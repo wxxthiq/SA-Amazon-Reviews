@@ -1,0 +1,9 @@
+streamlit
+pandas
+altair
+spacy
+textblob
+wordcloud
+matplotlib
+requests
+kaggle
