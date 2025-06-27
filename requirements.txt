@@ -1,10 +1,17 @@
-streamlit
-pandas
-altair
-textblob
-wordcloud
-matplotlib
-requests
-plotly
-spacy
+# requirements.txt
+
+streamlit==1.36.0
+pandas==2.2.2
+altair==5.3.0
+textblob==0.18.0.post0
+wordcloud==1.9.3
+matplotlib==3.9.0
+requests==2.32.3
+plotly==5.22.0
+
+# --- Stable Spacy Ecosystem Versions ---
+spacy==3.7.4
+blis==0.7.11
+thinc==8.2.3
+numpy==1.26.4
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
