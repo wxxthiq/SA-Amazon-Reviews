@@ -18,53 +18,79 @@ import plotly.express as px
 alt.data_transformers.enable('default', max_rows=None)
 
 # --- Configuration ---
-KAGGLE_USERNAME = "wathiqsoualhi"
-KAGGLE_DATASET_SLUG = "mcauley-v3" # As per your config
-DATA_VERSION = 0 # Increment this to force a re-download if you update the Kaggle dataset
-DATABASE_PATH = "amazon_reviews_images_v2.db" # This MUST match the name of the unzipped DB file from Kaggle.
+# IMPORTANT: The slug should NOT contain your username for this method to work best
+KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-v3" 
+DATA_VERSION = 3 # Increment version to ensure new download attempt
+DATABASE_PATH = "amazon_reviews_images_v2.db"
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 
-# --- Data Loading ---
+# --- NEW, ROBUST Data Loading Function using the official Kaggle library ---
 def download_data_with_versioning(dataset_slug, db_path, version_path, expected_version):
-    """Downloads data only if the local version is out of date."""
-    current_version = 0
+    """Downloads data using the official Kaggle API library and handles authentication."""
+    current_version = -1
     if os.path.exists(version_path):
         with open(version_path, "r") as f:
-            try: current_version = int(f.read().strip())
-            except (ValueError, TypeError): current_version = -1
+            try:
+                current_version = int(f.read().strip())
+            except (ValueError, TypeError):
+                current_version = -1
     
     if current_version == expected_version and os.path.exists(db_path):
+        logging.info("Database is up to date.")
         return
 
     st.info(f"Database v{current_version} is outdated (expected v{expected_version}). Forcing fresh download...")
     if os.path.exists(db_path): os.remove(db_path)
     if os.path.exists(version_path): os.remove(version_path)
 
-    url = f"https://www.kaggle.com/api/v1/datasets/download/{KAGGLE_USERNAME}/{dataset_slug}"
-    zip_file_path = f"{dataset_slug}.zip"
+    # 1. Check for secrets
+    if "KAGGLE_USERNAME" not in st.secrets or "KAGGLE_KEY" not in st.secrets:
+        st.error("FATAL: Kaggle secrets not found. Please add KAGGLE_USERNAME and KAGGLE_KEY to your Streamlit secrets.")
+        st.stop()
+        
+    # 2. Create the .kaggle directory and kaggle.json file at runtime
+    kaggle_dir = os.path.expanduser("~/.kaggle")
+    os.makedirs(kaggle_dir, exist_ok=True)
+    kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
     
-    with st.spinner(f"Downloading data from Kaggle... Please wait."):
+    credentials = {
+        "username": st.secrets["KAGGLE_USERNAME"],
+        "key": st.secrets["KAGGLE_KEY"]
+    }
+    with open(kaggle_json_path, "w") as f:
+        json.dump(credentials, f)
+        
+    # 3. Set correct file permissions (important for the Kaggle library)
+    os.chmod(kaggle_json_path, 0o600)
+
+    # 4. Use the Kaggle API to download the dataset
+    with st.spinner(f"Downloading data for '{dataset_slug}' from Kaggle... Please wait."):
         try:
-            # Note: The Kaggle API URL format for public datasets is slightly different
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-            with open(zip_file_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192): f.write(chunk)
-            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-                zip_ref.extractall(".")
-            os.remove(zip_file_path)
+            logging.info(f"Attempting to download dataset: {dataset_slug}")
+            # The official Kaggle API for downloading datasets
+            kaggle.api.dataset_download_files(
+                dataset=dataset_slug,
+                path='.',  # Download to the current directory
+                unzip=True
+            )
+            logging.info("Kaggle API download successful.")
             
+            # 5. Verify download and update version file
             if os.path.exists(db_path):
-                with open(version_path, "w") as f: f.write(str(expected_version))
+                with open(version_path, "w") as f:
+                    f.write(str(expected_version))
                 st.success("Database download complete! Rerunning app...")
                 st.rerun()
             else:
-                st.error(f"FATAL: Download complete, but '{db_path}' was not found after unzipping. Please check the name in your Kaggle zip file.")
+                st.error(f"FATAL: Download complete, but '{db_path}' was not found after unzipping. Please check the name of the file inside your Kaggle dataset's zip archive.")
                 st.stop()
+
         except Exception as e:
-            st.error(f"FATAL: An error occurred during download: {e}")
+            # Catch potential errors from the Kaggle library, including authentication
+            st.error(f"FATAL: An error occurred during the Kaggle API download: {e}")
+            logging.error(f"Kaggle API error details: {e}")
             st.stop()
 
 
@@ -160,12 +186,11 @@ def generate_wordcloud(text, title, custom_stopwords):
     ax.axis('off')
     return fig
 
-
 # --- Main App Execution ---
 st.set_page_config(layout="wide", page_title="Amazon Review Explorer")
-# Use the test title to verify deployment
-st.title("✅ V3 - DEPLOYMENT TEST - Amazon Reviews")
+st.title("⚡ Amazon Reviews - Sentiment Dashboard")
 
+# The KAGGLE_USERNAME is no longer needed here, it's read from secrets
 download_data_with_versioning(KAGGLE_DATASET_SLUG, DATABASE_PATH, VERSION_FILE_PATH, DATA_VERSION)
 conn = connect_to_db(DATABASE_PATH)
 nlp = load_spacy_model()
