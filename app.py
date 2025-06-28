@@ -14,6 +14,7 @@ import zipfile
 import json
 import plotly.express as px
 import logging
+import kaggle
 
 # --- Altair Data Transformer ---
 alt.data_transformers.enable('default', max_rows=None)
