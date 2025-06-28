@@ -33,7 +33,8 @@ PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 
 # in app.py
 
-# --- CORRECTED Data Loading Function ---
+# in app.py
+
 def download_data_with_versioning(dataset_slug, db_path, version_path, expected_version):
     """Downloads data using the official Kaggle API library and handles authentication."""
     current_version = -1
@@ -43,11 +44,13 @@ def download_data_with_versioning(dataset_slug, db_path, version_path, expected_
                 current_version = int(f.read().strip())
             except (ValueError, TypeError):
                 current_version = -1
-
+    
+    # If the database is current, we don't need to do anything else.
     if current_version == expected_version and os.path.exists(db_path):
         logging.info("Database is up to date.")
         return
 
+    # --- Start of Download Logic ---
     st.info(f"Database v{current_version} is outdated (expected v{expected_version}). Forcing fresh download...")
     if os.path.exists(db_path): os.remove(db_path)
     if os.path.exists(version_path): os.remove(version_path)
@@ -55,22 +58,22 @@ def download_data_with_versioning(dataset_slug, db_path, version_path, expected_
     if "KAGGLE_USERNAME" not in st.secrets or "KAGGLE_KEY" not in st.secrets:
         st.error("FATAL: Kaggle secrets not found. Please add KAGGLE_USERNAME and KAGGLE_KEY to your Streamlit secrets.")
         st.stop()
-
+        
     kaggle_dir = os.path.expanduser("~/.kaggle")
     os.makedirs(kaggle_dir, exist_ok=True)
     kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
-
+    
     credentials = {
         "username": st.secrets["KAGGLE_USERNAME"],
         "key": st.secrets["KAGGLE_KEY"]
     }
     with open(kaggle_json_path, "w") as f:
         json.dump(credentials, f)
-
+        
     os.chmod(kaggle_json_path, 0o600)
 
-    with st.spinner(f"Downloading data for '{dataset_slug}' from Kaggle... Please wait."):
-        try:
+    try:
+        with st.spinner(f"Downloading data for '{dataset_slug}' from Kaggle... Please wait."):
             logging.info(f"Attempting to download dataset: {dataset_slug}")
             kaggle.api.dataset_download_files(
                 dataset=dataset_slug,
@@ -79,23 +82,22 @@ def download_data_with_versioning(dataset_slug, db_path, version_path, expected_
             )
             logging.info("Kaggle API download successful.")
 
-            if os.path.exists(db_path):
-                with open(version_path, "w") as f:
-                    f.write(str(expected_version))
-                st.success("Database download complete! Rerunning app...")
-                st.rerun()
-            else:
-                st.error(f"FATAL: Download complete, but '{db_path}' was not found after unzipping. Please check the name of the file inside your Kaggle dataset's zip archive.")
-                st.stop()
-        # THIS IS THE CORRECTED LINE: Be more specific about the errors we catch.
-        except (requests.exceptions.RequestException, kaggle.rest.ApiException, Exception) as e:
-            # We add a check to ensure we don't catch Streamlit's internal rerun exception
-            if "RerunData" in str(type(e)):
-                pass # Ignore it and let Streamlit handle it
-            else:
-                st.error(f"FATAL: An error occurred during the Kaggle API download: {e}")
-                logging.error(f"Kaggle API error details: {e}")
-                st.stop()
+    except Exception as e:
+        # This will now only catch genuine errors during the download process.
+        st.error(f"FATAL: An error occurred during the Kaggle API download: {e}")
+        logging.error(f"Kaggle API error details: {e}")
+        st.stop()
+        
+    # --- This logic now runs *after* the try-except block has successfully completed ---
+    if os.path.exists(db_path):
+        with open(version_path, "w") as f:
+            f.write(str(expected_version))
+        st.success("Database download complete! Rerunning app...")
+        # st.rerun() is now outside the try-except block and will not cause an error.
+        st.rerun()
+    else:
+        st.error(f"FATAL: Download complete, but '{db_path}' was not found after unzipping. Please check the name of the file inside your Kaggle dataset's zip archive.")
+        st.stop()
 
 
 @st.cache_resource
