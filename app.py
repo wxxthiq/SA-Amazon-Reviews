@@ -31,7 +31,9 @@ VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 
-# --- NEW, ROBUST Data Loading Function using the official Kaggle library ---
+# in app.py
+
+# --- CORRECTED Data Loading Function ---
 def download_data_with_versioning(dataset_slug, db_path, version_path, expected_version):
     """Downloads data using the official Kaggle API library and handles authentication."""
     current_version = -1
@@ -41,7 +43,7 @@ def download_data_with_versioning(dataset_slug, db_path, version_path, expected_
                 current_version = int(f.read().strip())
             except (ValueError, TypeError):
                 current_version = -1
-    
+
     if current_version == expected_version and os.path.exists(db_path):
         logging.info("Database is up to date.")
         return
@@ -50,39 +52,33 @@ def download_data_with_versioning(dataset_slug, db_path, version_path, expected_
     if os.path.exists(db_path): os.remove(db_path)
     if os.path.exists(version_path): os.remove(version_path)
 
-    # 1. Check for secrets
     if "KAGGLE_USERNAME" not in st.secrets or "KAGGLE_KEY" not in st.secrets:
         st.error("FATAL: Kaggle secrets not found. Please add KAGGLE_USERNAME and KAGGLE_KEY to your Streamlit secrets.")
         st.stop()
-        
-    # 2. Create the .kaggle directory and kaggle.json file at runtime
+
     kaggle_dir = os.path.expanduser("~/.kaggle")
     os.makedirs(kaggle_dir, exist_ok=True)
     kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
-    
+
     credentials = {
         "username": st.secrets["KAGGLE_USERNAME"],
         "key": st.secrets["KAGGLE_KEY"]
     }
     with open(kaggle_json_path, "w") as f:
         json.dump(credentials, f)
-        
-    # 3. Set correct file permissions (important for the Kaggle library)
+
     os.chmod(kaggle_json_path, 0o600)
 
-    # 4. Use the Kaggle API to download the dataset
     with st.spinner(f"Downloading data for '{dataset_slug}' from Kaggle... Please wait."):
         try:
             logging.info(f"Attempting to download dataset: {dataset_slug}")
-            # The official Kaggle API for downloading datasets
             kaggle.api.dataset_download_files(
                 dataset=dataset_slug,
-                path='.',  # Download to the current directory
+                path='.',
                 unzip=True
             )
             logging.info("Kaggle API download successful.")
-            
-            # 5. Verify download and update version file
+
             if os.path.exists(db_path):
                 with open(version_path, "w") as f:
                     f.write(str(expected_version))
@@ -91,12 +87,15 @@ def download_data_with_versioning(dataset_slug, db_path, version_path, expected_
             else:
                 st.error(f"FATAL: Download complete, but '{db_path}' was not found after unzipping. Please check the name of the file inside your Kaggle dataset's zip archive.")
                 st.stop()
-
-        except Exception as e:
-            # Catch potential errors from the Kaggle library, including authentication
-            st.error(f"FATAL: An error occurred during the Kaggle API download: {e}")
-            logging.error(f"Kaggle API error details: {e}")
-            st.stop()
+        # THIS IS THE CORRECTED LINE: Be more specific about the errors we catch.
+        except (requests.exceptions.RequestException, kaggle.rest.ApiException, Exception) as e:
+            # We add a check to ensure we don't catch Streamlit's internal rerun exception
+            if "RerunData" in str(type(e)):
+                pass # Ignore it and let Streamlit handle it
+            else:
+                st.error(f"FATAL: An error occurred during the Kaggle API download: {e}")
+                logging.error(f"Kaggle API error details: {e}")
+                st.stop()
 
 
 @st.cache_resource
