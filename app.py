@@ -13,9 +13,13 @@ import requests
 import zipfile
 import json
 import plotly.express as px
+import logging
 
 # --- Altair Data Transformer ---
 alt.data_transformers.enable('default', max_rows=None)
+
+# --- Configure logging ---
+logging.basicConfig(level=logging.INFO)
 
 # --- Configuration ---
 # IMPORTANT: The slug should NOT contain your username for this method to work best
