@@ -26,7 +26,7 @@ alt.data_transformers.enable('default', max_rows=None)
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-v3"
 # --- MODIFIED: Pointing to the new 'lite' database file ---
 DATABASE_PATH = "amazon_reviews_lite_v3.db" 
-DATA_VERSION = 1 # Reset version for the new database file
+DATA_VERSION = 3 # Reset version for the new database file
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
 REVIEWS_PER_PAGE = 5
