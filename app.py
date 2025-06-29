@@ -24,12 +24,13 @@ alt.data_transformers.enable('default', max_rows=None)
 
 # --- Configuration ---
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-v3"
-DATA_VERSION = 5 # Incremented to ensure a clean run
-DATABASE_PATH = "amazon_reviews_images_v2.db" # This MUST match the unzipped file name
+# --- MODIFIED: Pointing to the new 'lite' database file ---
+DATABASE_PATH = "amazon_reviews_lite_v1.db" 
+DATA_VERSION = 1 # Reset version for the new database file
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
+REVIEWS_PER_PAGE = 5
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
-
 
 # --- Data Loading Function ---
 def download_data_with_versioning(dataset_slug, db_path, version_path, expected_version):
@@ -100,218 +101,124 @@ def connect_to_db(path):
         st.error(f"FATAL: Could not connect to database at '{path}'. Error: {e}")
         st.stop()
 
-@st.cache_resource
-def load_spacy_model():
-    model_name = "en_core_web_sm"
-    return spacy.load(model_name)
-
-@st.cache_data
-def get_all_categories(_conn):
-    if _conn is None: return ["All"]
-    try:
-        df = pd.read_sql_query("SELECT DISTINCT category FROM products", _conn)
-        categories = sorted(df['category'].dropna().unique().tolist())
-        categories.insert(0, "All")
-        return categories
-    except Exception as e:
-        st.warning(f"Could not load categories: {e}")
-        return ["All"]
+# --- Data Fetching Functions (Modified for Lite DB) ---
 
 @st.cache_data
 def get_product_summary_data(_conn):
-    if _conn is None: return pd.DataFrame()
-    try:
-        query = "SELECT * FROM products"
-        df = pd.read_sql_query(query, _conn)
-        return df
-    except Exception as e:
-        st.error(f"An error occurred while loading product summary: {e}")
-        return pd.DataFrame()
+    """Fetches the main product gallery data."""
+    return pd.read_sql("SELECT * FROM products", _conn)
 
-def fetch_reviews_for_product(_conn, asin):
-    if _conn is None: return pd.DataFrame()
-    query = "SELECT * FROM reviews WHERE parent_asin = ?"
-    df = pd.read_sql_query(query, _conn, params=(asin,))
-    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-    df = df.reset_index().rename(columns={'index': 'review_id'})
+@st.cache_data
+def get_discrepancy_data(_conn, asin):
+    """Fetches the lightweight data for the discrepancy plot."""
+    df = pd.read_sql("SELECT rating, text_polarity FROM discrepancy_data WHERE parent_asin = ?", _conn, params=(asin,))
+    df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
     return df
 
 @st.cache_data
-def calculate_discrepancy(reviews_df):
-    if 'text_polarity' not in reviews_df.columns:
-        st.error("Data integrity error: text_polarity column not found in reviews.")
-        return reviews_df.assign(discrepancy=0, rating_display=reviews_df['rating'])
-    df = reviews_df.copy()
-    df['normalized_rating'] = (df['rating'] - 3) / 2
-    df['discrepancy'] = (df['text_polarity'] - df['normalized_rating']).abs()
-    df['rating_display'] = df['rating'].round().astype(int)
-    return df
+def get_rating_distribution_data(_conn, asin):
+    """(NEW) Fetches the pre-computed rating distribution for a product."""
+    return pd.read_sql("SELECT `1_star`, `2_star`, `3_star`, `4_star`, `5_star` FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
 
-@st.cache_data
-def aspect_based_sentiment(_reviews_df, aspects, _nlp_model):
-    aspect_sentiments = {aspect: {'pos': 0, 'neg': 0, 'neu': 0, 'mentions': 0} for aspect in aspects}
-    for review_text in _reviews_df['text'].dropna():
-        try:
-            for sentence in _nlp_model(review_text).sents:
-                for aspect in aspects:
-                    if f' {aspect.lower()} ' in f' {sentence.text.lower()} ':
-                        aspect_sentiments[aspect]['mentions'] += 1
-                        sentiment = TextBlob(sentence.text).sentiment.polarity
-                        if sentiment > 0.1: aspect_sentiments[aspect]['pos'] += 1
-                        elif sentiment < -0.1: aspect_sentiments[aspect]['neg'] += 1
-                        else: aspect_sentiments[aspect]['neu'] += 1
-        except Exception:
-            continue
-    results = [{'aspect': aspect, **scores} for aspect, scores in aspect_sentiments.items() if scores['mentions'] > 0]
-    return pd.DataFrame(results)
-
-def generate_wordcloud(text, title, custom_stopwords):
-    stopwords = STOPWORDS.union(set(custom_stopwords))
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.set_title(title, fontsize=16)
-    if text and isinstance(text, str) and text.strip():
-        try:
-            wordcloud = WordCloud(width=800, height=400, background_color='white', stopwords=stopwords, colormap='viridis').generate(text)
-            ax.imshow(wordcloud, interpolation='bilinear')
-        except ValueError: ax.text(0.5, 0.5, 'No words to display', ha='center', va='center')
-    else: ax.text(0.5, 0.5, 'No reviews for this data segment', ha='center', va='center')
-    ax.axis('off')
-    return fig
+def get_paginated_reviews(_conn, asin, page_num, page_size):
+    """Fetches a small 'page' of raw reviews to display."""
+    offset = (page_num - 1) * page_size
+    return pd.read_sql(f"SELECT rating, sentiment, text FROM reviews WHERE parent_asin = ? LIMIT ? OFFSET ?", _conn, params=(asin, page_size, offset))
 
 
-# --- Main App Execution ---
+# --- Main App ---
 st.set_page_config(layout="wide", page_title="Amazon Review Explorer")
-st.title("⚡ Amazon Reviews - Sentiment Dashboard")
+st.title("⚡ Amazon Reviews - Sentiment Dashboard (Lite Version)")
 
-download_data_with_versioning(KAGGLE_DATASET_SLUG, DATABASE_PATH, VERSION_FILE_PATH, DATA_VERSION)
+# Initialize and run data download
+# download_data_with_versioning(KAGGLE_DATASET_SLUG, DATABASE_PATH, VERSION_FILE_PATH, DATA_VERSION)
 conn = connect_to_db(DATABASE_PATH)
-nlp = load_spacy_model()
 
-# Initialize session state variables
+# Initialize session state
 if 'page' not in st.session_state: st.session_state.page = 0
+if 'review_page' not in st.session_state: st.session_state.review_page = 1
 if 'selected_product' not in st.session_state: st.session_state.selected_product = None
-if 'image_index' not in st.session_state: st.session_state.image_index = 0
 
-
-# --- Main App Logic ---
-if conn and nlp:
+if conn:
     products_df = get_product_summary_data(conn)
     
-    # --- DETAILED PRODUCT VIEW (INTERACTIVE & MEMORY-EFFICIENT) ---
+    # --- DETAILED PRODUCT VIEW ---
     if st.session_state.selected_product:
         selected_asin = st.session_state.selected_product
-        
-        # Load all data for the selected product ONCE
-        @st.cache_data
-        def load_product_data(_conn, asin):
-            reviews_df = fetch_reviews_for_product(_conn, asin)
-            if reviews_df.empty:
-                return pd.DataFrame(), pd.DataFrame()
-            reviews_with_scores = calculate_discrepancy(reviews_df)
-            return reviews_df, reviews_with_scores
+        product_details = products_df.loc[products_df['parent_asin'] == selected_asin].iloc[0]
 
-        raw_reviews, reviews_with_scores = load_product_data(conn, selected_asin)
-        
-        # Get static details from the main products summary
-        product_details = products_df[products_df['parent_asin'] == selected_asin].iloc[0]
-
-        # --- UI ---
-        if st.button("⬅️ Back to Search Results"):
+        if st.button("⬅️ Back to Search"):
             st.session_state.selected_product = None
-            st.session_state.image_index = 0
+            st.session_state.review_page = 1
             st.rerun()
 
         st.header(product_details['product_title'])
-        image_urls_str = product_details.get('image_urls')
-        image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) else []
-
-        # Image Carousel
-        if not image_urls:
-            st.image(PLACEHOLDER_IMAGE_URL, use_container_width=True)
-        else:
-            # ... (Image carousel code as before)
-            st.image(image_urls[st.session_state.image_index], use_container_width=True)
-
-        if raw_reviews.empty:
-            st.warning("No reviews found for this product.")
-            st.stop()
+        # ... (Image carousel code can remain here)
 
         st.markdown("---")
         
-        # --- ON-DEMAND HEAVY ANALYSIS ---
-        st.subheader("Advanced Analysis")
-        st.info("Heavy analysis is performed on-demand to ensure app stability.")
-        
-        if st.button("Run Full Analysis on Reviews"):
-            with st.spinner("Running advanced analysis... This may take a moment on products with many reviews."):
+        # --- Visualization Tabs ---
+        vis_tab, reviews_tab = st.tabs(["📊 Sentiment Analysis", "💬 Individual Reviews"])
+
+        with vis_tab:
+            st.subheader("Sentiment Analysis Visualizations")
+            
+            discrepancy_df = get_discrepancy_data(conn, selected_asin)
+            rating_dist_df = get_rating_distribution_data(conn, selected_asin)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("#### Rating Distribution")
+                if not rating_dist_df.empty:
+                    # Reshape the data for Altair
+                    dist_data = rating_dist_df.T.reset_index()
+                    dist_data.columns = ['Star Rating', 'Count']
+                    dist_data['Star Rating'] = dist_data['Star Rating'].str.replace('_', ' ')
+                    
+                    chart = alt.Chart(dist_data).mark_bar().encode(
+                        x=alt.X('Star Rating', sort=None),
+                        y=alt.Y('Count'),
+                        tooltip=['Star Rating', 'Count']
+                    ).properties(title="Overall Rating Distribution")
+                    st.altair_chart(chart, use_container_width=True)
+                else:
+                    st.warning("No rating distribution data available.")
+            
+            with col2:
+                st.markdown("#### Rating vs. Text Discrepancy")
+                if not discrepancy_df.empty:
+                    plot = px.scatter(discrepancy_df, x="rating", y="text_polarity", color="discrepancy", title="Discrepancy Plot")
+                    st.plotly_chart(plot, use_container_width=True)
+                else:
+                    st.warning("No discrepancy data available.")
+
+        with reviews_tab:
+            st.subheader("Paginated Individual Reviews")
+            reviews_df = get_paginated_reviews(conn, selected_asin, st.session_state.review_page, REVIEWS_PER_PAGE)
+            if not reviews_df.empty:
+                for index, row in reviews_df.iterrows():
+                    st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']}**")
+                    st.markdown(f"> {row['text']}")
+                    st.divider()
                 
-                # Define aspects relevant to fashion
-                fashion_aspects = ['fit', 'size', 'color', 'fabric', 'quality', 'price', 'style', 'comfort', 'stitching', 'zipper']
-                absa_results_df = aspect_based_sentiment(reviews_with_scores, fashion_aspects, nlp)
-                
-                # --- Display results after computation ---
-                col1, col2 = st.columns(2, gap="large")
-                with col1:
-                    st.markdown("#### Aspect Sentiment")
-                    if not absa_results_df.empty:
-                        absa_melted = absa_results_df.melt(id_vars=['aspect'], value_vars=['pos', 'neg'], var_name='sentiment', value_name='count')
-                        absa_melted['count'] = absa_melted.apply(lambda row: -row['count'] if row['sentiment'] == 'neg' else row['count'], axis=1)
-                        absa_chart = alt.Chart(absa_melted).mark_bar().encode(x=alt.X('count:Q', title='Number of Mentions'), y=alt.Y('aspect:N', sort='-x', title='Product Aspect'), color=alt.Color('sentiment:N')).properties(title="Positive vs. Negative Mentions by Feature")
-                        st.altair_chart(absa_chart, use_container_width=True)
-                    else:
-                        st.warning("No defined aspects found in these reviews.")
-                
-                with col2:
-                    st.markdown("#### Rating vs. Text Discrepancy")
-                    discrepancy_plot = px.scatter(reviews_with_scores, x="rating_display", y="text_polarity", color="discrepancy", title="Brighter points indicate higher discrepancy")
-                    st.plotly_chart(discrepancy_plot, use_container_width=True)
+                col1, col2, col3 = st.columns([1, 8, 1])
+                if st.session_state.review_page > 1:
+                    if col1.button("⬅️ Previous"):
+                        st.session_state.review_page -= 1
+                        st.rerun()
+                if len(reviews_df) == REVIEWS_PER_PAGE:
+                     if col3.button("Next ➡️"):
+                        st.session_state.review_page += 1
+                        st.rerun()
+            else:
+                st.warning("No more reviews to display.")
 
     # --- MAIN SEARCH PAGE ---
     else:
+        st.session_state.review_page = 1
         st.header("Search for Products")
-        
-        col1, col2, col3 = st.columns(3)
-        search_term = col1.text_input("Search by product title:")
-        available_categories = get_all_categories(conn)
-        category = col2.selectbox("Filter by Category", available_categories)
-        sort_by = col3.selectbox("Sort By", ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"])
-        
-        # The search logic should be applied directly to products_df
-        search_results_df = products_df.copy()
-        if search_term:
-            search_results_df = search_results_df[search_results_df['product_title'].str.contains(search_term, case=False, na=False)]
-        if category != "All":
-            search_results_df = search_results_df[search_results_df['category'] == category]
-        
-        # Sorting logic
-        if sort_by == "Popularity (Most Reviews)":
-            search_results_df = search_results_df.sort_values(by="review_count", ascending=False)
-        elif sort_by == "Highest Rating":
-            search_results_df = search_results_df.sort_values(by="average_rating", ascending=False)
-        elif sort_by == "Lowest Rating":
-            search_results_df = search_results_df.sort_values(by="average_rating", ascending=True)
-
-        st.markdown("---")
-        total_results = len(search_results_df)
-        st.header(f"Found {total_results} Products")
-        
-        start_idx = st.session_state.page * PRODUCTS_PER_PAGE
-        end_idx = start_idx + PRODUCTS_PER_PAGE
-        paginated_results = search_results_df.iloc[start_idx:end_idx]
-
-        for i in range(0, len(paginated_results), 4):
-            cols = st.columns(4)
-            for j, col in enumerate(cols):
-                if i + j < len(paginated_results):
-                    row = paginated_results.iloc[i+j]
-                    with col.container(border=True):
-                        image_urls_str = row.get('image_urls')
-                        thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
-                        st.image(thumbnail_url, use_container_width=True)
-                        st.markdown(f"**{row['product_title']}**")
-                        if st.button("View Details", key=row['parent_asin']):
-                            st.session_state.selected_product = row['parent_asin']
-                            st.rerun()
+        # ... (Your existing main page search and gallery code is fine here) ...
 
 else:
-    st.error("Application setup failed. Please check logs and database connection.")
+    st.error("Application setup failed. Please check database connection.")
+
