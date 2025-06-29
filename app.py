@@ -23,8 +23,8 @@ logging.basicConfig(level=logging.INFO)
 alt.data_transformers.enable('default', max_rows=None)
 
 # --- Configuration ---
-KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-3mcauley"
-DATABASE_PATH = "amazon_reviews_lite_v3.db" 
+KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-lite"
+DATABASE_PATH = "amazon_reviews_lite_v4.db" 
 DATA_VERSION = 3 
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
