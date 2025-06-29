@@ -23,10 +23,9 @@ logging.basicConfig(level=logging.INFO)
 alt.data_transformers.enable('default', max_rows=None)
 
 # --- Configuration ---
-KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-v3"
-# --- MODIFIED: Pointing to the new 'lite' database file ---
+KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-3mcauley"
 DATABASE_PATH = "amazon_reviews_lite_v3.db" 
-DATA_VERSION = 3 # Reset version for the new database file
+DATA_VERSION = 3 
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
 REVIEWS_PER_PAGE = 5
@@ -94,11 +93,32 @@ def download_data_with_versioning(dataset_slug, db_path, version_path, expected_
 
 
 @st.cache_resource
-def connect_to_db(path):
+def connect_to_db(path, required_tables):
+    """
+    Connects to the SQLite database and verifies that all required tables exist.
+    """
     try:
-        return sqlite3.connect(path, uri=True, check_same_thread=False, timeout=15)
+        conn = sqlite3.connect(path, uri=True, check_same_thread=False, timeout=15)
+        
+        # Verify that the necessary tables exist
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        existing_tables = {row[0] for row in cursor.fetchall()}
+        
+        missing_tables = set(required_tables) - existing_tables
+        
+        if missing_tables:
+            st.error(
+                f"Database Integrity Error: The database at '{path}' is missing the following required tables: "
+                f"`{', '.join(missing_tables)}`. Please ensure you have run the correct `database_builder.py` script "
+                "and that the app is using the correct, fully-built database file."
+            )
+            st.stop()
+            
+        return conn
+        
     except Exception as e:
-        st.error(f"FATAL: Could not connect to database at '{path}'. Error: {e}")
+        st.error(f"FATAL: Could not connect to or verify database at '{path}'. Error: {e}")
         st.stop()
 
 # --- Data Fetching Functions (Modified for Lite DB) ---
@@ -130,9 +150,12 @@ def get_paginated_reviews(_conn, asin, page_num, page_size):
 st.set_page_config(layout="wide", page_title="Amazon Review Explorer")
 st.title("⚡ Amazon Reviews - Sentiment Dashboard (Lite Version)")
 
+# Define the tables this "lite" version of the app requires
+REQUIRED_TABLES = ['products', 'reviews', 'discrepancy_data', 'rating_distribution']
+
 # Initialize and run data download
 # download_data_with_versioning(KAGGLE_DATASET_SLUG, DATABASE_PATH, VERSION_FILE_PATH, DATA_VERSION)
-conn = connect_to_db(DATABASE_PATH)
+conn = connect_to_db(DATABASE_PATH, REQUIRED_TABLES)
 
 # Initialize session state
 if 'page' not in st.session_state: st.session_state.page = 0
@@ -221,4 +244,3 @@ if conn:
 
 else:
     st.error("Application setup failed. Please check database connection.")
-
