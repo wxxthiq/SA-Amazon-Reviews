@@ -4,6 +4,7 @@ import sqlite3
 from wordcloud import WordCloud, STOPWORDS
 import matplotlib.pyplot as plt
 import altair as alt
+from streamlit_plotly_events import plotly_events
 import re
 from collections import Counter
 import spacy
