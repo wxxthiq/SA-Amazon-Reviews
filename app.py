@@ -134,6 +134,14 @@ def get_product_summary_data(_conn):
     return pd.read_sql("SELECT * FROM products", _conn)
 
 @st.cache_data
+def get_all_categories(_conn):
+    """Fetches a list of all unique categories from the products table."""
+    df = pd.read_sql("SELECT DISTINCT category FROM products", _conn)
+    categories = sorted(df['category'].dropna().unique().tolist())
+    categories.insert(0, "All") # Add 'All' as the default option
+    return categories
+    
+@st.cache_data
 def get_discrepancy_data(_conn, asin):
     """Fetches the lightweight data for the discrepancy plot."""
     df = pd.read_sql("SELECT rating, text_polarity FROM discrepancy_data WHERE parent_asin = ?", _conn, params=(asin,))
