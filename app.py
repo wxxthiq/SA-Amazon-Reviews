@@ -131,14 +131,13 @@ def get_all_categories(_conn):
     """Fetches a list of all unique categories. Cached for efficiency on the main page."""
     df = pd.read_sql("SELECT DISTINCT category FROM products", _conn)
     categories = sorted(df['category'].dropna().unique().tolist())
-    # MODIFIED: Do not add "All" by default. The user must select a category.
     categories.insert(0, "--- Select a Category ---")
     return categories
 
 def get_filtered_products(_conn, category, search_term, sort_by, limit, offset):
     """
-    (NEW) Fetches a paginated and filtered list of products directly from the database.
-    This is highly memory-efficient as it doesn't load all products at once.
+    Fetches a paginated and filtered list of products directly from the database.
+    This is highly memory-efficient.
     """
     query = "SELECT * FROM products"
     count_query = "SELECT COUNT(*) FROM products"
@@ -165,21 +164,16 @@ def get_filtered_products(_conn, category, search_term, sort_by, limit, offset):
     else: # Lowest Rating
         query += " ORDER BY average_rating ASC"
 
-    # Get total count for pagination
-    total_count = _conn.execute(count_query, params).fetchone()[0]
-
-    # Add pagination to the main query
-    query += f" LIMIT {limit} OFFSET {offset}"
+    total_count = _conn.execute(count_query, tuple(params)).fetchone()[0]
+    query += f" LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
     
     df = pd.read_sql(query, _conn, params=params)
-    
     return df, total_count
-
 
 def get_single_product_details(_conn, asin):
     """Fetches details for only one product, used for the detail page."""
     return pd.read_sql("SELECT * FROM products WHERE parent_asin = ?", _conn, params=(asin,))
-
 
 def get_discrepancy_data(_conn, asin):
     """Fetches the lightweight data for the discrepancy plot."""
@@ -207,18 +201,18 @@ REQUIRED_TABLES = ['products', 'reviews', 'discrepancy_data', 'rating_distributi
 download_data_with_versioning(KAGGLE_DATASET_SLUG, DATABASE_PATH, VERSION_FILE_PATH, DATA_VERSION)
 conn = connect_to_db(DATABASE_PATH, REQUIRED_TABLES)
 
-# Initialize session state
+# Initialize session state for all filters and pages
 if 'page' not in st.session_state: st.session_state.page = 0
 if 'review_page' not in st.session_state: st.session_state.review_page = 1
 if 'selected_product' not in st.session_state: st.session_state.selected_product = None
 if 'category' not in st.session_state: st.session_state.category = "--- Select a Category ---"
-
+if 'search_term' not in st.session_state: st.session_state.search_term = ""
+if 'sort_by' not in st.session_state: st.session_state.sort_by = "Popularity (Most Reviews)"
 
 if conn:
     # --- DETAILED PRODUCT VIEW ---
     if st.session_state.selected_product:
         selected_asin = st.session_state.selected_product
-        # Fetch only the details for the selected product
         product_details_df = get_single_product_details(conn, selected_asin)
         
         if product_details_df.empty:
@@ -242,13 +236,60 @@ if conn:
 
         st.markdown("---")
         
+        # --- Visualization Tabs ---
         vis_tab, reviews_tab = st.tabs(["📊 Sentiment Analysis", "💬 Individual Reviews"])
+
         with vis_tab:
-            # ... (visualization logic remains the same) ...
-            pass
+            st.subheader("Sentiment Analysis Visualizations")
+            
+            discrepancy_df = get_discrepancy_data(conn, selected_asin)
+            rating_dist_df = get_rating_distribution_data(conn, selected_asin)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("#### Rating Distribution")
+                if not rating_dist_df.empty:
+                    dist_data = rating_dist_df.T.reset_index()
+                    dist_data.columns = ['Star Rating', 'Count']
+                    dist_data['Star Rating'] = dist_data['Star Rating'].str.replace('_', ' ')
+                    
+                    chart = alt.Chart(dist_data).mark_bar().encode(
+                        x=alt.X('Star Rating', sort=None, title="Stars"),
+                        y=alt.Y('Count', title="Number of Reviews"),
+                        tooltip=['Star Rating', 'Count']
+                    ).properties(title="Overall Rating Distribution")
+                    st.altair_chart(chart, use_container_width=True)
+                else:
+                    st.warning("No rating distribution data available.")
+            
+            with col2:
+                st.markdown("#### Rating vs. Text Discrepancy")
+                if not discrepancy_df.empty:
+                    plot = px.scatter(discrepancy_df, x="rating", y="text_polarity", color="discrepancy", title="Discrepancy Plot")
+                    st.plotly_chart(plot, use_container_width=True)
+                else:
+                    st.warning("No discrepancy data available.")
+
         with reviews_tab:
-            # ... (review pagination logic remains the same) ...
-            pass
+            st.subheader("Paginated Individual Reviews")
+            reviews_df = get_paginated_reviews(conn, selected_asin, st.session_state.review_page, REVIEWS_PER_PAGE)
+            if not reviews_df.empty:
+                for index, row in reviews_df.iterrows():
+                    st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']}**")
+                    st.markdown(f"> {row['text']}")
+                    st.divider()
+                
+                col1, col2, col3 = st.columns([1, 8, 1])
+                if st.session_state.review_page > 1:
+                    if col1.button("⬅️ Previous"):
+                        st.session_state.review_page -= 1
+                        st.rerun()
+                if len(reviews_df) == REVIEWS_PER_PAGE:
+                     if col3.button("Next ➡️"):
+                        st.session_state.review_page += 1
+                        st.rerun()
+            else:
+                st.info("No more reviews to display for this product.")
 
     # --- MAIN SEARCH PAGE ---
     else:
@@ -258,28 +299,26 @@ if conn:
         # --- Search and Filter Controls ---
         col1, col2, col3 = st.columns(3)
         with col1:
-            search_term = st.text_input("Search by product title:")
+            st.session_state.search_term = st.text_input("Search by product title:", value=st.session_state.search_term)
         with col2:
             available_categories = get_all_categories(conn)
-            # When a new category is selected, reset the page to 0
             def on_category_change():
                 st.session_state.page = 0
-            category = st.selectbox("Filter by Category", available_categories, key='category', on_change=on_category_change)
+            st.session_state.category = st.selectbox("Filter by Category", available_categories, index=available_categories.index(st.session_state.category), on_change=on_category_change)
         with col3:
-            sort_by = st.selectbox("Sort By", ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"], key='sort_by')
+            st.session_state.sort_by = st.selectbox("Sort By", ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"], index=["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"].index(st.session_state.sort_by))
 
-        if category == "--- Select a Category ---":
+        if st.session_state.category == "--- Select a Category ---":
             st.info("Please select a category to view products.")
         else:
-            # Fetch only the required page of products from the database
             paginated_results, total_results = get_filtered_products(
-                conn, category, search_term, sort_by, 
+                conn, st.session_state.category, st.session_state.search_term, st.session_state.sort_by, 
                 limit=PRODUCTS_PER_PAGE, 
                 offset=st.session_state.page * PRODUCTS_PER_PAGE
             )
 
             st.markdown("---")
-            st.header(f"Found {total_results} Products in '{category}'")
+            st.header(f"Found {total_results} Products in '{st.session_state.category}'")
             
             if paginated_results.empty and total_results > 0:
                 st.warning("No more products to display on this page.")
