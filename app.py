@@ -25,7 +25,7 @@ alt.data_transformers.enable('default', max_rows=None)
 # --- App Configuration ---
 # This points to the dataset and file that we have verified are correct.
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-lite" 
-DATABASE_PATH = "amazon_reviews_lite_v4.db"  # Using v5 to ensure no caching issues
+DATABASE_PATH = "amazon_reviews_lite_v4.db"  # Using v4 to ensure no caching issues
 DATA_VERSION = 4                             # Matching the DB version
 
 VERSION_FILE_PATH = ".db_version"
@@ -322,6 +322,11 @@ if conn:
                                 thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
                                 st.image(thumbnail_url, use_container_width=True)
                                 st.markdown(f"**{row['product_title']}**")
+                                # --- THIS IS THE ADDED SECTION ---
+                                avg_rating = row.get('average_rating', 0)
+                                review_count = row.get('review_count', 0)
+                                st.caption(f"Avg. Rating: {avg_rating:.2f} ⭐ ({int(review_count)} reviews)")
+                                # --- END OF ADDED SECTION ---
                                 if st.button("View Details", key=row['parent_asin']):
                                     st.session_state.selected_product = row['parent_asin']
                                     st.rerun()
