@@ -304,29 +304,33 @@ if conn:
                 st.markdown("#### Rating Distribution (Click a bar to see reviews)")
                 if not rating_dist_df.empty:
                     dist_data = rating_dist_df.T.reset_index()
-                    dist_data.columns = ['star_ratiing', 'Count']
-                    dist_data['star_ratiing'] = dist_data['star_ratiing'].str.replace('_', ' ')
+                    # --- MODIFIED: Use a clean column name for interaction ---
+                    dist_data.columns = ['star_rating_str', 'Count']
+                    # Keep the user-friendly name for display
+                    dist_data['Star Rating'] = dist_data['star_rating_str'].str.replace('_', ' ')
                     
                     # --- MODIFIED: Interactive Altair Chart ---
-                    selection = alt.selection_point(fields=['star_ratiing'], empty=True, on='click')
+                    # Use the clean column name 'star_rating_str' for the selection field
+                    selection = alt.selection_point(fields=['star_rating_str'], empty=True, on='click')
                     color = alt.condition(selection, alt.value('orange'), alt.value('steelblue'))
 
                     chart = alt.Chart(dist_data).mark_bar().encode(
-                        x=alt.X('star_ratiing', sort=None, title="Stars"),
+                        # Use the clean name for encoding, but the friendly name for the axis title
+                        x=alt.X('star_rating_str', sort=None, title="Stars", axis=alt.Axis(labelExpr="datum.value.replace('_', ' ')")),
                         y=alt.Y('Count', title="Number of Reviews"),
                         color=color,
-                        tooltip=['Ratiing', 'Count']
+                        tooltip=['Star Rating', 'Count']
                     ).add_params(
                         selection
                     ).properties(title="Overall Rating Distribution")
                     
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
 
-                    # Handle drill-down from chart selection
-                    if event.selection and event.selection["star_ratiing"]:
-                        selected_rating_str = event.selection["star_ratiing"][0]
-                        # Convert "5 star" string to integer 5
-                        selected_rating_int = int(selected_rating_str.split(' ')[0])
+                    # --- MODIFIED: Handle drill-down using the clean column name ---
+                    if event.selection and event.selection["star_rating_str"]:
+                        selected_rating_str = event.selection["star_rating_str"][0]
+                        # Convert "1_star" string to integer 1
+                        selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
                         
                         # If a new bar is clicked, reset the page
                         if st.session_state.drilldown_rating != selected_rating_int:
