@@ -142,10 +142,8 @@ def get_single_review_text(_conn, review_id):
 st.set_page_config(layout="wide", page_title="Amazon Review Explorer")
 st.title("⚡ Amazon Reviews - Sentiment Dashboard")
 
-REQUIRED_TABLES = ['products', 'reviews', 'discrepancy_data', 'rating_distribution']
-
 download_data_with_versioning(KAGGLE_DATASET_SLUG, DATABASE_PATH, VERSION_FILE_PATH, DATA_VERSION)
-conn = connect_to_db(DATABASE_PATH, REQUIRED_TABLES)
+conn = connect_to_db(DATABASE_PATH)
 
 # Initialize session state for all filters and pages
 if 'page' not in st.session_state: st.session_state.page = 0
