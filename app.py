@@ -25,8 +25,8 @@ alt.data_transformers.enable('default', max_rows=None)
 # --- App Configuration ---
 # This points to the dataset and file that we have verified are correct.
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-lite" 
-DATABASE_PATH = "amazon_reviews_lite_v4.db"  # Using v4 to ensure no caching issues
-DATA_VERSION = 4                             # Matching the DB version
+DATABASE_PATH = "amazon_reviews_lite_v5.db"  # Using v5 to ensure no caching issues
+DATA_VERSION = 5                             # Matching the DB version
 
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
@@ -180,6 +180,10 @@ conn = connect_to_db(DATABASE_PATH, REQUIRED_TABLES)
 if 'page' not in st.session_state: st.session_state.page = 0
 if 'review_page' not in st.session_state: st.session_state.review_page = 1
 if 'selected_product' not in st.session_state: st.session_state.selected_product = None
+if 'search_term' not in st.session_state: st.session_state.search_term = ""
+if 'category' not in st.session_state: st.session_state.category = "All"
+if 'sort_by' not in st.session_state: st.session_state.sort_by = "Popularity (Most Reviews)"
+
 
 if conn:
     products_df = get_product_summary_data(conn)
@@ -267,45 +271,77 @@ if conn:
         st.session_state.review_page = 1
         st.header("Search for Products")
         
+        # --- Search and Filter Controls ---
         col1, col2, col3 = st.columns(3)
-        search_term = col1.text_input("Search by product title:")
-        available_categories = get_all_categories(conn)
-        category = col2.selectbox("Filter by Category", available_categories)
-        sort_by = col3.selectbox("Sort By", ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"])
-        
-        search_results_df = products_df
-        if search_term:
-            search_results_df = search_results_df[search_results_df['product_title'].str.contains(search_term, case=False, na=False)]
-        if category != "All":
-            search_results_df = search_results_df[search_results_df['category'] == category]
-        
-        if sort_by == "Popularity (Most Reviews)":
-            search_results_df = search_results_df.sort_values(by="review_count", ascending=False)
-        elif sort_by == "Highest Rating":
-            search_results_df = search_results_df.sort_values(by="average_rating", ascending=False)
-        else: # Lowest Rating
-            search_results_df = search_results_df.sort_values(by="average_rating", ascending=True)
+        with col1:
+            st.session_state.search_term = st.text_input("Search by product title:", value=st.session_state.search_term)
+        with col2:
+            available_categories = get_all_categories(conn)
+            st.session_state.category = st.selectbox("Filter by Category", available_categories, index=available_categories.index(st.session_state.category))
+        with col3:
+            st.session_state.sort_by = st.selectbox("Sort By", ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"], index=["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"].index(st.session_state.sort_by))
 
-        st.markdown("---")
-        total_results = len(search_results_df)
-        st.header(f"Found {total_results} Products")
-        
-        start_idx = st.session_state.page * PRODUCTS_PER_PAGE
-        end_idx = start_idx + PRODUCTS_PER_PAGE
-        paginated_results = search_results_df.iloc[start_idx:end_idx]
+        # --- Logic to display results only when a category is selected ---
+        if st.session_state.category == "All":
+            st.info("Please select a category to view products.")
+        else:
+            # Apply all filters to the main dataframe
+            search_results_df = products_df
+            if st.session_state.category != "All":
+                search_results_df = search_results_df[search_results_df['category'] == st.session_state.category]
+            if st.session_state.search_term:
+                search_results_df = search_results_df[search_results_df['product_title'].str.contains(st.session_state.search_term, case=False, na=False)]
+            
+            # Apply sorting
+            if st.session_state.sort_by == "Popularity (Most Reviews)":
+                search_results_df = search_results_df.sort_values(by="review_count", ascending=False)
+            elif st.session_state.sort_by == "Highest Rating":
+                search_results_df = search_results_df.sort_values(by="average_rating", ascending=False)
+            else: # Lowest Rating
+                search_results_df = search_results_df.sort_values(by="average_rating", ascending=True)
 
-        for i in range(0, len(paginated_results), 4):
-            cols = st.columns(4)
-            for j, col in enumerate(cols):
-                if i + j < len(paginated_results):
-                    row = paginated_results.iloc[i+j]
-                    with col.container(border=True):
-                        image_urls_str = row.get('image_urls')
-                        thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
-                        st.image(thumbnail_url, use_container_width=True)
-                        st.markdown(f"**{row['product_title']}**")
-                        if st.button("View Details", key=row['parent_asin']):
-                            st.session_state.selected_product = row['parent_asin']
+            st.markdown("---")
+            total_results = len(search_results_df)
+            st.header(f"Found {total_results} Products in '{st.session_state.category}'")
+            
+            # --- Pagination Logic ---
+            start_idx = st.session_state.page * PRODUCTS_PER_PAGE
+            end_idx = start_idx + PRODUCTS_PER_PAGE
+            paginated_results = search_results_df.iloc[start_idx:end_idx]
+
+            if paginated_results.empty and total_results > 0:
+                st.warning("No more products to display on this page.")
+            else:
+                for i in range(0, len(paginated_results), 4):
+                    cols = st.columns(4)
+                    for j, col in enumerate(cols):
+                        if i + j < len(paginated_results):
+                            row = paginated_results.iloc[i+j]
+                            with col.container(border=True):
+                                image_urls_str = row.get('image_urls')
+                                thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
+                                st.image(thumbnail_url, use_container_width=True)
+                                st.markdown(f"**{row['product_title']}**")
+                                if st.button("View Details", key=row['parent_asin']):
+                                    st.session_state.selected_product = row['parent_asin']
+                                    st.rerun()
+
+            # --- Pagination Buttons ---
+            st.markdown("---")
+            total_pages = (total_results + PRODUCTS_PER_PAGE - 1) // PRODUCTS_PER_PAGE
+            if total_pages > 1:
+                nav_cols = st.columns([1, 1, 1])
+                with nav_cols[0]:
+                    if st.session_state.page > 0:
+                        if st.button("⬅️ Previous Page"):
+                            st.session_state.page -= 1
+                            st.rerun()
+                with nav_cols[1]:
+                    st.write(f"Page {st.session_state.page + 1} of {total_pages}")
+                with nav_cols[2]:
+                    if (st.session_state.page + 1) < total_pages:
+                        if st.button("Next Page ➡️"):
+                            st.session_state.page += 1
                             st.rerun()
 
 else:
