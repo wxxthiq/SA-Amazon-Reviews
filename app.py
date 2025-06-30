@@ -227,12 +227,38 @@ if conn:
             st.rerun()
 
         st.header(product_details['product_title'])
+
+        # --- MODIFIED: Image Carousel Logic ---
         image_urls_str = product_details.get('image_urls')
-        image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) else []
-        if image_urls:
-            st.image(image_urls[0], use_container_width=True)
-        else:
+        image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
+
+        if not image_urls:
             st.image(PLACEHOLDER_IMAGE_URL, use_container_width=True)
+        else:
+            # Ensure index is not out of bounds if the product changes
+            if st.session_state.image_index >= len(image_urls):
+                st.session_state.image_index = 0
+
+            # Define callback functions to change the image index
+            def next_image():
+                st.session_state.image_index = (st.session_state.image_index + 1) % len(image_urls)
+            
+            def prev_image():
+                st.session_state.image_index = (st.session_state.image_index - 1 + len(image_urls)) % len(image_urls)
+
+            # Display the current image
+            st.image(image_urls[st.session_state.image_index], use_container_width=True)
+
+            # Display buttons and image counter only if there's more than one image
+            if len(image_urls) > 1:
+                col1, col2, col3 = st.columns([1, 8, 1])
+                with col1:
+                    st.button("⬅️", on_click=prev_image, use_container_width=True, key="prev_img")
+                with col2:
+                    st.caption(f"Image {st.session_state.image_index + 1} of {len(image_urls)}")
+                with col3:
+                    st.button("➡️", on_click=next_image, use_container_width=True, key="next_img")
+        # --- END OF MODIFIED SECTION ---
 
         st.markdown("---")
         
