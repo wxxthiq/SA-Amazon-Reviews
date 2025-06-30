@@ -162,6 +162,11 @@ def get_discrepancy_data(_conn, asin):
     df = pd.read_sql(query, _conn, params=(asin,))
     if not df.empty:
         df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
+        # --- NEW: Add jitter to separate overlapping points ---
+        jitter_strength_rating = 0.1
+        jitter_strength_polarity = 0.02
+        df['rating_jittered'] = df['rating'] + np.random.uniform(-jitter_strength_rating, jitter_strength_rating, size=len(df))
+        df['text_polarity_jittered'] = df['text_polarity'] + np.random.uniform(-jitter_strength_polarity, jitter_strength_polarity, size=len(df))
     return df
     
 st.cache_data
