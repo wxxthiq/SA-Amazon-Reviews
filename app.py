@@ -315,7 +315,7 @@ if conn:
                         discrepancy_df,
                         x="rating",
                         y="text_polarity",
-                        color="sentiment",
+                        color="discrepancy", # Color by the discrepancy score
                         custom_data=['review_id'], # Pass the unique ID to the plot
                         hover_name='review_id' # Show the ID on hover for context
                     )
@@ -323,7 +323,7 @@ if conn:
                     
                     # --- Drill-down display for discrepancy plot ---
                     if selected_point:
-                        clicked_review_id = selected_point[0]['custom_data'][0]
+                        clicked_review_id = selected_point[0]['customdata'][0]
                         review_text = get_single_review_text(conn, clicked_review_id)
                         with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
                             st.markdown(f"> {review_text}")
