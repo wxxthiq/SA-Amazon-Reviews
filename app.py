@@ -147,7 +147,6 @@ def get_filtered_products(_conn, category, search_term, sort_by, limit, offset):
     df = pd.read_sql(query, _conn, params=params)
     return df, total_count
 
-
 def get_single_product_details(_conn, asin):
     """Fetches details for only one product."""
     return pd.read_sql("SELECT * FROM products WHERE parent_asin = ?", _conn, params=(asin,))
@@ -163,6 +162,11 @@ def get_discrepancy_data(_conn, asin):
     if not df.empty:
         df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
     return df
+    
+st.cache_data
+def get_rating_distribution_data(_conn, asin):
+    """Fetches the pre-computed rating distribution for a product."""
+    return pd.read_sql("SELECT `1_star`, `2_star`, `3_star`, `4_star`, `5_star` FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
 
 def get_single_review_text(_conn, review_id):
     """Fetches the full text of a single review by its unique ID."""
