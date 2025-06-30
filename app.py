@@ -304,18 +304,18 @@ if conn:
                 st.markdown("#### Rating Distribution (Click a bar to see reviews)")
                 if not rating_dist_df.empty:
                     dist_data = rating_dist_df.T.reset_index()
-                    dist_data.columns = ['Star Rating', 'Count']
-                    dist_data['Star Rating'] = dist_data['Star Rating'].str.replace('_', ' ')
+                    dist_data.columns = ['star_ratiing', 'Count']
+                    dist_data['star_ratiing'] = dist_data['star_ratiing'].str.replace('_', ' ')
                     
                     # --- MODIFIED: Interactive Altair Chart ---
-                    selection = alt.selection_point(fields=['Star Rating'], empty=True, on='click')
+                    selection = alt.selection_point(fields=['star_ratiing'], empty=True, on='click')
                     color = alt.condition(selection, alt.value('orange'), alt.value('steelblue'))
 
                     chart = alt.Chart(dist_data).mark_bar().encode(
-                        x=alt.X('Star Rating', sort=None, title="Stars"),
+                        x=alt.X('star_ratiing', sort=None, title="Stars"),
                         y=alt.Y('Count', title="Number of Reviews"),
                         color=color,
-                        tooltip=['Star Rating', 'Count']
+                        tooltip=['Ratiing', 'Count']
                     ).add_params(
                         selection
                     ).properties(title="Overall Rating Distribution")
@@ -323,8 +323,8 @@ if conn:
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
 
                     # Handle drill-down from chart selection
-                    if event.selection and event.selection["Star Rating"]:
-                        selected_rating_str = event.selection["Star Rating"][0]
+                    if event.selection and event.selection["star_ratiing"]:
+                        selected_rating_str = event.selection["star_ratiing"][0]
                         # Convert "5 star" string to integer 5
                         selected_rating_int = int(selected_rating_str.split(' ')[0])
                         
