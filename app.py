@@ -38,7 +38,7 @@ PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 
 def download_data_with_versioning(dataset_slug, db_path, version_path, expected_version):
     """Downloads data using the official Kaggle API library and handles authentication."""
-    current_version = -1
+    current_version = 4
     if os.path.exists(version_path):
         with open(version_path, "r") as f:
             try:
@@ -322,22 +322,22 @@ if conn:
                     )
                     selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
                     
-                # --- CORRECTED: Robust event handling using pointIndex ---
-                if selected_point:
-                    # The event returns a list of dicts, get the first one.
-                    point_data = selected_point[0]
-                    
-                    # Check if the 'pointIndex' key exists
-                    if 'pointIndex' in point_data:
-                        # Use the index to look up the review_id in our original DataFrame
-                        clicked_index = point_data['pointIndex']
-                        clicked_review_id = discrepancy_df.iloc[clicked_index]['review_id']
+                    # --- CORRECTED: Robust event handling using pointIndex ---
+                    if selected_point:
+                        # The event returns a list of dicts, get the first one.
+                        point_data = selected_point[0]
                         
-                        review_text = get_single_review_text(conn, clicked_review_id)
-                        with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
-                            st.markdown(f"> {review_text}")
-                    else:
-                        st.warning("Could not retrieve review details from the clicked point. Please try again.")
+                        # Check if the 'pointIndex' key exists
+                        if 'pointIndex' in point_data:
+                            # Use the index to look up the review_id in our original DataFrame
+                            clicked_index = point_data['pointIndex']
+                            clicked_review_id = discrepancy_df.iloc[clicked_index]['review_id']
+                            
+                            review_text = get_single_review_text(conn, clicked_review_id)
+                            with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
+                                st.markdown(f"> {review_text}")
+                        else:
+                            st.warning("Could not retrieve review details from the clicked point. Please try again.")
                         
                 else:
                     st.warning("No discrepancy data available.")
