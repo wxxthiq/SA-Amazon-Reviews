@@ -174,6 +174,22 @@ def get_single_review_text(_conn, review_id):
     result = _conn.execute("SELECT text FROM reviews WHERE review_id = ?", (review_id,)).fetchone()
     return result[0] if result else "Review text not found."
 
+def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
+    """
+    Fetches a small 'page' of raw reviews to display, with an optional rating filter.
+    """
+    offset = (page_num - 1) * page_size
+    params = [asin]
+    query = f"SELECT rating, sentiment, text FROM reviews WHERE parent_asin = ?"
+
+    if rating_filter is not None:
+        query += " AND rating = ?"
+        params.append(rating_filter)
+
+    query += f" LIMIT ? OFFSET ?"
+    params.extend([page_size, offset])
+    
+    return pd.read_sql(query, _conn, params=params)
 
 # --- Main App ---
 st.set_page_config(layout="wide", page_title="Amazon Review Explorer")
