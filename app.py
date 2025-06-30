@@ -25,8 +25,8 @@ alt.data_transformers.enable('default', max_rows=None)
 # --- App Configuration ---
 # This points to the dataset and file that we have verified are correct.
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-lite" 
-DATABASE_PATH = "amazon_reviews_lite_v5.db"  # Using v5 to ensure no caching issues
-DATA_VERSION = 5                             # Matching the DB version
+DATABASE_PATH = "amazon_reviews_lite_v4.db"  # Using v4 to ensure no caching issues
+DATA_VERSION = 4                             # Matching the DB version
 
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
