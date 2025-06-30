@@ -22,18 +22,18 @@ logging.basicConfig(level=logging.INFO)
 # --- Altair Data Transformer ---
 alt.data_transformers.enable('default', max_rows=None)
 
-# --- FINAL, CORRECTED CONFIGURATION ---
-# This now points to the dataset and a NEW filename to bypass caching issues.
+# --- App Configuration ---
+# This points to the dataset and file that we have verified are correct.
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-lite" 
-DATABASE_PATH = "amazon_reviews_lite_v4.db"  # <-- RENAMED FILE
-DATA_VERSION = 3                             # <-- INCREMENTED VERSION
+DATABASE_PATH = "amazon_reviews_lite_v4.db"  # Using v5 to ensure no caching issues
+DATA_VERSION = 4                             # Matching the DB version
 
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
 REVIEWS_PER_PAGE = 5
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 
-# --- Data Loading Function (No changes needed here) ---
+# --- Data Loading Function ---
 def download_data_with_versioning(dataset_slug, db_path, version_path, expected_version):
     """Downloads data using the official Kaggle API library and handles authentication."""
     current_version = -1
@@ -98,9 +98,9 @@ def download_data_with_versioning(dataset_slug, db_path, version_path, expected_
 def connect_to_db(path, required_tables):
     """
     Connects to the SQLite database and verifies that all required tables exist.
-    Includes a debug inspector to show what tables are actually present.
     """
     if not os.path.exists(path):
+        # This will only trigger if the download fails to place the file.
         st.error(f"Database file not found at path: {path}. Please ensure the download was successful.")
         st.stop()
 
@@ -108,31 +108,15 @@ def connect_to_db(path, required_tables):
         conn = sqlite3.connect(path, uri=True, check_same_thread=False, timeout=15)
         cursor = conn.cursor()
         
-        # --- NEW DEBUG INSPECTOR ---
-        with st.expander("🕵️‍♀️ Database Debug Inspector"):
-            st.write(f"Checking database file: `{path}`")
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            existing_tables = {row[0] for row in cursor.fetchall()}
-            
-            if not existing_tables:
-                st.warning("No tables found in the database file.")
-            else:
-                st.write("**Tables found:**")
-                st.write(existing_tables)
-
-            # Compare found tables with required tables
-            missing_tables = set(required_tables) - existing_tables
-            st.write("**Verification Result:**")
-            if not missing_tables:
-                st.success("✅ All required tables are present.")
-            else:
-                st.error(f"❌ Missing required tables: `{', '.join(missing_tables)}`")
-        # --- END DEBUG INSPECTOR ---
-
+        # Verify that the necessary tables exist before proceeding.
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        existing_tables = {row[0] for row in cursor.fetchall()}
+        missing_tables = set(required_tables) - existing_tables
+        
         if missing_tables:
             st.error(
-                f"Database Integrity Error: The application stopped because the database is missing required tables. "
-                "Please check the debug inspector above for details."
+                f"Database Integrity Error: The database at '{path}' is missing required tables: "
+                f"`{', '.join(missing_tables)}`. This indicates the wrong database file is being used."
             )
             st.stop()
             
@@ -142,7 +126,7 @@ def connect_to_db(path, required_tables):
         st.error(f"FATAL: Could not connect to or verify database at '{path}'. Error: {e}")
         st.stop()
 
-# --- Data Fetching Functions (No changes needed here) ---
+# --- Data Fetching Functions ---
 
 @st.cache_data
 def get_product_summary_data(_conn):
@@ -153,12 +137,13 @@ def get_product_summary_data(_conn):
 def get_discrepancy_data(_conn, asin):
     """Fetches the lightweight data for the discrepancy plot."""
     df = pd.read_sql("SELECT rating, text_polarity FROM discrepancy_data WHERE parent_asin = ?", _conn, params=(asin,))
-    df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
+    if not df.empty:
+        df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
     return df
 
 @st.cache_data
 def get_rating_distribution_data(_conn, asin):
-    """(NEW) Fetches the pre-computed rating distribution for a product."""
+    """Fetches the pre-computed rating distribution for a product."""
     return pd.read_sql("SELECT `1_star`, `2_star`, `3_star`, `4_star`, `5_star` FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
 
 def get_paginated_reviews(_conn, asin, page_num, page_size):
@@ -169,13 +154,13 @@ def get_paginated_reviews(_conn, asin, page_num, page_size):
 
 # --- Main App ---
 st.set_page_config(layout="wide", page_title="Amazon Review Explorer")
-st.title("⚡ Amazon Reviews - Sentiment Dashboard (Lite Version)")
+st.title("⚡ Amazon Reviews - Sentiment Dashboard")
 
+# Define the tables this "lite" version of the app requires
 REQUIRED_TABLES = ['products', 'reviews', 'discrepancy_data', 'rating_distribution']
 
 download_data_with_versioning(KAGGLE_DATASET_SLUG, DATABASE_PATH, VERSION_FILE_PATH, DATA_VERSION)
 conn = connect_to_db(DATABASE_PATH, REQUIRED_TABLES)
-
 
 # Initialize session state
 if 'page' not in st.session_state: st.session_state.page = 0
@@ -196,7 +181,14 @@ if conn:
             st.rerun()
 
         st.header(product_details['product_title'])
-        # ... (Image carousel code can remain here)
+        # Image Carousel Logic
+        image_urls_str = product_details.get('image_urls')
+        image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) else []
+        if image_urls:
+            st.image(image_urls[0], use_container_width=True) # Display first image
+        else:
+            st.image(PLACEHOLDER_IMAGE_URL, use_container_width=True)
+
 
         st.markdown("---")
         
@@ -213,14 +205,13 @@ if conn:
             with col1:
                 st.markdown("#### Rating Distribution")
                 if not rating_dist_df.empty:
-                    # Reshape the data for Altair
                     dist_data = rating_dist_df.T.reset_index()
                     dist_data.columns = ['Star Rating', 'Count']
                     dist_data['Star Rating'] = dist_data['Star Rating'].str.replace('_', ' ')
                     
                     chart = alt.Chart(dist_data).mark_bar().encode(
-                        x=alt.X('Star Rating', sort=None),
-                        y=alt.Y('Count'),
+                        x=alt.X('Star Rating', sort=None, title="Stars"),
+                        y=alt.Y('Count', title="Number of Reviews"),
                         tooltip=['Star Rating', 'Count']
                     ).properties(title="Overall Rating Distribution")
                     st.altair_chart(chart, use_container_width=True)
@@ -254,13 +245,53 @@ if conn:
                         st.session_state.review_page += 1
                         st.rerun()
             else:
-                st.warning("No more reviews to display.")
+                st.info("No more reviews to display for this product.")
 
     # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
         st.header("Search for Products")
-        # ... (Your existing main page search and gallery code is fine here) ...
+        
+        col1, col2, col3 = st.columns(3)
+        search_term = col1.text_input("Search by product title:")
+        available_categories = get_all_categories(conn)
+        category = col2.selectbox("Filter by Category", available_categories)
+        sort_by = col3.selectbox("Sort By", ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"])
+        
+        search_results_df = products_df
+        if search_term:
+            search_results_df = search_results_df[search_results_df['product_title'].str.contains(search_term, case=False, na=False)]
+        if category != "All":
+            search_results_df = search_results_df[search_results_df['category'] == category]
+        
+        if sort_by == "Popularity (Most Reviews)":
+            search_results_df = search_results_df.sort_values(by="review_count", ascending=False)
+        elif sort_by == "Highest Rating":
+            search_results_df = search_results_df.sort_values(by="average_rating", ascending=False)
+        else: # Lowest Rating
+            search_results_df = search_results_df.sort_values(by="average_rating", ascending=True)
+
+        st.markdown("---")
+        total_results = len(search_results_df)
+        st.header(f"Found {total_results} Products")
+        
+        start_idx = st.session_state.page * PRODUCTS_PER_PAGE
+        end_idx = start_idx + PRODUCTS_PER_PAGE
+        paginated_results = search_results_df.iloc[start_idx:end_idx]
+
+        for i in range(0, len(paginated_results), 4):
+            cols = st.columns(4)
+            for j, col in enumerate(cols):
+                if i + j < len(paginated_results):
+                    row = paginated_results.iloc[i+j]
+                    with col.container(border=True):
+                        image_urls_str = row.get('image_urls')
+                        thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
+                        st.image(thumbnail_url, use_container_width=True)
+                        st.markdown(f"**{row['product_title']}**")
+                        if st.button("View Details", key=row['parent_asin']):
+                            st.session_state.selected_product = row['parent_asin']
+                            st.rerun()
 
 else:
     st.error("Application setup failed. Please check database connection.")
