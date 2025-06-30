@@ -250,9 +250,43 @@ if conn:
         with left_col:
             # ... (Image gallery code remains the same) ...
             pass
+            image_urls_str = product_details.get('image_urls')
+            image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
+            
+            thumbnail_url = image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL
+            st.image(thumbnail_url, use_container_width=True)
+
+            if image_urls:
+                with st.popover("View Image Gallery"):
+                    # Ensure index is not out of bounds if the product changes
+                    if st.session_state.image_index >= len(image_urls):
+                        st.session_state.image_index = 0
+
+                    def next_image():
+                        st.session_state.image_index = (st.session_state.image_index + 1) % len(image_urls)
+                    
+                    def prev_image():
+                        st.session_state.image_index = (st.session_state.image_index - 1 + len(image_urls)) % len(image_urls)
+
+                    st.image(image_urls[st.session_state.image_index], use_container_width=True)
+
+                    if len(image_urls) > 1:
+                        g_col1, g_col2, g_col3 = st.columns([1, 8, 1])
+                        g_col1.button("⬅️", on_click=prev_image, use_container_width=True, key="gallery_prev")
+                        g_col2.caption(f"Image {st.session_state.image_index + 1} of {len(image_urls)}")
+                        g_col3.button("➡️", on_click=next_image, use_container_width=True, key="gallery_next")
+            
         with right_col:
             # ... (Header stats remain the same) ...
             pass
+            st.header(product_details['product_title'])
+            st.caption(f"Category: {product_details['category']}")
+            
+            stat_cols = st.columns(2)
+            avg_rating = product_details.get('average_rating', 0)
+            review_count = product_details.get('review_count', 0)
+            stat_cols[0].metric("Average Rating", f"{avg_rating:.2f} ⭐")
+            stat_cols[1].metric("Total Reviews", f"{int(review_count):,}")
 
         st.markdown("---")
         
@@ -342,7 +376,70 @@ if conn:
 
     # --- MAIN SEARCH PAGE ---
     else:
-        # ... (Main page logic remains the same) ...
+        st.session_state.review_page = 1
+        st.header("Search for Products")
+        
+        # --- Search and Filter Controls ---
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.session_state.search_term = st.text_input("Search by product title:", value=st.session_state.search_term)
+        with col2:
+            available_categories = get_all_categories(conn)
+            def on_category_change():
+                st.session_state.page = 0
+            st.session_state.category = st.selectbox("Filter by Category", available_categories, index=available_categories.index(st.session_state.category), on_change=on_category_change)
+        with col3:
+            st.session_state.sort_by = st.selectbox("Sort By", ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"], index=["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"].index(st.session_state.sort_by))
+
+        if st.session_state.category == "--- Select a Category ---":
+            st.info("Please select a category to view products.")
+        else:
+            paginated_results, total_results = get_filtered_products(
+                conn, st.session_state.category, st.session_state.search_term, st.session_state.sort_by, 
+                limit=PRODUCTS_PER_PAGE, 
+                offset=st.session_state.page * PRODUCTS_PER_PAGE
+            )
+
+            st.markdown("---")
+            st.header(f"Found {total_results} Products in '{st.session_state.category}'")
+            
+            if paginated_results.empty and total_results > 0:
+                st.warning("No more products to display on this page.")
+            else:
+                for i in range(0, len(paginated_results), 4):
+                    cols = st.columns(4)
+                    for j, col in enumerate(cols):
+                        if i + j < len(paginated_results):
+                            row = paginated_results.iloc[i+j]
+                            with col.container(border=True):
+                                image_urls_str = row.get('image_urls')
+                                thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
+                                st.image(thumbnail_url, use_container_width=True)
+                                st.markdown(f"**{row['product_title']}**")
+                                avg_rating = row.get('average_rating', 0)
+                                review_count = row.get('review_count', 0)
+                                st.caption(f"Avg. Rating: {avg_rating:.2f} ⭐ ({int(review_count)} reviews)")
+                                if st.button("View Details", key=row['parent_asin']):
+                                    st.session_state.selected_product = row['parent_asin']
+                                    st.rerun()
+
+            # --- Pagination Buttons ---
+            st.markdown("---")
+            total_pages = (total_results + PRODUCTS_PER_PAGE - 1) // PRODUCTS_PER_PAGE
+            if total_pages > 1:
+                nav_cols = st.columns([1, 1, 1])
+                with nav_cols[0]:
+                    if st.session_state.page > 0:
+                        if st.button("⬅️ Previous Page"):
+                            st.session_state.page -= 1
+                            st.rerun()
+                with nav_cols[1]:
+                    st.write(f"Page {st.session_state.page + 1} of {total_pages}")
+                with nav_cols[2]:
+                    if (st.session_state.page + 1) < total_pages:
+                        if st.button("Next Page ➡️"):
+                            st.session_state.page += 1
+                            st.rerun()
         pass
 
 else:
