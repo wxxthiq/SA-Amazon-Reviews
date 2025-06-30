@@ -26,7 +26,7 @@ alt.data_transformers.enable('default', max_rows=None)
 # This points to the dataset and file that we have verified are correct.
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-lite" 
 DATABASE_PATH = "amazon_reviews_lite_v4.db"  # Using v5 to ensure no caching issues
-DATA_VERSION = 1                             # Matching the DB version
+DATA_VERSION = 4                             # Matching the DB version
 
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
@@ -347,10 +347,10 @@ if conn:
                 else:
                     st.warning("No discrepancy data available.")
 
-            # --- NEW: Drill-down review display section ---
+            # --- Drill-down review display section with pagination ---
             if st.session_state.drilldown_rating:
                 st.markdown("---")
-                st.subheader(f"Displaying {st.session_state.drilldown_rating}-Star Reviews")
+                st.subheader(f"Displaying {st.session_state.drilldown_rating}-Star Reviews (Page {st.session_state.drilldown_page})")
                 
                 drilldown_reviews = get_paginated_reviews(
                     conn, selected_asin, 
@@ -364,13 +364,27 @@ if conn:
                         st.markdown(f"> {row['text']}")
                         st.divider()
                     
-                    if len(drilldown_reviews) == REVIEWS_PER_PAGE:
-                        if st.button("Load More Reviews"):
-                            st.session_state.drilldown_page += 1
-                            st.rerun()
+                    # --- NEW PAGINATION LOGIC ---
+                    nav_cols = st.columns([1, 1, 1])
+                    with nav_cols[0]:
+                        if st.session_state.drilldown_page > 1:
+                            if st.button("⬅️ Previous 5", key="drilldown_prev"):
+                                st.session_state.drilldown_page -= 1
+                                st.rerun()
+                    
+                    nav_cols[1].write("") # Empty column for spacing
+
+                    with nav_cols[2]:
+                        if len(drilldown_reviews) == REVIEWS_PER_PAGE:
+                            if st.button("Next 5 ➡️", key="drilldown_next"):
+                                st.session_state.drilldown_page += 1
+                                st.rerun()
                 else:
                     st.info("No more reviews to display for this rating.")
-
+                    if st.session_state.drilldown_page > 1:
+                        if st.button("Go back to first page"):
+                            st.session_state.drilldown_page = 1
+                            st.rerun()
 
         with reviews_tab:
             # ... (General review pagination logic remains the same) ...
