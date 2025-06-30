@@ -311,7 +311,7 @@ if conn:
                 if not discrepancy_df.empty:
                     st.info("Hover over points to see details. Clicking points is not enabled in this version.")
                     plot = px.scatter(
-                        discrepancy_data,
+                        discrepancy_df,
                         x="rating",
                         y="text_polarity",
                         color="sentiment",
