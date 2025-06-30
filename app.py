@@ -228,38 +228,46 @@ if conn:
             st.session_state.image_index = 0 # Reset image index
             st.rerun()
 
-        st.header(product_details['product_title'])
-        
-        # --- MODIFIED: Image Carousel Logic ---
-        image_urls_str = product_details.get('image_urls')
-        image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
+        # --- MODIFIED: Header Layout with Popover Image Gallery ---
+        left_col, right_col = st.columns([1, 2])
 
-        if not image_urls:
-            st.image(PLACEHOLDER_IMAGE_URL, use_container_width=True)
-        else:
-            # Ensure index is not out of bounds if the product changes
-            if st.session_state.image_index >= len(image_urls):
-                st.session_state.image_index = 0
-
-            # Define callback functions to change the image index
-            def next_image():
-                st.session_state.image_index = (st.session_state.image_index + 1) % len(image_urls)
+        with left_col:
+            image_urls_str = product_details.get('image_urls')
+            image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
             
-            def prev_image():
-                st.session_state.image_index = (st.session_state.image_index - 1 + len(image_urls)) % len(image_urls)
+            thumbnail_url = image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL
+            st.image(thumbnail_url, use_container_width=True)
 
-            # Display the current image
-            st.image(image_urls[st.session_state.image_index], use_container_width=True)
+            if image_urls:
+                with st.popover("View Image Gallery"):
+                    # Ensure index is not out of bounds if the product changes
+                    if st.session_state.image_index >= len(image_urls):
+                        st.session_state.image_index = 0
 
-            # Display buttons and image counter only if there's more than one image
-            if len(image_urls) > 1:
-                col1, col2, col3 = st.columns([1, 8, 1])
-                with col1:
-                    st.button("⬅️", on_click=prev_image, use_container_width=True, key="prev_img")
-                with col2:
-                    st.caption(f"Image {st.session_state.image_index + 1} of {len(image_urls)}")
-                with col3:
-                    st.button("➡️", on_click=next_image, use_container_width=True, key="next_img")
+                    def next_image():
+                        st.session_state.image_index = (st.session_state.image_index + 1) % len(image_urls)
+                    
+                    def prev_image():
+                        st.session_state.image_index = (st.session_state.image_index - 1 + len(image_urls)) % len(image_urls)
+
+                    st.image(image_urls[st.session_state.image_index], use_container_width=True)
+
+                    if len(image_urls) > 1:
+                        g_col1, g_col2, g_col3 = st.columns([1, 8, 1])
+                        g_col1.button("⬅️", on_click=prev_image, use_container_width=True, key="gallery_prev")
+                        g_col2.caption(f"Image {st.session_state.image_index + 1} of {len(image_urls)}")
+                        g_col3.button("➡️", on_click=next_image, use_container_width=True, key="gallery_next")
+
+        with right_col:
+            st.header(product_details['product_title'])
+            st.caption(f"Category: {product_details['category']}")
+            
+            stat_cols = st.columns(2)
+            avg_rating = product_details.get('average_rating', 0)
+            review_count = product_details.get('review_count', 0)
+            stat_cols[0].metric("Average Rating", f"{avg_rating:.2f} ⭐")
+            stat_cols[1].metric("Total Reviews", f"{int(review_count):,}")
+
         # --- END OF MODIFIED SECTION ---
 
         st.markdown("---")
