@@ -112,9 +112,41 @@ def get_all_categories(_conn):
     return categories
 
 def get_filtered_products(_conn, category, search_term, sort_by, limit, offset):
-    """Fetches a paginated and filtered list of products directly from the database."""
-    # ... (This function remains the same as the last correct version) ...
-    pass
+    """
+    (CORRECTED) Fetches a paginated and filtered list of products directly from the database.
+    """
+    query = "SELECT * FROM products"
+    count_query = "SELECT COUNT(*) FROM products"
+    
+    conditions = []
+    params = []
+
+    if category != "--- Select a Category ---":
+        conditions.append("category = ?")
+        params.append(category)
+
+    if search_term:
+        conditions.append("product_title LIKE ?")
+        params.append(f"%{search_term}%")
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+        count_query += " WHERE " + " AND ".join(conditions)
+
+    if sort_by == "Popularity (Most Reviews)":
+        query += " ORDER BY review_count DESC"
+    elif sort_by == "Highest Rating":
+        query += " ORDER BY average_rating DESC"
+    else: # Lowest Rating
+        query += " ORDER BY average_rating ASC"
+
+    total_count = _conn.execute(count_query, tuple(params)).fetchone()[0]
+    query += f" LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    
+    df = pd.read_sql(query, _conn, params=params)
+    return df, total_count
+
 
 def get_single_product_details(_conn, asin):
     """Fetches details for only one product."""
