@@ -208,6 +208,7 @@ if 'selected_product' not in st.session_state: st.session_state.selected_product
 if 'category' not in st.session_state: st.session_state.category = "--- Select a Category ---"
 if 'search_term' not in st.session_state: st.session_state.search_term = ""
 if 'sort_by' not in st.session_state: st.session_state.sort_by = "Popularity (Most Reviews)"
+if 'image_index' not in st.session_state: st.session_state.image_index = 0
 
 if conn:
     # --- DETAILED PRODUCT VIEW ---
@@ -224,10 +225,11 @@ if conn:
         if st.button("⬅️ Back to Search"):
             st.session_state.selected_product = None
             st.session_state.review_page = 1
+            st.session_state.image_index = 0 # Reset image index
             st.rerun()
 
         st.header(product_details['product_title'])
-
+        
         # --- MODIFIED: Image Carousel Logic ---
         image_urls_str = product_details.get('image_urls')
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
