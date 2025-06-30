@@ -316,13 +316,15 @@ if conn:
                         x="rating",
                         y="text_polarity",
                         color="discrepancy", # Color by the discrepancy score
+                        color_continuous_scale=px.colors.sequential.Viridis, # Add a vibrant color scale
                         custom_data=['review_id'], # Pass the unique ID to the plot
                         hover_name='review_id' # Show the ID on hover for context
                     )
                     selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
                     
-                    # --- Drill-down display for discrepancy plot ---
+                    # --- CORRECTED EVENT HANDLING ---
                     if selected_point:
+                        # The correct key is 'customdata' (all lowercase, no underscore)
                         clicked_review_id = selected_point[0]['customdata'][0]
                         review_text = get_single_review_text(conn, clicked_review_id)
                         with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
