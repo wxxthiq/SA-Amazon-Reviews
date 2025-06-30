@@ -304,33 +304,32 @@ if conn:
                 st.markdown("#### Rating Distribution (Click a bar to see reviews)")
                 if not rating_dist_df.empty:
                     dist_data = rating_dist_df.T.reset_index()
-                    # --- MODIFIED: Use a clean column name for interaction ---
-                    dist_data.columns = ['star_rating_str', 'Count']
-                    # Keep the user-friendly name for display
-                    dist_data['Star Rating'] = dist_data['star_rating_str'].str.replace('_', ' ')
+                    # Use a clean column name for interaction, and a friendly one for display
+                    dist_data.columns = ['Star_Rating', 'Count']
+                    dist_data['Star_Rating'] = dist_data['Star_Rating'].str.replace('_', ' ')
                     
-                    # --- MODIFIED: Interactive Altair Chart ---
-                    # Use the clean column name 'star_rating_str' for the selection field
-                    selection = alt.selection_point(fields=['star_rating_str'], empty=True, on='click')
+                    # Define the correct sort order to ensure bars are 1, 2, 3, 4, 5
+                    sort_order = ['1 star', '2 star', '3 star', '4 star', '5 star']
+                    
+                    # --- CORRECTED: Simplified and more robust Altair chart ---
+                    selection = alt.selection_point(fields=['Star_Rating'], empty=True, on='click', name="rating_selector")
                     color = alt.condition(selection, alt.value('orange'), alt.value('steelblue'))
 
                     chart = alt.Chart(dist_data).mark_bar().encode(
-                        # Use the clean name for encoding, but the friendly name for the axis title
-                        x=alt.X('star_rating_str', sort=None, title="Stars", axis=alt.Axis(labelExpr="datum.value.replace('_', ' ')")),
-                        y=alt.Y('Count', title="Number of Reviews"),
+                        x=alt.X('Star_Rating:N', sort=sort_order, title="Stars"),
+                        y=alt.Y('Count:Q', title="Number of Reviews"),
                         color=color,
-                        tooltip=['Star Rating', 'Count']
+                        tooltip=['Star_Rating', 'Count']
                     ).add_params(
                         selection
                     ).properties(title="Overall Rating Distribution")
                     
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
 
-                    # --- CORRECTED: Check for the selector name in the event dictionary ---
+                    # --- CORRECTED: Handle drill-down using the correct key ---
                     if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
-                        # The actual data is inside the named selector
                         selected_data = event.selection["rating_selector"]
-                        selected_rating_str = selected_data['star_rating_str'][0]
+                        selected_rating_str = selected_data['Star_Rating'][0]
                         
                         selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
                         
