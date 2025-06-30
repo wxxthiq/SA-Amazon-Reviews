@@ -36,7 +36,7 @@ PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 # --- Data Loading Function ---
 def download_data_with_versioning(dataset_slug, db_path, version_path, expected_version):
     """Downloads data using the official Kaggle API library and handles authentication."""
-    current_version = -1
+    current_version = 4
     if os.path.exists(version_path):
         with open(version_path, "r") as f:
             try:
