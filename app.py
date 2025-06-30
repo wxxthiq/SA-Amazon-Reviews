@@ -25,8 +25,8 @@ alt.data_transformers.enable('default', max_rows=None)
 # --- App Configuration ---
 # This points to the dataset and file that we have verified are correct.
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/mcauley-lite" 
-DATABASE_PATH = "amazon_reviews_lite_v4.db"  # Using v5 to ensure no caching issues
-DATA_VERSION = 4                             # Matching the DB version
+DATABASE_PATH = "amazon_reviews_lite_v5.db"  # Using v5 to ensure no caching issues
+DATA_VERSION = 5                             # Matching the DB version
 
 VERSION_FILE_PATH = ".db_version"
 PRODUCTS_PER_PAGE = 16
@@ -130,28 +130,34 @@ def connect_to_db(path, required_tables):
 
 @st.cache_data
 def get_product_summary_data(_conn):
-    """Fetches the main product gallery data."""
+    """Fetches the main product gallery data. This is cached as it's large and loaded once."""
     return pd.read_sql("SELECT * FROM products", _conn)
 
 @st.cache_data
 def get_all_categories(_conn):
-    """Fetches a list of all unique categories from the products table."""
+    """Fetches a list of all unique categories. Cached for efficiency on the main page."""
     df = pd.read_sql("SELECT DISTINCT category FROM products", _conn)
     categories = sorted(df['category'].dropna().unique().tolist())
     categories.insert(0, "All") # Add 'All' as the default option
     return categories
-    
-@st.cache_data
+
+# --- MODIFIED: Caching removed from detail-page functions to prevent memory leaks ---
 def get_discrepancy_data(_conn, asin):
-    """Fetches the lightweight data for the discrepancy plot."""
+    """
+    Fetches the lightweight data for the discrepancy plot.
+    Not cached to prevent memory accumulation across multiple product views.
+    """
     df = pd.read_sql("SELECT rating, text_polarity FROM discrepancy_data WHERE parent_asin = ?", _conn, params=(asin,))
     if not df.empty:
         df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
     return df
 
-@st.cache_data
+# --- MODIFIED: Caching removed ---
 def get_rating_distribution_data(_conn, asin):
-    """Fetches the pre-computed rating distribution for a product."""
+    """
+    Fetches the pre-computed rating distribution for a product.
+    Not cached to prevent memory accumulation.
+    """
     return pd.read_sql("SELECT `1_star`, `2_star`, `3_star`, `4_star`, `5_star` FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
 
 def get_paginated_reviews(_conn, asin, page_num, page_size):
@@ -206,6 +212,7 @@ if conn:
         with vis_tab:
             st.subheader("Sentiment Analysis Visualizations")
             
+            # These functions are now called live on each run for this page
             discrepancy_df = get_discrepancy_data(conn, selected_asin)
             rating_dist_df = get_rating_distribution_data(conn, selected_asin)
 
