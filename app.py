@@ -304,14 +304,11 @@ if conn:
                 st.markdown("#### Rating Distribution (Click a bar to see reviews)")
                 if not rating_dist_df.empty:
                     dist_data = rating_dist_df.T.reset_index()
-                    # Use a clean column name for interaction, and a friendly one for display
                     dist_data.columns = ['Star_Rating', 'Count']
                     dist_data['Star_Rating'] = dist_data['Star_Rating'].str.replace('_', ' ')
                     
-                    # Define the correct sort order to ensure bars are 1, 2, 3, 4, 5
                     sort_order = ['1 star', '2 star', '3 star', '4 star', '5 star']
                     
-                    # --- CORRECTED: Simplified and more robust Altair chart ---
                     selection = alt.selection_point(fields=['Star_Rating'], empty=True, on='click', name="rating_selector")
                     color = alt.condition(selection, alt.value('orange'), alt.value('steelblue'))
 
@@ -326,20 +323,21 @@ if conn:
                     
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
 
-                    # --- CORRECTED: Handle drill-down using the correct key ---
+                    # --- FINAL CORRECTED LOGIC ---
                     if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
-                        selected_data = event.selection["rating_selector"]
-                        selected_rating_str = selected_data['Star_Rating'][0]
-                        
-                        selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
-                        
-                        if st.session_state.drilldown_rating != selected_rating_int:
-                            st.session_state.drilldown_rating = selected_rating_int
-                            st.session_state.drilldown_page = 1
+                        # The selection object is a list of dictionaries. Get the first one.
+                        selected_data_list = event.selection["rating_selector"]
+                        if selected_data_list:
+                            selected_rating_str = selected_data_list[0]['Star_Rating']
+                            
+                            selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
+                            
+                            if st.session_state.drilldown_rating != selected_rating_int:
+                                st.session_state.drilldown_rating = selected_rating_int
+                                st.session_state.drilldown_page = 1
                     
                 else:
-                    st.warning("No rating distribution data available.")
-            
+                    st.warning("No rating distribution data available.")            
             with col2:
                 st.markdown("#### Rating vs. Text Discrepancy")
                 if not discrepancy_df.empty:
