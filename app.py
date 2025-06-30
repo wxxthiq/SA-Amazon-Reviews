@@ -326,13 +326,14 @@ if conn:
                     
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
 
-                    # --- MODIFIED: Handle drill-down using the clean column name ---
-                    if event.selection and event.selection["star_rating_str"]:
-                        selected_rating_str = event.selection["star_rating_str"][0]
-                        # Convert "1_star" string to integer 1
+                    # --- CORRECTED: Check for the selector name in the event dictionary ---
+                    if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
+                        # The actual data is inside the named selector
+                        selected_data = event.selection["rating_selector"]
+                        selected_rating_str = selected_data['star_rating_str'][0]
+                        
                         selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
                         
-                        # If a new bar is clicked, reset the page
                         if st.session_state.drilldown_rating != selected_rating_int:
                             st.session_state.drilldown_rating = selected_rating_int
                             st.session_state.drilldown_page = 1
