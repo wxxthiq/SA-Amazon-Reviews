@@ -327,15 +327,26 @@ if conn:
                 st.markdown("#### Rating vs. Text Discrepancy")
                 if not discrepancy_df.empty:
                     st.info("Hover over points to see details. Clicking points is not enabled in this version.")
+                    # --- MODIFIED: Use jittered data for plotting and show original data on hover ---
                     plot = px.scatter(
                         discrepancy_df,
-                        x="rating",
-                        y="text_polarity",
-                        color="discrepancy", # Color by the discrepancy score
-                        color_continuous_scale=px.colors.sequential.Viridis, # Add a vibrant color scale
-                        custom_data=['review_id'], # Pass the unique ID to the plot
-                        hover_name='review_id' # Show the ID on hover for context
+                        x="rating_jittered",
+                        y="text_polarity_jittered",
+                        color="discrepancy",
+                        color_continuous_scale=px.colors.sequential.Viridis,
+                        custom_data=['review_id'],
+                        hover_name='review_id',
+                        hover_data={
+                            'rating': True, # Show original rating
+                            'text_polarity': ':.2f', # Show original polarity, formatted
+                            'discrepancy': ':.2f',
+                            'rating_jittered': False, # Hide jittered value from hover
+                            'text_polarity_jittered': False # Hide jittered value from hover
+                        }
                     )
+                    plot.update_xaxes(title_text='Rating')
+                    plot.update_yaxes(title_text='Text Sentiment Polarity')
+
                     selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
                     
                     # --- CORRECTED: Robust event handling using pointIndex ---
