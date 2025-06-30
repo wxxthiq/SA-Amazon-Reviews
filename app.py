@@ -322,13 +322,23 @@ if conn:
                     )
                     selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
                     
-                    # --- CORRECTED EVENT HANDLING ---
-                    if selected_point:
-                        # The correct key is 'customdata' (all lowercase, no underscore)
-                        clicked_review_id = selected_point[0]['customdata'][0]
+                # --- MODIFIED: Robust event handling and debugging ---
+                if selected_point:
+                    # First, let's print the raw event data to help debug
+                    st.write("Debug: Click Event Data Received:")
+                    st.write(selected_point)
+
+                    # The event returns a list of dicts, get the first one.
+                    point_data = selected_point[0]
+                    
+                    # Check if the correct key exists before accessing it
+                    if 'customdata' in point_data and point_data['customdata']:
+                        clicked_review_id = point_data['customdata'][0]
                         review_text = get_single_review_text(conn, clicked_review_id)
                         with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
                             st.markdown(f"> {review_text}")
+                    else:
+                        st.warning("Could not retrieve review ID from the clicked point. Please try clicking another point.")
                 else:
                     st.warning("No discrepancy data available.")
 
