@@ -216,6 +216,7 @@ if 'drilldown_reviews' not in st.session_state: st.session_state.drilldown_revie
 if 'drilldown_title' not in st.session_state: st.session_state.drilldown_title = ""
 if 'drilldown_page' not in st.session_state: st.session_state.drilldown_page = 1
 if 'drilldown_rating_filter' not in st.session_state: st.session_state.drilldown_rating_filter = None
+if 'drilldown_rating' not in st.session_state: st.session_state.drilldown_rating = None
 
 
 
