@@ -318,18 +318,17 @@ if conn:
                     
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
 
-                    # --- FINAL CORRECTED LOGIC ---
+                    # Replace the old event handling block with this one
                     if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
-                        # The selection object is a list of dictionaries. Get the first one.
                         selected_data_list = event.selection["rating_selector"]
                         if selected_data_list:
                             selected_rating_str = selected_data_list[0]['Star_Rating']
-                            
                             selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
-                            
-                            if st.session_state.drilldown_rating != selected_rating_int:
-                                st.session_state.drilldown_rating = selected_rating_int
-                                st.session_state.drilldown_page = 1
+                    
+                            # If we clicked a new bar, reset the page and set the new filter
+                            if st.session_state.drilldown_rating_filter != selected_rating_int:
+                                st.session_state.drilldown_rating_filter = selected_rating_int
+                                st.session_state.drilldown_page = 1 # Reset to page 1 for new selection
                     
                 else:
                     st.warning("No rating distribution data available.")            
