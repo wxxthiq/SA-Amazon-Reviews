@@ -317,29 +317,28 @@ if conn:
                     ).properties(title="Overall Rating Distribution")
                     
                     st.altair_chart(chart, use_container_width=True)
-                
-                    # This code goes inside `with col1:`, right after the `event = st.altair_chart(...)` line
+                    # VERIFY THIS CODE IS CORRECT
                     st.markdown("---")
-                    st.write("**Or, select a rating to view reviews:**")
+                    st.write("**Select a rating to view reviews:**")
                     
-                    # Create 5 columns for our 5 buttons
                     button_cols = st.columns(5)
                     rating_values = [1, 2, 3, 4, 5]
                     
-                    # Define a callback function to set the state when a button is clicked
                     def set_drilldown_filter(rating):
-                        st.session_state.drilldown_rating_filter = rating
-                        st.session_state.drilldown_page = 1
+                        # If the user clicks the same button again, clear the filter
+                        if st.session_state.drilldown_rating_filter == rating:
+                            st.session_state.drilldown_rating_filter = None
+                            st.session_state.drilldown_page = 1
+                        else:
+                            st.session_state.drilldown_rating_filter = rating
+                            st.session_state.drilldown_page = 1
                     
-                    # Create a button for each star rating in its own column
                     for i, col in enumerate(button_cols):
                         with col:
                             rating = rating_values[i]
-                            # The on_click callback is the key to stable state management
                             st.button(f"{rating} ⭐", on_click=set_drilldown_filter, args=(rating,), use_container_width=True)
-                            
-                    # Replace the old chart event handling logic with this one
                     
+                    # Replace the old chart event handling logic with this one    
                     if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
                         selected_data_list = event.selection["rating_selector"]
                         if selected_data_list:
