@@ -452,7 +452,22 @@ if conn:
                         plot.update_yaxes(title_text='Text Sentiment Polarity')
                 
                         selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
-                
+
+                        # --- Display for Discrepancy Plot Drill-Down ---
+                        if st.session_state.discrepancy_review_id:
+                            st.markdown("---")
+                            st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
+                        
+                            review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
+                        
+                            with st.container(border=True):
+                                st.markdown(f"> {review_text}")
+                        
+                            # Add a button to clear the selection and hide the review
+                            if st.button("Close Review Snippet"):
+                                st.session_state.discrepancy_review_id = None
+                                st.rerun()
+                                
                         # NEW, STABLE LOGIC
                         if selected_point:
                             point_data = selected_point[0]
@@ -460,20 +475,6 @@ if conn:
                                 clicked_index = point_data['pointIndex']
                                 # Set our session state variable with the ID of the clicked review
                                 st.session_state.discrepancy_review_id = discrepancy_df.iloc[clicked_index]['review_id']
-                                # --- Display for Discrepancy Plot Drill-Down ---
-                                if st.session_state.discrepancy_review_id:
-                                    st.markdown("---")
-                                    st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
-                                
-                                    review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
-                                
-                                    with st.container(border=True):
-                                        st.markdown(f"> {review_text}")
-                                
-                                    # Add a button to clear the selection and hide the review
-                                    if st.button("Close Review Snippet"):
-                                        st.session_state.discrepancy_review_id = None
-                                        st.rerun()
                     else:
                         st.warning("No reviews match the selected filters.")
         
