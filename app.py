@@ -435,36 +435,36 @@ if conn:
 
         if st.session_state.category == "--- Select a Category ---":
             st.info("Please select a category to view products.")
-        else:
-            paginated_results, total_results = get_filtered_products(
-                conn, st.session_state.category, st.session_state.search_term, st.session_state.sort_by, 
-                limit=PRODUCTS_PER_PAGE, 
-                offset=st.session_state.page * PRODUCTS_PER_PAGE
-            )
+    else:
+        paginated_results, total_results = get_filtered_products(
+            conn, st.session_state.category, st.session_state.search_term, st.session_state.sort_by, 
+            limit=PRODUCTS_PER_PAGE, 
+            offset=st.session_state.page * PRODUCTS_PER_PAGE
+        )
 
-            st.markdown("---")
-            st.header(f"Found {total_results} Products in '{st.session_state.category}'")
-            
-            if paginated_results.empty and total_results > 0:
-                st.warning("No more products to display on this page.")
-            else:
-                for i in range(0, len(paginated_results), 4):
-                    cols = st.columns(4)
-                    for j, col in enumerate(cols):
-                        if i + j < len(paginated_results):
-                            row = paginated_results.iloc[i+j]
-                            with col.container(border=True):
-                                image_urls_str = row.get('image_urls')
-                                thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
-                                st.image(thumbnail_url, use_container_width=True)
-                                st.markdown(f"**{row['product_title']}**")
-                                avg_rating = row.get('average_rating', 0)
-                                review_count = row.get('review_count', 0)
-                                st.caption(f"Avg. Rating: {avg_rating:.2f} ⭐ ({int(review_count)} reviews)")
-                                if st.button("View Details", key=row['parent_asin']):
-                                    st.session_state.selected_product = row['parent_asin']
-                                    st.rerun()
-                    pass
+        st.markdown("---")
+        st.header(f"Found {total_results} Products in '{st.session_state.category}'")
+        
+        if paginated_results.empty and total_results > 0:
+            st.warning("No more products to display on this page.")
+        else:
+            for i in range(0, len(paginated_results), 4):
+                cols = st.columns(4)
+                for j, col in enumerate(cols):
+                    if i + j < len(paginated_results):
+                        row = paginated_results.iloc[i+j]
+                        with col.container(border=True):
+                            image_urls_str = row.get('image_urls')
+                            thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
+                            st.image(thumbnail_url, use_container_width=True)
+                            st.markdown(f"**{row['product_title']}**")
+                            avg_rating = row.get('average_rating', 0)
+                            review_count = row.get('review_count', 0)
+                            st.caption(f"Avg. Rating: {avg_rating:.2f} ⭐ ({int(review_count)} reviews)")
+                            if st.button("View Details", key=row['parent_asin']):
+                                st.session_state.selected_product = row['parent_asin']
+                                st.rerun()
+                pass
 
             # --- Pagination Buttons ---
             st.markdown("---")
