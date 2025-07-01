@@ -376,11 +376,16 @@ if conn:
         
         product_details = product_details_df.iloc[0]
         if st.button("⬅️ Back to Search"):
+            # --- Clear ALL state related to the detail view ---
             st.session_state.selected_product = None
             st.session_state.review_page = 1
             st.session_state.image_index = 0
             st.session_state.drilldown_rating = None
             st.session_state.drilldown_page = 1
+            # --- ADD THESE TWO LINES ---
+            st.session_state.all_reviews_page = 0
+            st.session_state.all_reviews_sort = "Newest First"
+            # --- END OF ADDITION ---
             st.rerun()
 
         # Header Layout with Popover Image Gallery
