@@ -284,7 +284,6 @@ if conn:
         
         selected_asin = st.session_state.selected_product
         product_details_df = get_single_product_details(conn, selected_asin)
-        rating_dist_df = get_rating_distribution_data(conn, selected_asin)
         
         # --- Interactive Sidebar Filters ---
         st.sidebar.header("Interactive Filters")
@@ -395,25 +394,22 @@ if conn:
             else:
                 col1, col2 = st.columns(2)
         
+                # NEW, DYNAMIC CHART LOGIC
                 with col1:
-                    # NEW, STABLE CHART CODE
-                    st.markdown("#### Rating Distribution")
-                    if not rating_dist_df.empty:
-                        dist_data = rating_dist_df.T.reset_index()
-                        dist_data.columns = ['Star Rating', 'Count']
-                        dist_data['Star Rating'] = dist_data['Star Rating'].str.replace('_', ' ')
-                    
-                        sort_order = ['1 star', '2 star', '3 star', '4 star', '5 star']
-                    
-                        chart = alt.Chart(dist_data).mark_bar().encode(
-                            x=alt.X('Star Rating:N', sort=sort_order, title="Stars"),
-                            y=alt.Y('Count:Q', title="Number of Reviews"),
-                            tooltip=['Star Rating', 'Count']
-                        ).properties(title="Overall Rating Distribution")
-                    
-                        st.altair_chart(chart, use_container_width=True)
-                    else:
-                        st.warning("No rating distribution data available.")
+                    st.markdown("#### Rating Distribution (Live)")
+                
+                    # Dynamically calculate rating counts from the filtered data
+                    rating_counts_df = filtered_data['rating'].value_counts().sort_index().reset_index()
+                    rating_counts_df.columns = ['Rating', 'Count']
+                
+                    chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                        x=alt.X('Rating:O', title="Stars", scale=alt.Scale(domain=[1, 2, 3, 4, 5])), # :O specifies ordinal data type
+                        y=alt.Y('Count:Q', title="Number of Reviews"),
+                        tooltip=['Rating', 'Count']
+                    ).properties(
+                        title="Filtered Rating Distribution"
+                    )
+                    st.altair_chart(chart, use_container_width=True)
         
                 with col2:
                     st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
