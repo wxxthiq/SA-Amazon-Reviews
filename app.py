@@ -170,10 +170,15 @@ def get_discrepancy_data(_conn, asin):
         df['text_polarity_jittered'] = df['text_polarity'] + np.random.uniform(-jitter_strength_polarity, jitter_strength_polarity, size=len(df))
     return df
     
-st.cache_data
+@st.cache_data
 def get_rating_distribution_data(_conn, asin):
     """Fetches the pre-computed rating distribution for a product."""
     return pd.read_sql("SELECT `1_star`, `2_star`, `3_star`, `4_star`, `5_star` FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
+    
+def get_single_review_text(conn, review_id):
+    """Fetches the full text of a single review by its unique ID."""
+    result = conn.execute("SELECT text FROM reviews WHERE review_id = ?", (review_id,)).fetchone()
+    return result[0] if result else "Review text not found."
 
 def get_single_review(_conn, review_id):
     """Fetches a single review as a DataFrame."""
