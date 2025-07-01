@@ -417,38 +417,51 @@ if conn:
         
                 with col2:
                     st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
-                    plot = px.scatter(
-                        filtered_data,
-                        x="rating_jittered",
-                        y="text_polarity_jittered",
-                        color="discrepancy",
-                        color_continuous_scale=px.colors.sequential.Viridis,
-                        custom_data=['review_id'],
-                        hover_name='review_id',
-                        hover_data={'rating': True, 'text_polarity': ':.2f'}
+                    
+                    # This DataFrame already contains rating, sentiment, polarity, and review_id.
+                    discrepancy_df = get_filtered_data_for_product(
+                        conn, selected_asin, selected_ratings, selected_sentiments, selected_date_range
                     )
-                    plot.update_xaxes(title_text='Rating')
-                    plot.update_yaxes(title_text='Text Sentiment Polarity')
-                    selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
-        
-                    # Replace the old block with this new, corrected version
-                    if selected_point:
-                        # The event returns a list of dicts, get the first one.
-                        point_data = selected_point[0]
-                        
-                        # Check if the 'pointIndex' key exists before trying to use it.
-                        if 'pointIndex' in point_data:
-                            # Use the index to find the correct row in the original DataFrame.
-                            clicked_index = point_data['pointIndex']
-                            clicked_review_id = discrepancy_df.iloc[clicked_index]['review_id']
-                            
-                            # Now fetch and display the review text.
-                            review_text = get_single_review_text(conn, clicked_review_id)
-                            with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
-                                st.markdown(f"> {review_text}")
-                        else:
-                            # Show a helpful message if the click event data is malformed.
-                            st.warning("Could not retrieve review details from the clicked point. Please try again.")
+                
+                    if not discrepancy_df.empty:
+                        # 2. Calculate the 'discrepancy' column on the filtered data.
+                        discrepancy_df['discrepancy'] = (discrepancy_df['text_polarity'] - ((discrepancy_df['rating'] - 3.0) / 2.0)).abs()
+                
+                        # 3. Add jitter for better visualization.
+                        discrepancy_df['rating_jittered'] = discrepancy_df['rating'] + np.random.uniform(-0.1, 0.1, size=len(discrepancy_df))
+                        discrepancy_df['text_polarity_jittered'] = discrepancy_df['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(discrepancy_df))
+                
+                        # 4. Now, create the plot with the fully prepared DataFrame.
+                        plot = px.scatter(
+                            discrepancy_df, # Use the prepared DataFrame
+                            x="rating_jittered",
+                            y="text_polarity_jittered",
+                            color="discrepancy", # This column now exists
+                            color_continuous_scale=px.colors.sequential.Viridis,
+                            custom_data=['review_id'],
+                            hover_name='review_id',
+                            hover_data={
+                                'rating': True, 
+                                'text_polarity': ':.2f',
+                                'discrepancy': ':.2f',
+                                'rating_jittered': False,
+                                'text_polarity_jittered': False
+                            }
+                        )
+                        plot.update_xaxes(title_text='Rating')
+                        plot.update_yaxes(title_text='Text Sentiment Polarity')
+                
+                        selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
+                
+                        if selected_point:
+                            point_data = selected_point[0]
+                            if 'customdata' in point_data and point_data['customdata']:
+                                clicked_review_id = point_data['customdata'][0]
+                                review_text = get_single_review_text(conn, clicked_review_id)
+                                with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
+                                    st.markdown(f"> {review_text}")
+                    else:
+                        st.warning("No reviews match the selected filters.")
         
         with reviews_tab:
             # ... (General review pagination logic remains the same) ...
