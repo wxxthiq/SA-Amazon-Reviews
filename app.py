@@ -323,21 +323,18 @@ if conn:
                     
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
                     st.markdown("---") # Add a visual separator
-                    
-                    # Replace the old on_select_rating function with this one
-
+                
+                    # VERIFY THIS FUNCTION IS CORRECT
                     def on_select_rating():
                         """Callback to handle dropdown selection for rating drilldown."""
-                        # Get the selected rating string from the selectbox's state
                         selected_rating_str = st.session_state.rating_select_box
                     
-                        # If the user selected a valid rating (not the placeholder)
                         if selected_rating_str and selected_rating_str != "---":
                             selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
                             st.session_state.drilldown_rating_filter = selected_rating_int
                             st.session_state.drilldown_page = 1
                         else:
-                            # If the user selected the "---" placeholder, clear the filter
+                            # If the user selects the "---" placeholder, clear the filter
                             st.session_state.drilldown_rating_filter = None
                             st.session_state.drilldown_page = 1
                     
@@ -375,16 +372,12 @@ if conn:
                     )
                     
                     # Replace the old chart event handling logic with this one
+                    # NEW, CORRECT LOGIC
                     if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
                         selected_data_list = event.selection["rating_selector"]
                         if selected_data_list:
-                            selected_rating_str = selected_data_list[0]['Star_Rating']
-                            selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
-                    
-                            # If a new bar is clicked, set the filter and reset the page
-                            if st.session_state.drilldown_rating_filter != selected_rating_int:
-                                st.session_state.drilldown_rating_filter = selected_rating_int
-                                st.session_state.drilldown_page = 1
+                            # This line programmatically changes the dropdown's value, which will trigger its on_change callback on the next rerun.
+                            st.session_state.rating_select_box = selected_data_list[0]['Star_Rating']
                     
                 else:
                     st.warning("No rating distribution data available.")  
