@@ -153,27 +153,40 @@ def get_single_product_details(_conn, asin):
     """Fetches details for only one product."""
     return pd.read_sql("SELECT * FROM products WHERE parent_asin = ?", _conn, params=(asin,))
 
+
 @st.cache_data
-def get_discrepancy_data(_conn, asin):
+def get_filtered_discrepancy_data(_conn, asin, rating_filter, sentiment_filter, date_range):
     """
-    Fetches all necessary data for the discrepancy plot for a given product.
-    This is cached per product view.
+    Fetches all necessary data for the discrepancy plot, applying all filters directly in SQL.
+    This is the core of the on-the-fly analysis.
     """
+    # Base query selects all necessary columns from the discrepancy table
     query = "SELECT review_id, rating, text_polarity, sentiment FROM discrepancy_data WHERE parent_asin = ?"
-    df = pd.read_sql(query, _conn, params=(asin,))
+    params = [asin]
+
+    # Dynamically add conditions for each filter if it's being used
+    if rating_filter:
+        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
+        params.extend(rating_filter)
+
+    if sentiment_filter:
+        query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
+        params.extend(sentiment_filter)
+
+    if date_range and len(date_range) == 2:
+        query += " AND date BETWEEN ? AND ?"
+        params.extend([date_range[0].strftime('%Y-%m-%d'), date_range[1].strftime('%Y-%m-%d')])
+
+    df = pd.read_sql(query, _conn, params=params)
+
+    # Calculate discrepancy on the filtered data
     if not df.empty:
         df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
-        # --- NEW: Add jitter to separate overlapping points ---
-        jitter_strength_rating = 0.1
-        jitter_strength_polarity = 0.02
-        df['rating_jittered'] = df['rating'] + np.random.uniform(-jitter_strength_rating, jitter_strength_rating, size=len(df))
-        df['text_polarity_jittered'] = df['text_polarity'] + np.random.uniform(-jitter_strength_polarity, jitter_strength_polarity, size=len(df))
+        # Add jitter for better visualization of overlapping points
+        df['rating_jittered'] = df['rating'] + np.random.uniform(-0.1, 0.1, size=len(df))
+        df['text_polarity_jittered'] = df['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(df))
+
     return df
-    
-@st.cache_data
-def get_rating_distribution_data(_conn, asin):
-    """Fetches the pre-computed rating distribution for a product."""
-    return pd.read_sql("SELECT `1_star`, `2_star`, `3_star`, `4_star`, `5_star` FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
     
 def get_single_review_text(conn, review_id):
     """Fetches the full text of a single review by its unique ID."""
@@ -201,6 +214,42 @@ def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
     
     return pd.read_sql(query, _conn, params=params)
 
+# This new function replaces get_discrepancy_data and get_rating_distribution_data
+@st.cache_data
+def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, date_range):
+    """
+    Fetches all necessary data for the detail page, applying all filters directly in SQL.
+    This is the core of the on-the-fly analysis.
+    """
+    query = "SELECT review_id, rating, text_polarity, sentiment, date FROM discrepancy_data WHERE parent_asin = ?"
+    params = [asin]
+
+    # Dynamically add conditions for each filter if it's being used
+    if rating_filter:
+        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
+        params.extend(rating_filter)
+
+    if sentiment_filter:
+        query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
+        params.extend(sentiment_filter)
+
+    if date_range and len(date_range) == 2:
+        # Ensure the date format matches what's in the database ('YYYY-MM-DD')
+        start_date = date_range[0].strftime('%Y-%m-%d')
+        end_date = date_range[1].strftime('%Y-%m-%d')
+        query += " AND date BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
+
+    df = pd.read_sql(query, _conn, params=params)
+
+    # Calculate discrepancy and jitter on the filtered data
+    if not df.empty:
+        df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
+        df['rating_jittered'] = df['rating'] + np.random.uniform(-0.1, 0.1, size=len(df))
+        df['text_polarity_jittered'] = df['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(df))
+
+    return df
+    
 # --- Main App ---
 st.set_page_config(layout="wide", page_title="Amazon Review Explorer")
 st.title("⚡ Amazon Reviews - Sentiment Dashboard")
@@ -228,6 +277,43 @@ if 'drilldown_rating' not in st.session_state: st.session_state.drilldown_rating
 if conn:
     # --- DETAILED PRODUCT VIEW ---
     if st.session_state.selected_product:
+        
+        # --- Interactive Sidebar Filters ---
+        st.sidebar.header("Interactive Filters")
+        
+        # Get min/max dates for this specific product to set as defaults for the date picker
+        min_date_db, max_date_db = conn.execute(
+            "SELECT MIN(date), MAX(date) FROM reviews WHERE parent_asin=?", (selected_asin,)
+        ).fetchone()
+        
+        min_date = datetime.strptime(min_date_db, '%Y-%m-%d').date() if min_date_db else datetime(2000, 1, 1).date()
+        max_date = datetime.now().date() # Default to today if max is not found
+        
+        selected_date_range = st.sidebar.date_input(
+            "Filter by Date Range", 
+            value=(min_date, max_date), 
+            min_value=min_date, 
+            max_value=max_date
+        )
+        
+        rating_options = [1, 2, 3, 4, 5]
+        selected_ratings = st.sidebar.multiselect(
+            "Filter by Star Rating", 
+            options=rating_options, 
+            default=rating_options
+        )
+        
+        sentiment_options = ['Positive', 'Negative', 'Neutral']
+        selected_sentiments = st.sidebar.multiselect(
+            "Filter by Sentiment", 
+            options=sentiment_options, 
+            default=sentiment_options
+        )
+        
+        # --- Fetch Data Based on Live Filters ---
+        filtered_data = get_filtered_data_for_product(
+            conn, selected_asin, selected_ratings, selected_sentiments, selected_date_range
+        )
         selected_asin = st.session_state.selected_product
         product_details_df = get_single_product_details(conn, selected_asin)
         
@@ -236,7 +322,6 @@ if conn:
             st.stop()
         
         product_details = product_details_df.iloc[0]
-
         if st.button("⬅️ Back to Search"):
             st.session_state.selected_product = None
             st.session_state.review_page = 1
@@ -289,64 +374,87 @@ if conn:
             stat_cols[1].metric("Total Reviews", f"{int(review_count):,}")
 
         st.markdown("---")
-        
         # --- Visualization Tabs ---
         vis_tab, reviews_tab = st.tabs(["📊 Sentiment Analysis", "💬 Individual Reviews"])
 
+        # Replace the entire 'with vis_tab:' block with this new code
         with vis_tab:
-            st.subheader("Sentiment Analysis Visualizations")
-            
-            discrepancy_df = get_discrepancy_data(conn, selected_asin)
-            rating_dist_df = get_rating_distribution_data(conn, selected_asin)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### Rating Distribution (Click a bar to see reviews)")
-                if not rating_dist_df.empty:
-                    dist_data = rating_dist_df.T.reset_index()
-                    dist_data.columns = ['Star_Rating', 'Count']
-                    dist_data['Star_Rating'] = dist_data['Star_Rating'].str.replace('_', ' ')
-                    
+            st.subheader("Live Analysis on Filtered Data")
+        
+            # This is the single source of truth for our visualizations
+            st.write(f"Displaying analysis for **{len(filtered_data)}** reviews matching your criteria.")
+        
+            if filtered_data.empty:
+                st.warning("No reviews match the selected filters. Please adjust your selections in the sidebar.")
+            else:
+                col1, col2 = st.columns(2)
+        
+                with col1:
+                    st.markdown("#### Rating Distribution (Click a bar to see reviews)")
+        
+                    # Create a DataFrame for the chart from the filtered data
+                    rating_counts_df = filtered_data['rating'].value_counts().sort_index().reset_index()
+                    rating_counts_df.columns = ['Rating', 'Count']
+                    # Convert rating to string for Altair selection to work reliably
+                    rating_counts_df['Rating_Str'] = rating_counts_df['Rating'].astype(str) + " star"
+        
                     sort_order = ['1 star', '2 star', '3 star', '4 star', '5 star']
-                    
-                    # NEW, STABLE CHART CODE
-                    chart = alt.Chart(dist_data).mark_bar().encode(
-                        x=alt.X('Star_Rating:N', sort=sort_order, title="Stars"),
+        
+                    selection = alt.selection_point(fields=['Rating_Str'], empty=True, on='click', name="rating_selector")
+                    color = alt.condition(selection, alt.value('orange'), alt.value('steelblue'))
+        
+                    chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                        x=alt.X('Rating_Str:N', sort=sort_order, title="Stars"),
                         y=alt.Y('Count:Q', title="Number of Reviews"),
-                        tooltip=['Star_Rating', 'Count']
-                    ).properties(title="Overall Rating Distribution")
-                    
-                    st.altair_chart(chart, use_container_width=True)
-                    # VERIFY THIS CODE IS CORRECT
-                    st.markdown("---")
-                    st.write("**Select a rating to view reviews:**")
-                    
-                    button_cols = st.columns(5)
-                    rating_values = [1, 2, 3, 4, 5]
-                    
-                    def set_drilldown_filter(rating):
-                        # If the user clicks the same button again, clear the filter
-                        if st.session_state.drilldown_rating_filter == rating:
-                            st.session_state.drilldown_rating_filter = None
-                            st.session_state.drilldown_page = 1
-                        else:
-                            st.session_state.drilldown_rating_filter = rating
-                            st.session_state.drilldown_page = 1
-                    
-                    for i, col in enumerate(button_cols):
-                        with col:
-                            rating = rating_values[i]
-                            st.button(f"{rating} ⭐", on_click=set_drilldown_filter, args=(rating,), use_container_width=True)
-                    
-                else:
-                    st.warning("No rating distribution data available.")  
-                # Replace the old unified display block with this one
-                # --- UNIFIED DRILL-DOWN DISPLAY ---
+                        color=color,
+                        tooltip=['Rating', 'Count']
+                    ).add_params(
+                        selection
+                    ).properties(title="Filtered Rating Distribution")
+        
+                    event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
+        
+                    # Event handling for the chart click
+                    if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
+                        selected_data_list = event.selection["rating_selector"]
+                        if selected_data_list:
+                            selected_rating_str = selected_data_list[0]['Rating_Str']
+                            selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
+        
+                            if st.session_state.drilldown_rating_filter != selected_rating_int:
+                                st.session_state.drilldown_rating_filter = selected_rating_int
+                                st.session_state.drilldown_page = 1
+                            else: # If the same bar is clicked again, toggle it off
+                                st.session_state.drilldown_rating_filter = None
+                                st.session_state.drilldown_page = 1
+        
+                with col2:
+                    st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
+                    plot = px.scatter(
+                        filtered_data,
+                        x="rating_jittered",
+                        y="text_polarity_jittered",
+                        color="discrepancy",
+                        color_continuous_scale=px.colors.sequential.Viridis,
+                        custom_data=['review_id'],
+                        hover_name='review_id',
+                        hover_data={'rating': True, 'text_polarity': ':.2f'}
+                    )
+                    plot.update_xaxes(title_text='Rating')
+                    plot.update_yaxes(title_text='Text Sentiment Polarity')
+                    selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
+        
+                    if selected_point:
+                        clicked_review_id = selected_point[0]['customdata'][0]
+                        review_text = get_single_review_text(conn, clicked_review_id)
+                        with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
+                            st.markdown(f"> {review_text}")
+        
+                # --- Unified Drill-Down Display Area ---
                 if st.session_state.drilldown_rating_filter is not None:
                     st.markdown("---")
                     st.subheader(f"Displaying {st.session_state.drilldown_rating_filter}-Star Reviews (Page {st.session_state.drilldown_page})")
-                
-                    # Fetch the reviews for the current page and selected rating
+        
                     drilldown_reviews = get_paginated_reviews(
                         conn, 
                         selected_asin, 
@@ -354,77 +462,26 @@ if conn:
                         REVIEWS_PER_PAGE, 
                         rating_filter=st.session_state.drilldown_rating_filter
                     )
-                
+        
                     if not drilldown_reviews.empty:
                         for index, row in drilldown_reviews.iterrows():
                             with st.container(border=True):
-                                st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']}**")
                                 st.markdown(f"> {row['text']}")
-                
-                        # --- Pagination for Drill-Down ---
+        
+                        # Pagination for drill-down
                         nav_cols = st.columns([1, 1, 1])
-                        with nav_cols[0]:
-                            if st.session_state.drilldown_page > 1:
-                                if st.button("⬅️ Previous 5", key="drilldown_prev"):
-                                    st.session_state.drilldown_page -= 1
-                                    st.rerun()
-                
-                        nav_cols[1].write("") # Spacer
-                
-                        with nav_cols[2]:
-                            # Show "Next" button only if we received a full page of results
-                            if len(drilldown_reviews) == REVIEWS_PER_PAGE:
-                                if st.button("Next 5 ➡️", key="drilldown_next"):
-                                    st.session_state.drilldown_page += 1
-                                    st.rerun()
+                        if st.session_state.drilldown_page > 1:
+                            if nav_cols[0].button("⬅️ Previous 5", key="drilldown_prev"):
+                                st.session_state.drilldown_page -= 1
+                                st.rerun()
+        
+                        if len(drilldown_reviews) == REVIEWS_PER_PAGE:
+                            if nav_cols[2].button("Next 5 ➡️", key="drilldown_next"):
+                                st.session_state.drilldown_page += 1
+                                st.rerun()
                     else:
                         st.info("No more reviews to display for this rating.")
-            with col2:
-                st.markdown("#### Rating vs. Text Discrepancy")
-                if not discrepancy_df.empty:
-                    st.info("Hover over points to see details. Clicking points is not enabled in this version.")
-                    # --- MODIFIED: Use jittered data for plotting and show original data on hover ---
-                    plot = px.scatter(
-                        discrepancy_df,
-                        x="rating_jittered",
-                        y="text_polarity_jittered",
-                        color="discrepancy",
-                        color_continuous_scale=px.colors.sequential.Viridis,
-                        custom_data=['review_id'],
-                        hover_name='review_id',
-                        hover_data={
-                            'rating': True, # Show original rating
-                            'text_polarity': ':.2f', # Show original polarity, formatted
-                            'discrepancy': ':.2f',
-                            'rating_jittered': False, # Hide jittered value from hover
-                            'text_polarity_jittered': False # Hide jittered value from hover
-                        }
-                    )
-                    plot.update_xaxes(title_text='Rating')
-                    plot.update_yaxes(title_text='Text Sentiment Polarity')
-
-                    selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
-                    
-                    # --- CORRECTED: Robust event handling using pointIndex ---
-                    if selected_point:
-                        # The event returns a list of dicts, get the first one.
-                        point_data = selected_point[0]
-                        
-                        # Check if the 'pointIndex' key exists
-                        if 'pointIndex' in point_data:
-                            # Use the index to look up the review_id in our original DataFrame
-                            clicked_index = point_data['pointIndex']
-                            clicked_review_id = discrepancy_df.iloc[clicked_index]['review_id']
-                            
-                            review_text = get_single_review_text(conn, clicked_review_id)
-                            with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
-                                st.markdown(f"> {review_text}")
-                        else:
-                            st.warning("Could not retrieve review details from the clicked point. Please try again.")
-                        
-                else:
-                    st.warning("No discrepancy data available.")
-
+                
         with reviews_tab:
             # ... (General review pagination logic remains the same) ...
             pass
