@@ -215,6 +215,11 @@ def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
     
     return pd.read_sql(query, _conn, params=params)
 
+@st.cache_data
+def get_rating_distribution_data(_conn, asin):
+    """Fetches the pre-computed rating distribution for a product."""
+    return pd.read_sql("SELECT `1_star`, `2_star`, `3_star`, `4_star`, `5_star` FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
+    
 # This new function replaces get_discrepancy_data and get_rating_distribution_data
 @st.cache_data
 def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, date_range):
