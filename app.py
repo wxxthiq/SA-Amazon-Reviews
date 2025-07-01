@@ -405,12 +405,13 @@ if conn:
                         if len(st.session_state.drilldown_reviews) == REVIEWS_PER_PAGE:
                             if st.button("Next 5 ➡️", key="drilldown_next"):
                                 st.session_state.drilldown_page += 1
-                                st.rerun()                else:
-                    st.info("No more reviews to display for this rating.")
-                    if st.session_state.drilldown_page > 1:
-                        if st.button("Go back to first page"):
-                            st.session_state.drilldown_page = 1
-                            st.rerun()
+                                st.rerun()                
+                        else:
+                            st.info("No more reviews to display for this rating.")
+                            if st.session_state.drilldown_page > 1:
+                                if st.button("Go back to first page"):
+                                    st.session_state.drilldown_page = 1
+                                    st.rerun()
 
         with reviews_tab:
             # ... (General review pagination logic remains the same) ...
