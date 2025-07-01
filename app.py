@@ -279,6 +279,7 @@ if conn:
         
         selected_asin = st.session_state.selected_product
         product_details_df = get_single_product_details(conn, selected_asin)
+        rating_dist_df = get_rating_distribution_data(conn, selected_asin)
         
         # --- Interactive Sidebar Filters ---
         st.sidebar.header("Interactive Filters")
