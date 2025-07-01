@@ -214,6 +214,52 @@ def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
     params.extend([page_size, offset])
     
     return pd.read_sql(query, _conn, params=params)
+    
+def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, limit, offset):
+    """
+    Fetches a paginated, filtered, and sorted list of reviews directly from the database.
+    """
+    query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
+    count_query = "SELECT COUNT(*) FROM reviews WHERE parent_asin = ?"
+    params = [asin]
+
+    # Dynamically add conditions for each filter
+    if rating_filter:
+        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
+        count_query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
+        params.extend(rating_filter)
+
+    if sentiment_filter:
+        query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
+        count_query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
+        params.extend(sentiment_filter)
+
+    if date_range and len(date_range) == 2:
+        start_date = date_range[0].strftime('%Y-%m-%d')
+        end_date = date_range[1].strftime('%Y-%m-%d')
+        query += " AND date BETWEEN ? AND ?"
+        count_query += " AND date BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
+
+    # Determine sorting order
+    if sort_by == "Newest First":
+        query += " ORDER BY date DESC"
+    elif sort_by == "Oldest First":
+        query += " ORDER BY date ASC"
+    elif sort_by == "Highest Rating":
+        query += " ORDER BY rating DESC"
+    elif sort_by == "Lowest Rating":
+        query += " ORDER BY rating ASC"
+
+    # Get total count for pagination display
+    total_count = _conn.execute(count_query, tuple(params)).fetchone()[0]
+
+    # Add pagination to the main query
+    query += f" LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    df = pd.read_sql(query, _conn, params=params)
+    return df, total_count
 
 @st.cache_data
 def get_rating_distribution_data(_conn, asin):
@@ -276,7 +322,9 @@ if 'drilldown_reviews' not in st.session_state: st.session_state.drilldown_revie
 if 'drilldown_title' not in st.session_state: st.session_state.drilldown_title = ""
 if 'drilldown_rating' not in st.session_state: st.session_state.drilldown_rating = None
 if 'discrepancy_review_id' not in st.session_state: st.session_state.discrepancy_review_id = None
-
+# Add these two lines for the new reviews tab state
+if 'all_reviews_page' not in st.session_state: st.session_state.all_reviews_page = 0
+if 'all_reviews_sort' not in st.session_state: st.session_state.all_reviews_sort = "Newest First"
 
 if conn:
     # --- DETAILED PRODUCT VIEW ---
@@ -474,9 +522,77 @@ if conn:
                     else:
                         st.warning("No reviews match the selected filters.")
         
+        # Replace the entire 'with reviews_tab:' block with this new code
         with reviews_tab:
-            # ... (General review pagination logic remains the same) ...
-            pass
+            st.subheader("Filtered Individual Reviews")
+        
+            # --- Sorting and Download Controls ---
+            sort_col, download_col = st.columns([3, 1])
+        
+            with sort_col:
+                st.session_state.all_reviews_sort = st.selectbox(
+                    "Sort reviews by:",
+                    options=["Newest First", "Oldest First", "Highest Rating", "Lowest Rating"],
+                    key="reviews_sort_box"
+                )
+        
+            # --- Fetch the filtered, sorted, and paginated data ---
+            paginated_reviews_df, total_reviews = get_filtered_reviews_paginated(
+                conn,
+                selected_asin,
+                selected_ratings,
+                selected_sentiments,
+                selected_date_range,
+                st.session_state.all_reviews_sort,
+                limit=10, # Display 10 reviews at a time
+                offset=st.session_state.all_reviews_page * 10
+            )
+        
+            with download_col:
+                # The download button will download ALL filtered reviews, not just the current page
+                # We need to fetch all of them for the download functionality
+                if not paginated_reviews_df.empty:
+                    all_filtered_reviews, _ = get_filtered_reviews_paginated(
+                        conn, selected_asin, selected_ratings, selected_sentiments, 
+                        selected_date_range, st.session_state.all_reviews_sort, 
+                        limit=-1, offset=0 # -1 limit in SQLite means no limit
+                    )
+                    st.download_button(
+                        label="📥 Save Filtered Reviews",
+                        data=all_filtered_reviews.to_csv(index=False).encode('utf-8'),
+                        file_name=f"{selected_asin}_filtered_reviews.csv",
+                        mime='text/csv',
+                    )
+        
+            st.markdown("---")
+        
+            # --- Display Reviews and Pagination ---
+            if not paginated_reviews_df.empty:
+                st.write(f"Displaying {len(paginated_reviews_df)} of {total_reviews} matching reviews.")
+        
+                for index, row in paginated_reviews_df.iterrows():
+                    with st.container(border=True):
+                        st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']} | Date: {row['date']}**")
+                        st.markdown(f"> {row['text']}")
+        
+                # Pagination Controls
+                total_pages = (total_reviews + 10 - 1) // 10
+                if total_pages > 1:
+                    st.markdown("---")
+                    nav_cols = st.columns([1, 1, 1])
+                    if st.session_state.all_reviews_page > 0:
+                        if nav_cols[0].button("⬅️ Previous Reviews", key="all_rev_prev"):
+                            st.session_state.all_reviews_page -= 1
+                            st.rerun()
+        
+                    nav_cols[1].write(f"Page {st.session_state.all_reviews_page + 1} of {total_pages}")
+        
+                    if (st.session_state.all_reviews_page + 1) < total_pages:
+                        if nav_cols[2].button("Next Reviews ➡️", key="all_rev_next"):
+                            st.session_state.all_reviews_page += 1
+                            st.rerun()
+            else:
+                st.warning("No reviews match the current filter criteria.")
 
     # --- MAIN SEARCH PAGE ---
     else:
