@@ -403,7 +403,7 @@ if conn:
                     rating_counts_df.columns = ['Rating', 'Count']
                 
                     chart = alt.Chart(rating_counts_df).mark_bar().encode(
-                        x=alt.X('Rating:O', title="Stars", scale=alt.Scale(domain=[1, 2, 3, 4, 5])), # :O specifies ordinal data type
+                        x=alt.X('Rating:O', title="Stars"),
                         y=alt.Y('Count:Q', title="Number of Reviews"),
                         tooltip=['Rating', 'Count']
                     ).properties(
