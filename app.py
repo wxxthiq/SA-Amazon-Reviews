@@ -269,8 +269,6 @@ if 'image_index' not in st.session_state: st.session_state.image_index = 0
 # --- NEW: Session state for unified drill-down display ---
 if 'drilldown_reviews' not in st.session_state: st.session_state.drilldown_reviews = pd.DataFrame()
 if 'drilldown_title' not in st.session_state: st.session_state.drilldown_title = ""
-if 'drilldown_rating_filter' not in st.session_state: st.session_state.drilldown_rating_filter = None
-if 'drilldown_page' not in st.session_state: st.session_state.drilldown_page = 1
 if 'drilldown_rating' not in st.session_state: st.session_state.drilldown_rating = None
 
 
@@ -392,43 +390,24 @@ if conn:
                 col1, col2 = st.columns(2)
         
                 with col1:
-                    st.markdown("#### Rating Distribution (Click a bar to see reviews)")
-        
-                    # Create a DataFrame for the chart from the filtered data
-                    rating_counts_df = filtered_data['rating'].value_counts().sort_index().reset_index()
-                    rating_counts_df.columns = ['Rating', 'Count']
-                    # Convert rating to string for Altair selection to work reliably
-                    rating_counts_df['Rating_Str'] = rating_counts_df['Rating'].astype(str) + " star"
-        
-                    sort_order = ['1 star', '2 star', '3 star', '4 star', '5 star']
-        
-                    selection = alt.selection_point(fields=['Rating_Str'], empty=True, on='click', name="rating_selector")
-                    color = alt.condition(selection, alt.value('orange'), alt.value('steelblue'))
-        
-                    chart = alt.Chart(rating_counts_df).mark_bar().encode(
-                        x=alt.X('Rating_Str:N', sort=sort_order, title="Stars"),
-                        y=alt.Y('Count:Q', title="Number of Reviews"),
-                        color=color,
-                        tooltip=['Rating', 'Count']
-                    ).add_params(
-                        selection
-                    ).properties(title="Filtered Rating Distribution")
-        
-                    event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
-        
-                    # Event handling for the chart click
-                    if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
-                        selected_data_list = event.selection["rating_selector"]
-                        if selected_data_list:
-                            selected_rating_str = selected_data_list[0]['Rating_Str']
-                            selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
-        
-                            if st.session_state.drilldown_rating_filter != selected_rating_int:
-                                st.session_state.drilldown_rating_filter = selected_rating_int
-                                st.session_state.drilldown_page = 1
-                            else: # If the same bar is clicked again, toggle it off
-                                st.session_state.drilldown_rating_filter = None
-                                st.session_state.drilldown_page = 1
+                    # NEW, STABLE CHART CODE
+                    st.markdown("#### Rating Distribution")
+                    if not rating_dist_df.empty:
+                        dist_data = rating_dist_df.T.reset_index()
+                        dist_data.columns = ['Star Rating', 'Count']
+                        dist_data['Star Rating'] = dist_data['Star Rating'].str.replace('_', ' ')
+                    
+                        sort_order = ['1 star', '2 star', '3 star', '4 star', '5 star']
+                    
+                        chart = alt.Chart(dist_data).mark_bar().encode(
+                            x=alt.X('Star Rating:N', sort=sort_order, title="Stars"),
+                            y=alt.Y('Count:Q', title="Number of Reviews"),
+                            tooltip=['Star Rating', 'Count']
+                        ).properties(title="Overall Rating Distribution")
+                    
+                        st.altair_chart(chart, use_container_width=True)
+                    else:
+                        st.warning("No rating distribution data available.")
         
                 with col2:
                     st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
@@ -449,41 +428,9 @@ if conn:
                     if selected_point:
                         clicked_review_id = selected_point[0]['customdata'][0]
                         review_text = get_single_review_text(conn, clicked_review_id)
-                        with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
+                        with st.expander(f"Full review for selected point (Review ID): : {clicked_review_id}", expanded=True):
                             st.markdown(f"> {review_text}")
         
-                # --- Unified Drill-Down Display Area ---
-                if st.session_state.drilldown_rating_filter is not None:
-                    st.markdown("---")
-                    st.subheader(f"Displaying {st.session_state.drilldown_rating_filter}-Star Reviews (Page {st.session_state.drilldown_page})")
-        
-                    drilldown_reviews = get_paginated_reviews(
-                        conn, 
-                        selected_asin, 
-                        st.session_state.drilldown_page, 
-                        REVIEWS_PER_PAGE, 
-                        rating_filter=st.session_state.drilldown_rating_filter
-                    )
-        
-                    if not drilldown_reviews.empty:
-                        for index, row in drilldown_reviews.iterrows():
-                            with st.container(border=True):
-                                st.markdown(f"> {row['text']}")
-        
-                        # Pagination for drill-down
-                        nav_cols = st.columns([1, 1, 1])
-                        if st.session_state.drilldown_page > 1:
-                            if nav_cols[0].button("⬅️ Previous 5", key="drilldown_prev"):
-                                st.session_state.drilldown_page -= 1
-                                st.rerun()
-        
-                        if len(drilldown_reviews) == REVIEWS_PER_PAGE:
-                            if nav_cols[2].button("Next 5 ➡️", key="drilldown_next"):
-                                st.session_state.drilldown_page += 1
-                                st.rerun()
-                    else:
-                        st.info("No more reviews to display for this rating.")
-                
         with reviews_tab:
             # ... (General review pagination logic remains the same) ...
             pass
