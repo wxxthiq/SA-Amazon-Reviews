@@ -483,7 +483,5 @@ if conn:
                         if st.button("Next Page ➡️"):
                             st.session_state.page += 1
                             st.rerun()
-        pass
-
 else:
     st.error("Application setup failed. Please check database connection.")
