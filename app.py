@@ -431,11 +431,24 @@ if conn:
                     plot.update_yaxes(title_text='Text Sentiment Polarity')
                     selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
         
+                    # Replace the old block with this new, corrected version
                     if selected_point:
-                        clicked_review_id = selected_point[0]['customdata'][0]
-                        review_text = get_single_review_text(conn, clicked_review_id)
-                        with st.expander(f"Full review for selected point (Review ID): : {clicked_review_id}", expanded=True):
-                            st.markdown(f"> {review_text}")
+                        # The event returns a list of dicts, get the first one.
+                        point_data = selected_point[0]
+                        
+                        # Check if the 'pointIndex' key exists before trying to use it.
+                        if 'pointIndex' in point_data:
+                            # Use the index to find the correct row in the original DataFrame.
+                            clicked_index = point_data['pointIndex']
+                            clicked_review_id = discrepancy_df.iloc[clicked_index]['review_id']
+                            
+                            # Now fetch and display the review text.
+                            review_text = get_single_review_text(conn, clicked_review_id)
+                            with st.expander(f"Full text for review: {clicked_review_id}", expanded=True):
+                                st.markdown(f"> {review_text}")
+                        else:
+                            # Show a helpful message if the click event data is malformed.
+                            st.warning("Could not retrieve review details from the clicked point. Please try again.")
         
         with reviews_tab:
             # ... (General review pagination logic remains the same) ...
