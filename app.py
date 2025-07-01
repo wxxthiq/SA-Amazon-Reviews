@@ -278,6 +278,9 @@ if conn:
     # --- DETAILED PRODUCT VIEW ---
     if st.session_state.selected_product:
         
+        selected_asin = st.session_state.selected_product
+        product_details_df = get_single_product_details(conn, selected_asin)
+        
         # --- Interactive Sidebar Filters ---
         st.sidebar.header("Interactive Filters")
         
@@ -314,8 +317,6 @@ if conn:
         filtered_data = get_filtered_data_for_product(
             conn, selected_asin, selected_ratings, selected_sentiments, selected_date_range
         )
-        selected_asin = st.session_state.selected_product
-        product_details_df = get_single_product_details(conn, selected_asin)
         
         if product_details_df.empty:
             st.error("Product details could not be found.")
