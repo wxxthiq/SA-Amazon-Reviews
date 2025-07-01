@@ -338,18 +338,6 @@ if conn:
                             rating = rating_values[i]
                             st.button(f"{rating} ⭐", on_click=set_drilldown_filter, args=(rating,), use_container_width=True)
                     
-                    # Replace the old chart event handling logic with this one    
-                    if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
-                        selected_data_list = event.selection["rating_selector"]
-                        if selected_data_list:
-                            selected_rating_str = selected_data_list[0]['Star_Rating']
-                            selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
-                    
-                            # Call the same function as the buttons to set the state
-                            set_drilldown_filter(selected_rating_int)
-                            # We need to rerun to see the change immediately after a chart click
-                            st.rerun()
-                    
                 else:
                     st.warning("No rating distribution data available.")  
                 # Replace the old unified display block with this one
