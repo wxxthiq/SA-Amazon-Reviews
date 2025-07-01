@@ -464,6 +464,7 @@ if conn:
                                 if st.button("View Details", key=row['parent_asin']):
                                     st.session_state.selected_product = row['parent_asin']
                                     st.rerun()
+                    pass
 
             # --- Pagination Buttons ---
             st.markdown("---")
