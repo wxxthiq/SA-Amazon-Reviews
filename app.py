@@ -322,11 +322,10 @@ if conn:
                     ).properties(title="Overall Rating Distribution")
                     
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
-                    # This code goes inside `with col1:`, right after the `event = st.altair_chart(...)` line
-                    
                     st.markdown("---") # Add a visual separator
                     
-                    # Define a callback function to run when the selectbox changes
+                    # Replace the old on_select_rating function with this one
+
                     def on_select_rating():
                         """Callback to handle dropdown selection for rating drilldown."""
                         # Get the selected rating string from the selectbox's state
@@ -367,9 +366,13 @@ if conn:
                             selected_rating_str = selected_data_list[0]['Star_Rating']
                             selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
                     
-                            # Set the filter and reset the page
-                            st.session_state.drilldown_rating_filter = selected_rating_int
-                            st.session_state.drilldown_page = 1
+                            # If a new bar is clicked, set the filter and reset the page
+                            if st.session_state.drilldown_rating_filter != selected_rating_int:
+                                st.session_state.drilldown_rating_filter = selected_rating_int
+                                st.session_state.drilldown_page = 1
+                    
+                            # This line is important: it makes the dropdown visually match the clicked bar
+                            st.session_state.rating_select_box = selected_rating_str
                     
                 else:
                     st.warning("No rating distribution data available.")  
