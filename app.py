@@ -324,65 +324,38 @@ if conn:
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
                     st.markdown("---") # Add a visual separator
                 
-                    # VERIFY THIS FUNCTION IS CORRECT
-                    def on_select_rating():
-                        """Callback to handle dropdown selection for rating drilldown."""
-                        selected_rating_str = st.session_state.rating_select_box
+                    # This code goes inside `with col1:`, right after the `event = st.altair_chart(...)` line
+                    st.markdown("---")
+                    st.write("**Or, select a rating to view reviews:**")
                     
-                        if selected_rating_str and selected_rating_str != "---":
-                            selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
-                            st.session_state.drilldown_rating_filter = selected_rating_int
-                            st.session_state.drilldown_page = 1
-                        else:
-                            # If the user selects the "---" placeholder, clear the filter
-                            st.session_state.drilldown_rating_filter = None
-                            st.session_state.drilldown_page = 1
+                    # Create 5 columns for our 5 buttons
+                    button_cols = st.columns(5)
+                    rating_values = [1, 2, 3, 4, 5]
                     
-                    # Create the selectbox widget
-                    rating_options = ["---"] + sort_order # Use the 'sort_order' list you already created
-                    # --- New logic to dynamically set the dropdown's index ---
-                    # Determine the index for the selectbox based on the current filter
-                    current_filter_value = f"{st.session_state.drilldown_rating_filter} star" if st.session_state.drilldown_rating_filter is not None else "---"
-                    try:
-                        current_index = rating_options.index(current_filter_value)
-                    except ValueError:
-                        current_index = 0 # Default to "---" if something goes wrong
+                    # Define a callback function to set the state when a button is clicked
+                    def set_drilldown_filter(rating):
+                        st.session_state.drilldown_rating_filter = rating
+                        st.session_state.drilldown_page = 1
                     
-                    # --- New logic to dynamically set the dropdown's displayed value ---
-                    
-                    # Determine what the selectbox should display based on the central state variable
-                    if st.session_state.drilldown_rating_filter is not None:
-                        current_filter_value = f"{st.session_state.drilldown_rating_filter} star"
-                    else:
-                        current_filter_value = "---"
-                    
-                    # Find the index of that value in our options list
-                    try:
-                        current_index = rating_options.index(current_filter_value)
-                    except ValueError:
-                        current_index = 0 # Default to "---" if the value isn't found
-                    
-                    # Instantiate the selectbox with the dynamically calculated index
-                    st.selectbox(
-                        "Or, select a rating to view reviews:",
-                        options=rating_options,
-                        key="rating_select_box",
-                        index=current_index
-                    )
-                    
+                    # Create a button for each star rating in its own column
+                    for i, col in enumerate(button_cols):
+                        with col:
+                            rating = rating_values[i]
+                            # The on_click callback is the key to stable state management
+                            st.button(f"{rating} ⭐", on_click=set_drilldown_filter, args=(rating,), use_container_width=True)
+                            
                     # Replace the old chart event handling logic with this one
+                    
                     if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
                         selected_data_list = event.selection["rating_selector"]
                         if selected_data_list:
                             selected_rating_str = selected_data_list[0]['Star_Rating']
                             selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
                     
-                            # If we clicked a new bar, set the filter and reset the page
-                            if st.session_state.drilldown_rating_filter != selected_rating_int:
-                                st.session_state.drilldown_rating_filter = selected_rating_int
-                                st.session_state.drilldown_page = 1
-                                # Manually trigger a rerun to update the display
-                                st.rerun()
+                            # Call the same function as the buttons to set the state
+                            set_drilldown_filter(selected_rating_int)
+                            # We need to rerun to see the change immediately after a chart click
+                            st.rerun()
                     
                 else:
                     st.warning("No rating distribution data available.")  
