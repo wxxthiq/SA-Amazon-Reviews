@@ -351,11 +351,26 @@ if conn:
                     except ValueError:
                         current_index = 0 # Default to "---" if something goes wrong
                     
+                    # --- New logic to dynamically set the dropdown's displayed value ---
+                    
+                    # Determine what the selectbox should display based on the central state variable
+                    if st.session_state.drilldown_rating_filter is not None:
+                        current_filter_value = f"{st.session_state.drilldown_rating_filter} star"
+                    else:
+                        current_filter_value = "---"
+                    
+                    # Find the index of that value in our options list
+                    try:
+                        current_index = rating_options.index(current_filter_value)
+                    except ValueError:
+                        current_index = 0 # Default to "---" if the value isn't found
+                    
+                    # Instantiate the selectbox with the dynamically calculated index
                     st.selectbox(
                         "Or, select a rating to view reviews:",
                         options=rating_options,
                         key="rating_select_box",
-                        index=current_index, # Set the index dynamically
+                        index=current_index,
                         on_change=on_select_rating
                     )
                     
@@ -370,9 +385,6 @@ if conn:
                             if st.session_state.drilldown_rating_filter != selected_rating_int:
                                 st.session_state.drilldown_rating_filter = selected_rating_int
                                 st.session_state.drilldown_page = 1
-                    
-                            # This line is important: it makes the dropdown visually match the clicked bar
-                            st.session_state.rating_select_box = selected_rating_str
                     
                 else:
                     st.warning("No rating distribution data available.")  
