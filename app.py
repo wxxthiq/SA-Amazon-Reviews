@@ -322,7 +322,34 @@ if conn:
                     ).properties(title="Overall Rating Distribution")
                     
                     event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
-
+                    # This code goes inside `with col1:`, right after the `event = st.altair_chart(...)` line
+                    
+                    st.markdown("---") # Add a visual separator
+                    
+                    # Define a callback function to run when the selectbox changes
+                    def on_select_rating():
+                        # Get the integer value from the selection (e.g., "5 star" -> 5)
+                        selected_rating_str = st.session_state.rating_select_box
+                        if selected_rating_str and selected_rating_str != "---":
+                            selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
+                            
+                            # If the selection changes, update the drilldown state and reset the page
+                            if st.session_state.drilldown_rating_filter != selected_rating_int:
+                                st.session_state.drilldown_rating_filter = selected_rating_int
+                                st.session_state.drilldown_page = 1
+                        else:
+                            # If the user selects the placeholder, clear the drilldown
+                            st.session_state.drilldown_rating_filter = None
+                            st.session_state.drilldown_page = 1
+                    
+                    # Create the selectbox widget
+                    rating_options = ["---"] + sort_order # Use the 'sort_order' list you already created
+                    st.selectbox(
+                        "Or, select a rating to view reviews:",
+                        options=rating_options,
+                        key="rating_select_box", # A new key for this widget
+                        on_change=on_select_rating
+                    )
                     # Replace the old event handling block with this one
                     if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
                         selected_data_list = event.selection["rating_selector"]
@@ -330,10 +357,9 @@ if conn:
                             selected_rating_str = selected_data_list[0]['Star_Rating']
                             selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
                     
-                            # If we clicked a new bar, reset the page and set the new filter
                             if st.session_state.drilldown_rating_filter != selected_rating_int:
                                 st.session_state.drilldown_rating_filter = selected_rating_int
-                                st.session_state.drilldown_page = 1 # Reset to page 1 for new selection
+                                st.session_state.drilldown_page = 1
                     
                 else:
                     st.warning("No rating distribution data available.")  
