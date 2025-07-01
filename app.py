@@ -219,8 +219,8 @@ if 'image_index' not in st.session_state: st.session_state.image_index = 0
 # --- NEW: Session state for unified drill-down display ---
 if 'drilldown_reviews' not in st.session_state: st.session_state.drilldown_reviews = pd.DataFrame()
 if 'drilldown_title' not in st.session_state: st.session_state.drilldown_title = ""
-if 'drilldown_page' not in st.session_state: st.session_state.drilldown_page = 1
 if 'drilldown_rating_filter' not in st.session_state: st.session_state.drilldown_rating_filter = None
+if 'drilldown_page' not in st.session_state: st.session_state.drilldown_page = 1
 if 'drilldown_rating' not in st.session_state: st.session_state.drilldown_rating = None
 
 
@@ -367,17 +367,22 @@ if conn:
                         "Or, select a rating to view reviews:",
                         options=rating_options,
                         key="rating_select_box",
-                        index=current_index,
-                        on_change=on_select_rating
+                        index=current_index
                     )
                     
                     # Replace the old chart event handling logic with this one
-                    # NEW, CORRECT LOGIC
                     if event.selection and "rating_selector" in event.selection and event.selection["rating_selector"]:
                         selected_data_list = event.selection["rating_selector"]
                         if selected_data_list:
-                            # This line programmatically changes the dropdown's value, which will trigger its on_change callback on the next rerun.
-                            st.session_state.rating_select_box = selected_data_list[0]['Star_Rating']
+                            selected_rating_str = selected_data_list[0]['Star_Rating']
+                            selected_rating_int = int(re.search(r'\d+', selected_rating_str).group())
+                    
+                            # If we clicked a new bar, set the filter and reset the page
+                            if st.session_state.drilldown_rating_filter != selected_rating_int:
+                                st.session_state.drilldown_rating_filter = selected_rating_int
+                                st.session_state.drilldown_page = 1
+                                # Manually trigger a rerun to update the display
+                                st.rerun()
                     
                 else:
                     st.warning("No rating distribution data available.")  
