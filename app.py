@@ -295,7 +295,7 @@ if conn:
         ).fetchone()
         
         min_date = datetime.strptime(min_date_db, '%Y-%m-%d').date() if min_date_db else datetime(2000, 1, 1).date()
-        max_date = datetime.now().date() # Default to today if max is not found
+        max_date = datetime.strptime(max_date_db, '%Y-%m-%d').date() if max_date_db else datetime(2000, 1, 1).date()
         
         selected_date_range = st.sidebar.date_input(
             "Filter by Date Range", 
