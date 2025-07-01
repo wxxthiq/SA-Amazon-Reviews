@@ -309,20 +309,14 @@ if conn:
                     
                     sort_order = ['1 star', '2 star', '3 star', '4 star', '5 star']
                     
-                    selection = alt.selection_point(fields=['Star_Rating'], empty=True, on='click', name="rating_selector")
-                    color = alt.condition(selection, alt.value('orange'), alt.value('steelblue'))
-
+                    # NEW, STABLE CHART CODE
                     chart = alt.Chart(dist_data).mark_bar().encode(
                         x=alt.X('Star_Rating:N', sort=sort_order, title="Stars"),
                         y=alt.Y('Count:Q', title="Number of Reviews"),
-                        color=color,
                         tooltip=['Star_Rating', 'Count']
-                    ).add_params(
-                        selection
                     ).properties(title="Overall Rating Distribution")
                     
-                    event = st.altair_chart(chart, use_container_width=True, on_select="rerun")
-                    st.markdown("---") # Add a visual separator
+                    st.altair_chart(chart, use_container_width=True)
                 
                     # This code goes inside `with col1:`, right after the `event = st.altair_chart(...)` line
                     st.markdown("---")
