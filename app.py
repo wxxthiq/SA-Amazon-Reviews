@@ -415,8 +415,8 @@ if conn:
                             if st.button("Next 5 ➡️", key="drilldown_next"):
                                 st.session_state.drilldown_page += 1
                                 st.rerun()
-    else:
-        st.info("No more reviews to display for this rating.")
+                else:
+                    st.info("No more reviews to display for this rating.")
 
         with reviews_tab:
             # ... (General review pagination logic remains the same) ...
