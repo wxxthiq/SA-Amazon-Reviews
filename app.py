@@ -175,10 +175,9 @@ def get_rating_distribution_data(_conn, asin):
     """Fetches the pre-computed rating distribution for a product."""
     return pd.read_sql("SELECT `1_star`, `2_star`, `3_star`, `4_star`, `5_star` FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
 
-def get_single_review_text(_conn, review_id):
-    """Fetches the full text of a single review by its unique ID."""
-    result = _conn.execute("SELECT text FROM reviews WHERE review_id = ?", (review_id,)).fetchone()
-    return result[0] if result else "Review text not found."
+def get_single_review(_conn, review_id):
+    """Fetches a single review as a DataFrame."""
+    return pd.read_sql("SELECT review_id, rating, sentiment, text FROM reviews WHERE review_id = ?", _conn, params=(review_id,))
 
 def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
     """
@@ -212,8 +211,12 @@ if 'category' not in st.session_state: st.session_state.category = "--- Select a
 if 'search_term' not in st.session_state: st.session_state.search_term = ""
 if 'sort_by' not in st.session_state: st.session_state.sort_by = "Popularity (Most Reviews)"
 if 'image_index' not in st.session_state: st.session_state.image_index = 0
-if 'drilldown_rating' not in st.session_state: st.session_state.drilldown_rating = None
+# --- NEW: Session state for unified drill-down display ---
+if 'drilldown_reviews' not in st.session_state: st.session_state.drilldown_reviews = pd.DataFrame()
+if 'drilldown_title' not in st.session_state: st.session_state.drilldown_title = ""
 if 'drilldown_page' not in st.session_state: st.session_state.drilldown_page = 1
+if 'drilldown_rating_filter' not in st.session_state: st.session_state.drilldown_rating_filter = None
+
 
 
 if conn:
@@ -375,39 +378,34 @@ if conn:
                 else:
                     st.warning("No discrepancy data available.")
 
-            # --- Drill-down review display section with pagination ---
-            if st.session_state.drilldown_rating:
+            # --- UNIFIED DRILL-DOWN DISPLAY ---
+            if not st.session_state.drilldown_reviews.empty:
                 st.markdown("---")
-                st.subheader(f"Displaying {st.session_state.drilldown_rating}-Star Reviews (Page {st.session_state.drilldown_page})")
-                
-                drilldown_reviews = get_paginated_reviews(
-                    conn, selected_asin, 
-                    st.session_state.drilldown_page, 
-                    REVIEWS_PER_PAGE, 
-                    rating_filter=st.session_state.drilldown_rating
-                )
+                st.subheader(st.session_state.drilldown_title)
 
-                if not drilldown_reviews.empty:
-                    for index, row in drilldown_reviews.iterrows():
+                for index, row in st.session_state.drilldown_reviews.iterrows():
+                    with st.container(border=True):
+                        st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']}**")
                         st.markdown(f"> {row['text']}")
-                        st.divider()
-                    
-                    # --- NEW PAGINATION LOGIC ---
+                
+                # Pagination for rating bar clicks
+                if st.session_state.drilldown_rating_filter is not None:
                     nav_cols = st.columns([1, 1, 1])
                     with nav_cols[0]:
                         if st.session_state.drilldown_page > 1:
                             if st.button("⬅️ Previous 5", key="drilldown_prev"):
                                 st.session_state.drilldown_page -= 1
+                                # Rerun will trigger data refetch for the new page
                                 st.rerun()
                     
-                    nav_cols[1].write("") # Empty column for spacing
+                    nav_cols[1].write("") # Spacer
 
                     with nav_cols[2]:
-                        if len(drilldown_reviews) == REVIEWS_PER_PAGE:
+                        # Show "Next" button only if we got a full page of results
+                        if len(st.session_state.drilldown_reviews) == REVIEWS_PER_PAGE:
                             if st.button("Next 5 ➡️", key="drilldown_next"):
                                 st.session_state.drilldown_page += 1
-                                st.rerun()
-                else:
+                                st.rerun()                else:
                     st.info("No more reviews to display for this rating.")
                     if st.session_state.drilldown_page > 1:
                         if st.button("Go back to first page"):
