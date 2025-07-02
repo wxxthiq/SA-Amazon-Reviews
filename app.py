@@ -254,6 +254,7 @@ def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter,
     df = pd.read_sql(query, _conn, params=params)
     return df # Note: It now only returns the DataFrame
 
+@st.cache_data
 def count_filtered_reviews(_conn, asin, rating_filter, sentiment_filter, date_range):
     """
     Performs a fast count of all reviews that match the given filters.
