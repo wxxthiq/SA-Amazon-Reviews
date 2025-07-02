@@ -191,7 +191,7 @@ def get_all_reviews_paginated(_conn, asin, sort_by, page_size, page_num):
     limit = page_size + 1  # Fetch one extra to check for a next page
     offset = (page_num - 1) * page_size
 
-    query = "SELECT rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
+    query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
     # Add sorting
