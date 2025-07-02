@@ -194,17 +194,8 @@ def get_all_reviews_paginated(_conn, asin, sort_by, page_size, page_num):
     query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
-    # Add sorting
-    if sort_by == "Newest First":
-        query += " ORDER BY date DESC"
-    elif sort_by == "Oldest First":
-        query += " ORDER BY date ASC"
-    elif sort_by == "Highest Rating":
-        query += " ORDER BY rating DESC"
-    else:  # Lowest Rating
-        query += " ORDER BY rating ASC"
-
-    query += f" LIMIT ? OFFSET ?"
+    # Default sort order
+    query += " ORDER BY date DESC"
     params.extend([limit, offset])
 
     df = pd.read_sql(query, _conn, params=params)
@@ -494,20 +485,6 @@ if conn:
         with reviews_tab:
             st.subheader("Browse All Individual Reviews for this Product")
         
-            # --- Sorting Controls ---
-            def on_sort_change():
-                # When sort order changes, clear the currently loaded reviews and reset the page
-                st.session_state.loaded_reviews_df = pd.DataFrame()
-                st.session_state.all_reviews_page = 0
-        
-            st.selectbox(
-                "Sort all reviews by:",
-                options=["Newest First", "Oldest First", "Highest Rating", "Lowest Rating"],
-                key="all_reviews_sort",
-                on_change=on_sort_change
-            )
-            st.markdown("---")
-        
             # --- "Load More" Button Logic ---
             # We use a button to trigger the fetching of the next page
             if st.button("Load 25 More Reviews", use_container_width=True):
@@ -518,8 +495,7 @@ if conn:
             reviews_to_display, has_more_after_this = get_all_reviews_paginated(
                 conn,
                 selected_asin,
-                st.session_state.all_reviews_sort,
-                page_size=25, # We'll load 25 reviews per click
+                page_size=10, # We'll load 25 reviews per click
                 page_num=st.session_state.all_reviews_page + 1 # page_num is 1-based
             )
         
