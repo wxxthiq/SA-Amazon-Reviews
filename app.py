@@ -235,11 +235,16 @@ def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
     
 # Replace your existing get_filtered_reviews_paginated function with this one
 
-def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, limit, offset):
+# Replace your existing get_filtered_reviews_paginated function with this one
+
+def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, page_size, page_num):
     """
-    Fetches a paginated, filtered, and sorted list of reviews.
-    This version correctly handles all arguments.
+    Fetches a paginated list of reviews. It fetches one extra item 
+    (page_size + 1) to determine if a next page exists, avoiding a slow COUNT(*).
     """
+    limit = page_size + 1 # Fetch one extra review
+    offset = (page_num - 1) * page_size
+
     query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
@@ -267,13 +272,16 @@ def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter,
         query += " ORDER BY rating ASC"
 
     # Add pagination
-    # A limit of -1 is used by the download button to fetch all rows
-    if limit != -1:
-        query += f" LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
+    query += f" LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
 
     df = pd.read_sql(query, _conn, params=params)
-    return df
+
+    # Determine if there's a next page
+    has_next_page = len(df) > page_size
+
+    # Return only the reviews for the current page and the next page flag
+    return df.head(page_size), has_next_page
     
 @st.cache_data
 def get_rating_distribution_data(_conn, asin):
@@ -542,6 +550,7 @@ if conn:
                         st.warning("No reviews match the selected filters.")
         
         # Replace the entire 'with reviews_tab:' block with this new code
+       # Replace the entire 'with reviews_tab:' block with this new code
         
         with reviews_tab:
             st.subheader("Filtered Individual Reviews")
@@ -549,47 +558,56 @@ if conn:
             sort_col, download_col = st.columns([3, 1])
         
             with sort_col:
+                # When the sort order changes, reset to the first page of reviews
+                def on_sort_change():
+                    st.session_state.all_reviews_page = 0
+        
                 st.session_state.all_reviews_sort = st.selectbox(
                     "Sort reviews by:",
                     options=["Newest First", "Oldest First", "Highest Rating", "Lowest Rating"],
-                    key="reviews_sort_box"
+                    key="reviews_sort_box",
+                    on_change=on_sort_change
                 )
         
-            # --- NEW LOGIC: Fetch one more than needed to check for a next page ---
-            page_size = 10
-            reviews_to_display = get_filtered_reviews_paginated(
+            # --- NEW LOGIC: Fetch current page and check for a next page ---
+            paginated_reviews_df, has_next_page = get_filtered_reviews_paginated(
                 conn,
                 selected_asin,
                 selected_ratings,
                 selected_sentiments,
                 selected_date_range,
                 st.session_state.all_reviews_sort,
-                limit=page_size + 1, # Fetch one extra
-                offset=st.session_state.all_reviews_page * page_size
+                page_size=10,
+                page_num=st.session_state.all_reviews_page + 1 # page_num is 1-based
             )
         
-            has_next_page = len(reviews_to_display) > page_size
-            paginated_reviews_df = reviews_to_display.head(page_size)
-        
-        
             with download_col:
-                # The download button now calls our helper function lazily
-                st.download_button(
-                    label="📥 Save Filtered Reviews",
-                    data=prepare_download_data(
+                # The download button still needs to fetch all reviews
+                if not paginated_reviews_df.empty:
+                    # To get all reviews for download, we can use a very large page_size
+                    # This is only executed when the button is prepared, not on every run
+                    all_filtered_reviews, _ = get_filtered_reviews_paginated(
                         conn, selected_asin, selected_ratings, selected_sentiments, 
-                        selected_date_range, st.session_state.all_reviews_sort
-                    ),
-                    file_name=f"{selected_asin}_filtered_reviews.csv",
-                    mime='text/csv',
-                )
+                        selected_date_range, st.session_state.all_reviews_sort, 
+                        page_size=100000, # A practical limit
+                        page_num=1
+                    )
+                    st.download_button(
+                        label="📥 Save Filtered Reviews",
+                        data=all_filtered_reviews.to_csv(index=False).encode('utf-8'),
+                        file_name=f"{selected_asin}_filtered_reviews.csv",
+                        mime='text/csv',
+                    )
         
             st.markdown("---")
         
             # --- Display Reviews and New Pagination ---
             if not paginated_reviews_df.empty:
                 st.write(f"Displaying Page {st.session_state.all_reviews_page + 1}")
-                # ... (The rest of your display logic for reviews remains the same) ...
+                for index, row in paginated_reviews_df.iterrows():
+                    with st.container(border=True):
+                        st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']} | Date: {row['date']}**")
+                        st.markdown(f"> {row['text']}")
         
                 st.markdown("---")
                 nav_cols = st.columns([1, 1, 1])
@@ -609,7 +627,6 @@ if conn:
                             st.rerun()
             else:
                 st.warning("No reviews match the current filter criteria.")
-        
     # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
