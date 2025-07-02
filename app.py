@@ -156,10 +156,11 @@ def get_single_product_details(_conn, asin):
 
 def prepare_download_data(conn, asin, rating_filter, sentiment_filter, date_range, sort_by):
     """
-    Fetches all reviews matching the current filters and prepares them for CSV download.
+    Fetches ALL reviews matching the current filters and prepares them for CSV download.
     This function is designed to be called by st.download_button's data argument.
     """
-    # Use a large number to simulate fetching all reviews, as limit=-1 can be tricky with params
+    # Use a very large limit to simulate fetching all matching rows.
+    # This query only runs when the user clicks the download button.
     df = get_filtered_reviews_paginated(
         conn, 
         asin, 
@@ -281,7 +282,7 @@ def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter,
     has_next_page = len(df) > page_size
 
     # Return only the reviews for the current page and the next page flag
-    return df.head(page_size), has_next_page
+    return df
     
 @st.cache_data
 def get_rating_distribution_data(_conn, asin):
@@ -550,58 +551,75 @@ if conn:
                         st.warning("No reviews match the selected filters.")
         
         # Replace the entire 'with reviews_tab:' block with this new code
-
         with reviews_tab:
             st.subheader("Filtered Individual Reviews")
         
-            # --- Sorting Controls ---
-            st.session_state.all_reviews_sort = st.selectbox(
-                "Sort reviews by:",
-                options=["Newest First", "Oldest First", "Highest Rating", "Lowest Rating"],
-                key="reviews_sort_box",
-                on_change=lambda: st.session_state.update(all_reviews_page=0) # Reset page on sort change
-            )
+            sort_col, download_col = st.columns([3, 1])
         
-            # --- Smart Pagination Data Fetch ---
-            # We will fetch a larger page size for the dataframe view
-            page_size = 50 
-            paginated_reviews_df, has_next_page = get_filtered_reviews_paginated(
+            with sort_col:
+                def on_sort_change():
+                    st.session_state.all_reviews_page = 0
+        
+                st.session_state.all_reviews_sort = st.selectbox(
+                    "Sort reviews by:",
+                    options=["Newest First", "Oldest First", "Highest Rating", "Lowest Rating"],
+                    key="reviews_sort_box",
+                    on_change=on_sort_change
+                )
+        
+            with download_col:
+                # The download button now calls our helper function lazily.
+                # The expensive data fetch only happens when the button is clicked.
+                st.download_button(
+                    label="📥 Save Filtered Reviews",
+                    data=prepare_download_data(
+                        conn, selected_asin, selected_ratings, selected_sentiments, 
+                        selected_date_range, st.session_state.all_reviews_sort
+                    ),
+                    file_name=f"{selected_asin}_filtered_reviews.csv",
+                    mime='text/csv',
+                )
+        
+            # --- NEW LOGIC: Fetch one more than needed to check for a next page ---
+            page_size = 10 # Display 10 reviews at a time for fast rendering
+            reviews_to_display = get_filtered_reviews_paginated(
                 conn,
                 selected_asin,
                 selected_ratings,
                 selected_sentiments,
                 selected_date_range,
                 st.session_state.all_reviews_sort,
-                page_size=page_size,
-                page_num=st.session_state.all_reviews_page + 1
+                limit=page_size + 1, # Fetch one extra to check for next page
+                offset=st.session_state.all_reviews_page * page_size
             )
+        
+            has_next_page = len(reviews_to_display) > page_size
+            paginated_reviews_df = reviews_to_display.head(page_size)
         
             st.markdown("---")
         
-            # --- Display Reviews using the efficient st.dataframe ---
+            # --- Display Reviews and New Pagination ---
             if not paginated_reviews_df.empty:
-                st.dataframe(
-                    paginated_reviews_df[['rating', 'sentiment', 'date', 'text']],
-                    use_container_width=True,
-                    hide_index=True,
-                    height=500 # Use a fixed height to make it scrollable
-                )
+                st.write(f"Displaying Page {st.session_state.all_reviews_page + 1}")
+                for index, row in paginated_reviews_df.iterrows():
+                    with st.container(border=True):
+                        st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']} | Date: {row['date']}**")
+                        st.markdown(f"> {row['text']}")
         
-                # --- New, Simpler Pagination ---
                 st.markdown("---")
                 nav_cols = st.columns([1, 1, 1])
         
                 with nav_cols[0]:
                     if st.session_state.all_reviews_page > 0:
-                        if st.button("⬅️ Previous Page", key="all_rev_prev"):
+                        if st.button("⬅️ Previous Reviews", key="all_rev_prev"):
                             st.session_state.all_reviews_page -= 1
                             st.rerun()
         
-                nav_cols[1].markdown(f"<p style='text-align: center;'>Page {st.session_state.all_reviews_page + 1}</p>", unsafe_allow_html=True)
+                nav_cols[1].write("") # Spacer
         
                 with nav_cols[2]:
                     if has_next_page:
-                        if st.button("Next Page ➡️", key="all_rev_next"):
+                        if st.button("Next Reviews ➡️", key="all_rev_next"):
                             st.session_state.all_reviews_page += 1
                             st.rerun()
             else:
