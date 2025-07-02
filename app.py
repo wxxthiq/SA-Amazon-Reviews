@@ -235,14 +235,11 @@ def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
     
 # Replace your existing get_filtered_reviews_paginated function with this one
 
-def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, page_size, page_num):
+def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, limit, offset):
     """
-    Fetches a paginated list of reviews. It fetches one extra item 
-    (page_size + 1) to determine if a next page exists, avoiding a slow COUNT(*).
+    Fetches a paginated, filtered, and sorted list of reviews.
+    This version correctly handles all arguments.
     """
-    limit = page_size + 1 # Fetch one extra review
-    offset = (page_num - 1) * page_size
-
     query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
@@ -270,16 +267,13 @@ def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter,
         query += " ORDER BY rating ASC"
 
     # Add pagination
-    query += f" LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
+    # A limit of -1 is used by the download button to fetch all rows
+    if limit != -1:
+        query += f" LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
     df = pd.read_sql(query, _conn, params=params)
-
-    # Determine if there's a next page
-    has_next_page = len(df) > page_size
-
-    # Return only the reviews for the current page and the next page flag
-    return df.head(page_size)
+    return df
     
 @st.cache_data
 def get_rating_distribution_data(_conn, asin):
