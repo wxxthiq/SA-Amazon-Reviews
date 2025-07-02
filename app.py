@@ -216,11 +216,15 @@ def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
     return pd.read_sql(query, _conn, params=params)
     
 # Replace your existing get_filtered_reviews_paginated function with this one
-def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, limit, offset):
+
+def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, page_size, page_num):
     """
-    Fetches a paginated, filtered, and sorted list of reviews.
-    This version correctly handles all arguments.
+    Fetches a paginated list of reviews. It fetches one extra item 
+    (page_size + 1) to determine if a next page exists, avoiding a slow COUNT(*).
     """
+    limit = page_size + 1 # Fetch one extra review
+    offset = (page_num - 1) * page_size
+
     query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
@@ -252,7 +256,12 @@ def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter,
     params.extend([limit, offset])
 
     df = pd.read_sql(query, _conn, params=params)
-    return df
+
+    # Determine if there's a next page
+    has_next_page = len(df) > page_size
+
+    # Return only the reviews for the current page and the next page flag
+    return df.head(page_size), has_next_page
     
 @st.cache_data
 def get_rating_distribution_data(_conn, asin):
@@ -521,6 +530,7 @@ if conn:
                         st.warning("No reviews match the selected filters.")
         
         # Replace the entire 'with reviews_tab:' block with this new code
+        
         with reviews_tab:
             st.subheader("Filtered Individual Reviews")
         
@@ -546,40 +556,27 @@ if conn:
             )
         
             with download_col:
-                # This part still needs to fetch all reviews for the download button
+                # The download button still needs to fetch all reviews
                 if not paginated_reviews_df.empty:
-                    # This query is only run when the user clicks the download button
-                    all_filtered_reviews = get_filtered_reviews_paginated(
+                    # To get all reviews for download, we can use a very large page_size
+                    all_filtered_reviews, _ = get_filtered_reviews_paginated(
                         conn, selected_asin, selected_ratings, selected_sentiments, 
                         selected_date_range, st.session_state.all_reviews_sort, 
-                        limit=-1, offset=0 # -1 limit in SQLite means no limit
+                        page_size=100000, # A large number to simulate fetching all
+                        page_num=1
                     )
-
-                    # The download button will download ALL filtered reviews, not just the current page.
-                    # We only show the button if there are any reviews to download.
-                    if total_reviews > 0:
-                        # This fetch is efficient because it only runs when needed for the download.
-                        all_filtered_reviews = get_filtered_reviews_paginated(
-                            conn, 
-                            selected_asin, 
-                            selected_ratings, 
-                            selected_sentiments, 
-                            selected_date_range, 
-                            st.session_state.all_reviews_sort, 
-                            limit=-1, # A limit of -1 in SQLite fetches all matching rows
-                            offset=0
-                        )
-                        st.download_button(
-                            label="📥 Save Filtered Reviews",
-                            data=all_filtered_reviews.to_csv(index=False).encode('utf-8'),
-                            file_name=f"{selected_asin}_filtered_reviews.csv",
-                            mime='text/csv',
-                        )
+                    st.download_button(
+                        label="📥 Save Filtered Reviews",
+                        data=all_filtered_reviews.to_csv(index=False).encode('utf-8'),
+                        file_name=f"{selected_asin}_filtered_reviews.csv",
+                        mime='text/csv',
+                    )
         
             st.markdown("---")
         
             # --- Display Reviews and New Pagination ---
             if not paginated_reviews_df.empty:
+                st.write(f"Displaying Page {st.session_state.all_reviews_page + 1}")
                 for index, row in paginated_reviews_df.iterrows():
                     with st.container(border=True):
                         st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']} | Date: {row['date']}**")
@@ -594,7 +591,7 @@ if conn:
                             st.session_state.all_reviews_page -= 1
                             st.rerun()
         
-                nav_cols[1].markdown(f"<p style='text-align: center;'>Page {st.session_state.all_reviews_page + 1}</p>", unsafe_allow_html=True)
+                nav_cols[1].write("") # Spacer
         
                 with nav_cols[2]:
                     if has_next_page:
