@@ -176,113 +176,23 @@ def get_filtered_review_ids(_conn, asin, rating_filter, sentiment_filter, date_r
 
     df = pd.read_sql(query, _conn, params=params)
     return df['review_id'].tolist()
-    
-# Replace the old prepare_download_data function with this one
-# Replace the old prepare_download_data function with this one
-def prepare_download_data(conn, asin, rating_filter, sentiment_filter, date_range, sort_by):
-    """
-    Fetches ALL reviews matching the current filters and prepares them for CSV download.
-    This function is designed to be called by st.download_button's data argument.
-    """
-    # To get all reviews for download, we use a very large page_size and get the first page.
-    # We use '_' to ignore the 'has_next_page' value which we don't need here.
-    df, _ = get_filtered_reviews_paginated(
-        conn,
-        asin,
-        rating_filter,
-        sentiment_filter,
-        date_range,
-        sort_by,
-        page_size=100000, # A practical limit to simulate fetching all
-        page_num=1
-    )
-    return df.to_csv(index=False).encode('utf-8')
-    
-@st.cache_data
-def get_filtered_discrepancy_data(_conn, asin, rating_filter, sentiment_filter, date_range):
-    """
-    Fetches all necessary data for the discrepancy plot, applying all filters directly in SQL.
-    This is the core of the on-the-fly analysis.
-    """
-    # Base query selects all necessary columns from the discrepancy table
-    query = "SELECT review_id, rating, text_polarity, sentiment FROM discrepancy_data WHERE parent_asin = ?"
-    params = [asin]
-
-    # Dynamically add conditions for each filter if it's being used
-    if rating_filter:
-        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
-        params.extend(rating_filter)
-
-    if sentiment_filter:
-        query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
-        params.extend(sentiment_filter)
-
-    if date_range and len(date_range) == 2:
-        query += " AND date BETWEEN ? AND ?"
-        params.extend([date_range[0].strftime('%Y-%m-%d'), date_range[1].strftime('%Y-%m-%d')])
-
-    df = pd.read_sql(query, _conn, params=params)
-
-    # Calculate discrepancy on the filtered data
-    if not df.empty:
-        df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
-        # Add jitter for better visualization of overlapping points
-        df['rating_jittered'] = df['rating'] + np.random.uniform(-0.1, 0.1, size=len(df))
-        df['text_polarity_jittered'] = df['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(df))
-
-    return df
-    
+        
 def get_single_review_text(conn, review_id):
     """Fetches the full text of a single review by its unique ID."""
     result = conn.execute("SELECT text FROM reviews WHERE review_id = ?", (review_id,)).fetchone()
     return result[0] if result else "Review text not found."
-
-def get_single_review(_conn, review_id):
-    """Fetches a single review as a DataFrame."""
-    return pd.read_sql("SELECT review_id, rating, sentiment, text FROM reviews WHERE review_id = ?", _conn, params=(review_id,))
-
-def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
-    """
-    Fetches a small 'page' of raw reviews to display, with an optional rating filter.
-    """
-    offset = (page_num - 1) * page_size
-    params = [asin]
-    query = f"SELECT rating, sentiment, text FROM reviews WHERE parent_asin = ?"
-
-    if rating_filter is not None:
-        query += " AND rating = ?"
-        params.append(rating_filter)
-
-    query += f" LIMIT ? OFFSET ?"
-    params.extend([page_size, offset])
-    
-    return pd.read_sql(query, _conn, params=params)
     
 # Replace your existing get_filtered_reviews_paginated function with this one
-
-def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, page_size, page_num):
+def get_all_reviews_paginated(_conn, asin, sort_by, page_size, page_num):
     """
-    Fetches a paginated list of reviews. It fetches one extra item 
-    (page_size + 1) to determine if a next page exists, avoiding a slow COUNT(*).
+    Fetches a simple, paginated list of all reviews for a product.
+    This version has NO FILTERS and is therefore very fast.
     """
-    limit = page_size + 1 # Fetch one extra review
+    limit = page_size + 1  # Fetch one extra to check for a next page
     offset = (page_num - 1) * page_size
 
-    query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
+    query = "SELECT rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
     params = [asin]
-
-    # Add WHERE clauses for filters
-    if rating_filter:
-        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
-        params.extend(rating_filter)
-    if sentiment_filter:
-        query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
-        params.extend(sentiment_filter)
-    if date_range and len(date_range) == 2:
-        start_date = date_range[0].strftime('%Y-%m-%d')
-        end_date = date_range[1].strftime('%Y-%m-%d')
-        query += " AND date BETWEEN ? AND ?"
-        params.extend([start_date, end_date])
 
     # Add sorting
     if sort_by == "Newest First":
@@ -291,26 +201,17 @@ def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter,
         query += " ORDER BY date ASC"
     elif sort_by == "Highest Rating":
         query += " ORDER BY rating DESC"
-    else: # Lowest Rating
+    else:  # Lowest Rating
         query += " ORDER BY rating ASC"
 
-    # Add pagination
     query += f" LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
     df = pd.read_sql(query, _conn, params=params)
-
-    # Determine if there's a next page
     has_next_page = len(df) > page_size
 
-    # Return only the reviews for the current page and the next page flag
     return df.head(page_size), has_next_page
-    
-@st.cache_data
-def get_rating_distribution_data(_conn, asin):
-    """Fetches the pre-computed rating distribution for a product."""
-    return pd.read_sql("SELECT `1_star`, `2_star`, `3_star`, `4_star`, `5_star` FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
-    
+
 # This new function replaces get_discrepancy_data and get_rating_distribution_data
 @st.cache_data
 def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, date_range):
