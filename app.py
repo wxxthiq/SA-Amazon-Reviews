@@ -594,45 +594,55 @@ if conn:
         
         # Replace the entire 'with reviews_tab:' block with this new code
         with reviews_tab:
-            st.subheader("Browse Individual Reviews")
+            st.subheader("Browse All Individual Reviews for this Product")
         
-            # Check if a filter has been applied from the other tab
-            if st.session_state.filtered_review_ids is None:
-                st.info("⬅️ Go to the 'Sentiment Analysis' tab to apply filters and browse the results here.")
+            # --- Sorting Controls ---
+            def on_sort_change():
+                # When sort order changes, clear the currently loaded reviews and reset the page
+                st.session_state.loaded_reviews_df = pd.DataFrame()
+                st.session_state.all_reviews_page = 0
+        
+            st.selectbox(
+                "Sort all reviews by:",
+                options=["Newest First", "Oldest First", "Highest Rating", "Lowest Rating"],
+                key="all_reviews_sort",
+                on_change=on_sort_change
+            )
+            st.markdown("---")
+        
+            # --- "Load More" Button Logic ---
+            # We use a button to trigger the fetching of the next page
+            if st.button("Load 25 More Reviews", use_container_width=True):
+                st.session_state.all_reviews_page += 1
+        
+            # Fetch the data for all pages loaded so far
+            # This is efficient because it only grows when the user explicitly asks for more data
+            reviews_to_display, has_more_after_this = get_all_reviews_paginated(
+                conn,
+                selected_asin,
+                st.session_state.all_reviews_sort,
+                page_size=25, # We'll load 25 reviews per click
+                page_num=st.session_state.all_reviews_page + 1 # page_num is 1-based
+            )
+        
+            # Append new reviews to the existing ones in session state
+            if not reviews_to_display.empty:
+                st.session_state.loaded_reviews_df = pd.concat(
+                    [st.session_state.loaded_reviews_df, reviews_to_display]
+                ).drop_duplicates(subset=['review_id'])
+        
+        
+            # --- Display Reviews using the efficient st.dataframe ---
+            if not st.session_state.loaded_reviews_df.empty:
+                st.info(f"Displaying {len(st.session_state.loaded_reviews_df)} reviews.")
+                st.dataframe(
+                    st.session_state.loaded_reviews_df[['rating', 'sentiment', 'date', 'text']],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=600 # Use a fixed height to make it scrollable
+                )
             else:
-                st.success(f"Browsing **{len(st.session_state.filtered_review_ids)}** filtered reviews.")
-        
-                # Simple pagination for the filtered list of IDs
-                page_size = 10
-                start_index = st.session_state.all_reviews_page * page_size
-                end_index = start_index + page_size
-                ids_to_fetch = st.session_state.filtered_review_ids[start_index:end_index]
-        
-                if not ids_to_fetch:
-                    st.warning("No more reviews to display.")
-                else:
-                    # Fetch the full text for only the 10 IDs on the current page
-                    placeholders = ','.join('?' for _ in ids_to_fetch)
-                    reviews_df = pd.read_sql(f"SELECT rating, sentiment, text, date FROM reviews WHERE review_id IN ({placeholders})", conn, params=ids_to_fetch)
-        
-                    for index, row in reviews_df.iterrows():
-                        with st.container(border=True):
-                            st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']} | Date: {row['date']}**")
-                            st.markdown(f"> {row['text']}")
-        
-                    # Pagination Buttons
-                    st.markdown("---")
-                    nav_cols = st.columns([1, 1, 1])
-                    if st.session_state.all_reviews_page > 0:
-                        if nav_cols[0].button("⬅️ Previous", key="br_prev"):
-                            st.session_state.all_reviews_page -= 1
-                            st.rerun()
-        
-                    if end_index < len(st.session_state.filtered_review_ids):
-                        if nav_cols[2].button("Next ➡️", key="br_next"):
-                            st.session_state.all_reviews_page += 1
-                            st.rerun()
-                            
+                st.warning("No reviews found for this product.")                    
     # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
