@@ -215,32 +215,29 @@ def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
     
     return pd.read_sql(query, _conn, params=params)
     
+# Replace the old get_filtered_reviews_paginated with this one
 def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, limit, offset):
     """
-    Fetches a paginated, filtered, and sorted list of reviews directly from the database.
+    Fetches a paginated, filtered, and sorted list of reviews.
+    This version NO LONGER performs the count.
     """
     query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
-    # Dynamically add conditions for each filter
+    # Add WHERE clauses for filters
     if rating_filter:
         query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
-        count_query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
         params.extend(rating_filter)
-
     if sentiment_filter:
         query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
-        count_query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
         params.extend(sentiment_filter)
-
     if date_range and len(date_range) == 2:
         start_date = date_range[0].strftime('%Y-%m-%d')
         end_date = date_range[1].strftime('%Y-%m-%d')
         query += " AND date BETWEEN ? AND ?"
-        count_query += " AND date BETWEEN ? AND ?"
         params.extend([start_date, end_date])
 
-    # Determine sorting order
+    # Add sorting
     if sort_by == "Newest First":
         query += " ORDER BY date DESC"
     elif sort_by == "Oldest First":
@@ -250,12 +247,12 @@ def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter,
     elif sort_by == "Lowest Rating":
         query += " ORDER BY rating ASC"
 
-    # Add pagination to the main query
+    # Add pagination
     query += f" LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
     df = pd.read_sql(query, _conn, params=params)
-    return df
+    return df # Note: It now only returns the DataFrame
 
 def count_filtered_reviews(_conn, asin, rating_filter, sentiment_filter, date_range):
     """
