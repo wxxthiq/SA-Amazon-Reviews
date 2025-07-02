@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import sqlite3
-from wordcloud import WordCloud, STOPWORDS
+from wordcloud import WordCloud, 
 import matplotlib.pyplot as plt
 import altair as alt
 from streamlit_plotly_events import plotly_events
@@ -235,17 +235,13 @@ def get_paginated_reviews(_conn, asin, page_num, page_size, rating_filter=None):
     return pd.read_sql(query, _conn, params=params)
     
 # Replace your existing get_filtered_reviews_paginated function with this one
-
 # Replace your existing get_filtered_reviews_paginated function with this one
 
-def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, page_size, page_num):
+def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter, date_range, sort_by, limit, offset):
     """
-    Fetches a paginated list of reviews. It fetches one extra item 
-    (page_size + 1) to determine if a next page exists, avoiding a slow COUNT(*).
+    Fetches a paginated, filtered, and sorted list of reviews.
+    This version correctly handles all arguments for both pagination and full download.
     """
-    limit = page_size + 1 # Fetch one extra review
-    offset = (page_num - 1) * page_size
-
     query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
@@ -273,15 +269,12 @@ def get_filtered_reviews_paginated(_conn, asin, rating_filter, sentiment_filter,
         query += " ORDER BY rating ASC"
 
     # Add pagination
-    query += f" LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
+    # A limit of -1 is used by the download button to fetch all rows
+    if limit != -1:
+        query += f" LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
     df = pd.read_sql(query, _conn, params=params)
-
-    # Determine if there's a next page
-    has_next_page = len(df) > page_size
-
-    # Return only the reviews for the current page and the next page flag
     return df
     
 @st.cache_data
