@@ -263,17 +263,14 @@ if 'category' not in st.session_state: st.session_state.category = "--- Select a
 if 'search_term' not in st.session_state: st.session_state.search_term = ""
 if 'sort_by' not in st.session_state: st.session_state.sort_by = "Popularity (Most Reviews)"
 if 'image_index' not in st.session_state: st.session_state.image_index = 0
-# --- NEW: Session state for unified drill-down display ---
-if 'drilldown_reviews' not in st.session_state: st.session_state.drilldown_reviews = pd.DataFrame()
-if 'drilldown_title' not in st.session_state: st.session_state.drilldown_title = ""
 if 'drilldown_rating' not in st.session_state: st.session_state.drilldown_rating = None
 if 'discrepancy_review_id' not in st.session_state: st.session_state.discrepancy_review_id = None
 # Add these two lines for the new reviews tab state
 if 'all_reviews_page' not in st.session_state: st.session_state.all_reviews_page = 0
 if 'all_reviews_sort' not in st.session_state: st.session_state.all_reviews_sort = "Newest First"
-# Add this line
 if 'filtered_review_ids' not in st.session_state: st.session_state.filtered_review_ids = None
-    
+if 'loaded_reviews_df' not in st.session_state: st.session_state.loaded_reviews_df = pd.DataFrame()
+
 if conn:
     # --- DETAILED PRODUCT VIEW ---
     if st.session_state.selected_product:
