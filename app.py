@@ -583,7 +583,27 @@ if conn:
                         selected_date_range, st.session_state.all_reviews_sort, 
                         limit=-1, offset=0 # -1 limit in SQLite means no limit
                     )
-                    st.download_button(...) # Your existing download button code
+
+                    # The download button will download ALL filtered reviews, not just the current page.
+                    # We only show the button if there are any reviews to download.
+                    if total_reviews > 0:
+                        # This fetch is efficient because it only runs when needed for the download.
+                        all_filtered_reviews = get_filtered_reviews_paginated(
+                            conn, 
+                            selected_asin, 
+                            selected_ratings, 
+                            selected_sentiments, 
+                            selected_date_range, 
+                            st.session_state.all_reviews_sort, 
+                            limit=-1, # A limit of -1 in SQLite fetches all matching rows
+                            offset=0
+                        )
+                        st.download_button(
+                            label="📥 Save Filtered Reviews",
+                            data=all_filtered_reviews.to_csv(index=False).encode('utf-8'),
+                            file_name=f"{selected_asin}_filtered_reviews.csv",
+                            mime='text/csv',
+                        )
         
             st.markdown("---")
         
