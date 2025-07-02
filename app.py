@@ -551,55 +551,73 @@ if conn:
         with reviews_tab:
             st.subheader("Filtered Individual Reviews")
         
-            # --- Sorting Controls ---
-            def on_sort_change():
-                # When sort order changes, reset the reviews we've loaded
-                st.session_state.loaded_reviews = pd.DataFrame()
-                st.session_state.all_reviews_page = 0
+            # --- Sorting and Download Controls ---
+            sort_col, download_col = st.columns([3, 1])
         
-            st.selectbox(
-                "Sort reviews by:",
-                options=["Newest First", "Oldest First", "Highest Rating", "Lowest Rating"],
-                key="all_reviews_sort",
-                on_change=on_sort_change
-            )
-            st.markdown("---")
+            with sort_col:
+                # When sort order changes, reset to the first page of reviews
+                def on_sort_change():
+                    st.session_state.all_reviews_page = 0
         
-            # Initialize a state to hold all loaded reviews for this view
-            if 'loaded_reviews' not in st.session_state:
-                st.session_state.loaded_reviews = pd.DataFrame()
+                st.session_state.all_reviews_sort = st.selectbox(
+                    "Sort reviews by:",
+                    options=["Newest First", "Oldest First", "Highest Rating", "Lowest Rating"],
+                    key="reviews_sort_box",
+                    on_change=on_sort_change
+                )
         
-            # Fetch the NEXT page of reviews
-            next_page_of_reviews, has_more = get_filtered_reviews_paginated(
+            with download_col:
+                # The download button now calls our helper function lazily.
+                # The expensive data fetch only happens when the button is clicked.
+                st.download_button(
+                    label="📥 Save Filtered Reviews",
+                    data=prepare_download_data(
+                        conn, selected_asin, selected_ratings, selected_sentiments, 
+                        selected_date_range, st.session_state.all_reviews_sort
+                    ),
+                    file_name=f"{selected_asin}_filtered_reviews.csv",
+                    mime='text/csv',
+                )
+        
+            # --- NEW LOGIC: Fetch one more than needed to check for a next page ---
+            page_size = 10 # Display 10 reviews at a time for fast rendering
+            reviews_to_display, has_next_page = get_filtered_reviews_paginated(
                 conn,
                 selected_asin,
                 selected_ratings,
                 selected_sentiments,
                 selected_date_range,
                 st.session_state.all_reviews_sort,
-                page_size=25, # Fetch 25 at a time
-                page_num=st.session_state.all_reviews_page + 1
+                page_size=page_size,
+                page_num=st.session_state.all_reviews_page + 1 # page_num is 1-based
             )
         
-            # If we have new reviews, append them to our list
-            if not next_page_of_reviews.empty:
-                st.session_state.loaded_reviews = pd.concat([st.session_state.loaded_reviews, next_page_of_reviews]).drop_duplicates(subset=['review_id'])
+            st.markdown("---")
         
-            # --- Display Reviews using the efficient st.dataframe ---
-            if not st.session_state.loaded_reviews.empty:
-                st.dataframe(
-                    st.session_state.loaded_reviews[['rating', 'sentiment', 'date', 'text']],
-                    use_container_width=True,
-                    hide_index=True
-                )
+            # --- Display Reviews and True Pagination ---
+            if not reviews_to_display.empty:
+                st.write(f"Displaying Page {st.session_state.all_reviews_page + 1}")
+                for index, row in reviews_to_display.iterrows():
+                    with st.container(border=True):
+                        st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']} | Date: {row['date']}**")
+                        st.markdown(f"> {row['text']}")
         
-                # --- "Load More" Button ---
-                if has_more:
-                    if st.button("Load 25 More Reviews"):
-                        st.session_state.all_reviews_page += 1
-                        st.rerun()
-                else:
-                    st.success("All matching reviews have been loaded.")
+                st.markdown("---")
+                nav_cols = st.columns([1, 1, 1])
+        
+                with nav_cols[0]:
+                    if st.session_state.all_reviews_page > 0:
+                        if st.button("⬅️ Previous Reviews", key="all_rev_prev"):
+                            st.session_state.all_reviews_page -= 1
+                            st.rerun()
+        
+                nav_cols[1].write("") # Spacer
+        
+                with nav_cols[2]:
+                    if has_next_page:
+                        if st.button("Next Reviews ➡️", key="all_rev_next"):
+                            st.session_state.all_reviews_page += 1
+                            st.rerun()
             else:
                 st.warning("No reviews match the current filter criteria.")
     
