@@ -155,6 +155,7 @@ def get_single_product_details(_conn, asin):
     return pd.read_sql("SELECT * FROM products WHERE parent_asin = ?", _conn, params=(asin,))
 
 # Replace the old prepare_download_data function with this one
+# Replace the old prepare_download_data function with this one
 def prepare_download_data(conn, asin, rating_filter, sentiment_filter, date_range, sort_by):
     """
     Fetches ALL reviews matching the current filters and prepares them for CSV download.
@@ -163,12 +164,12 @@ def prepare_download_data(conn, asin, rating_filter, sentiment_filter, date_rang
     # To get all reviews for download, we use a very large page_size and get the first page.
     # We use '_' to ignore the 'has_next_page' value which we don't need here.
     df, _ = get_filtered_reviews_paginated(
-        conn, 
-        asin, 
-        rating_filter, 
-        sentiment_filter, 
-        date_range, 
-        sort_by, 
+        conn,
+        asin,
+        rating_filter,
+        sentiment_filter,
+        date_range,
+        sort_by,
         page_size=100000, # A practical limit to simulate fetching all
         page_num=1
     )
@@ -582,7 +583,7 @@ if conn:
         
             # --- NEW LOGIC: Fetch one more than needed to check for a next page ---
             page_size = 10 # Display 10 reviews at a time for fast rendering
-            reviews_to_display, has_next_page = get_filtered_reviews_paginated(
+            paginated_reviews_df, has_next_page = get_filtered_reviews_paginated(
                 conn,
                 selected_asin,
                 selected_ratings,
@@ -592,6 +593,8 @@ if conn:
                 page_size=page_size,
                 page_num=st.session_state.all_reviews_page + 1 # page_num is 1-based
             )
+            
+            st.markdown("---")
         
             st.markdown("---")
         
