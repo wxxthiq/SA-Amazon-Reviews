@@ -495,6 +495,7 @@ if conn:
             reviews_to_display, has_more_after_this = get_all_reviews_paginated(
                 conn,
                 selected_asin,
+                st.session_state.all_reviews_sort,
                 page_size=10, # We'll load 25 reviews per click
                 page_num=st.session_state.all_reviews_page + 1 # page_num is 1-based
             )
