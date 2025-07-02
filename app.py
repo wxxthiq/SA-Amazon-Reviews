@@ -154,6 +154,29 @@ def get_single_product_details(_conn, asin):
     """Fetches details for only one product."""
     return pd.read_sql("SELECT * FROM products WHERE parent_asin = ?", _conn, params=(asin,))
 
+def get_filtered_review_ids(_conn, asin, rating_filter, sentiment_filter, date_range):
+    """
+    Fetches only the IDs of reviews that match the current filters. This is very fast.
+    """
+    query = "SELECT review_id FROM reviews WHERE parent_asin = ?"
+    params = [asin]
+
+    # Add WHERE clauses for filters
+    if rating_filter:
+        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
+        params.extend(rating_filter)
+    if sentiment_filter:
+        query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
+        params.extend(sentiment_filter)
+    if date_range and len(date_range) == 2:
+        start_date = date_range[0].strftime('%Y-%m-%d')
+        end_date = date_range[1].strftime('%Y-%m-%d')
+        query += " AND date BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
+
+    df = pd.read_sql(query, _conn, params=params)
+    return df['review_id'].tolist()
+    
 # Replace the old prepare_download_data function with this one
 # Replace the old prepare_download_data function with this one
 def prepare_download_data(conn, asin, rating_filter, sentiment_filter, date_range, sort_by):
@@ -347,7 +370,9 @@ if 'discrepancy_review_id' not in st.session_state: st.session_state.discrepancy
 # Add these two lines for the new reviews tab state
 if 'all_reviews_page' not in st.session_state: st.session_state.all_reviews_page = 0
 if 'all_reviews_sort' not in st.session_state: st.session_state.all_reviews_sort = "Newest First"
-
+# Add this line
+if 'filtered_review_ids' not in st.session_state: st.session_state.filtered_review_ids = None
+    
 if conn:
     # --- DETAILED PRODUCT VIEW ---
     if st.session_state.selected_product:
@@ -548,83 +573,66 @@ if conn:
                                 st.session_state.discrepancy_review_id = discrepancy_df.iloc[clicked_index]['review_id']
                     else:
                         st.warning("No reviews match the selected filters.")
+            
+            # This code goes at the end of the `with vis_tab:` block          
+            st.markdown("---")
+            
+            # Get the list of review IDs that match the current filters
+            filtered_ids = get_filtered_review_ids(conn, selected_asin, selected_ratings, selected_sentiments, selected_date_range)
+            
+            if filtered_ids:
+                st.session_state.filtered_review_ids = filtered_ids
+                # Use st.info to make the button stand out
+                st.info(f"Found **{len(filtered_ids)}** reviews matching your filters.")
+                if st.button("Browse These Reviews ➡️"):
+                    # This doesn't need to do anything but the app will rerun, and the
+                    # reviews_tab will now use the filtered_review_ids from session state.
+                    # We can switch to it programmatically if desired, but for now, this is simple.
+                    pass 
+            else:
+                st.warning("No reviews match the current filter criteria.")
         
         # Replace the entire 'with reviews_tab:' block with this new code
         with reviews_tab:
-            st.subheader("Filtered Individual Reviews")
+            st.subheader("Browse Individual Reviews")
         
-            # --- Sorting and Download Controls ---
-            sort_col, download_col = st.columns([3, 1])
+            # Check if a filter has been applied from the other tab
+            if st.session_state.filtered_review_ids is None:
+                st.info("⬅️ Go to the 'Sentiment Analysis' tab to apply filters and browse the results here.")
+            else:
+                st.success(f"Browsing **{len(st.session_state.filtered_review_ids)}** filtered reviews.")
         
-            with sort_col:
-                # When sort order changes, reset to the first page of reviews
-                def on_sort_change():
-                    st.session_state.all_reviews_page = 0
+                # Simple pagination for the filtered list of IDs
+                page_size = 10
+                start_index = st.session_state.all_reviews_page * page_size
+                end_index = start_index + page_size
+                ids_to_fetch = st.session_state.filtered_review_ids[start_index:end_index]
         
-                st.session_state.all_reviews_sort = st.selectbox(
-                    "Sort reviews by:",
-                    options=["Newest First", "Oldest First", "Highest Rating", "Lowest Rating"],
-                    key="reviews_sort_box",
-                    on_change=on_sort_change
-                )
+                if not ids_to_fetch:
+                    st.warning("No more reviews to display.")
+                else:
+                    # Fetch the full text for only the 10 IDs on the current page
+                    placeholders = ','.join('?' for _ in ids_to_fetch)
+                    reviews_df = pd.read_sql(f"SELECT rating, sentiment, text, date FROM reviews WHERE review_id IN ({placeholders})", conn, params=ids_to_fetch)
         
-            with download_col:
-                # The download button now calls our helper function lazily.
-                # The expensive data fetch only happens when the button is clicked.
-                st.download_button(
-                    label="📥 Save Filtered Reviews",
-                    data=prepare_download_data(
-                        conn, selected_asin, selected_ratings, selected_sentiments, 
-                        selected_date_range, st.session_state.all_reviews_sort
-                    ),
-                    file_name=f"{selected_asin}_filtered_reviews.csv",
-                    mime='text/csv',
-                )
+                    for index, row in reviews_df.iterrows():
+                        with st.container(border=True):
+                            st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']} | Date: {row['date']}**")
+                            st.markdown(f"> {row['text']}")
         
-            # --- NEW LOGIC: Fetch one more than needed to check for a next page ---
-            page_size = 10 # Display 10 reviews at a time for fast rendering
-            paginated_reviews_df, has_next_page = get_filtered_reviews_paginated(
-                conn,
-                selected_asin,
-                selected_ratings,
-                selected_sentiments,
-                selected_date_range,
-                st.session_state.all_reviews_sort,
-                page_size=page_size,
-                page_num=st.session_state.all_reviews_page + 1 # page_num is 1-based
-            )
-            
-            st.markdown("---")
-        
-            st.markdown("---")
-        
-            # --- Display Reviews and True Pagination ---
-            if not  paginated_reviews_df.empty:
-                st.write(f"Displaying Page {st.session_state.all_reviews_page + 1}")
-                for index, row in  paginated_reviews_df.iterrows():
-                    with st.container(border=True):
-                        st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']} | Date: {row['date']}**")
-                        st.markdown(f"> {row['text']}")
-        
-                st.markdown("---")
-                nav_cols = st.columns([1, 1, 1])
-        
-                with nav_cols[0]:
+                    # Pagination Buttons
+                    st.markdown("---")
+                    nav_cols = st.columns([1, 1, 1])
                     if st.session_state.all_reviews_page > 0:
-                        if st.button("⬅️ Previous Reviews", key="all_rev_prev"):
+                        if nav_cols[0].button("⬅️ Previous", key="br_prev"):
                             st.session_state.all_reviews_page -= 1
                             st.rerun()
         
-                nav_cols[1].write("") # Spacer
-        
-                with nav_cols[2]:
-                    if has_next_page:
-                        if st.button("Next Reviews ➡️", key="all_rev_next"):
+                    if end_index < len(st.session_state.filtered_review_ids):
+                        if nav_cols[2].button("Next ➡️", key="br_next"):
                             st.session_state.all_reviews_page += 1
                             st.rerun()
-            else:
-                st.warning("No reviews match the current filter criteria.")
-    
+                            
     # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
