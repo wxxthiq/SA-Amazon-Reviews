@@ -183,7 +183,7 @@ def get_single_review_text(conn, review_id):
     return result[0] if result else "Review text not found."
     
 # Replace your existing get_filtered_reviews_paginated function with this one
-def get_all_reviews_paginated(_conn, asin, sort_by, page_size, page_num):
+def get_all_reviews_paginated(_conn, asin, page_size, page_num):
     """
     Fetches a simple, paginated list of all reviews for a product.
     This version has NO FILTERS and is therefore very fast.
