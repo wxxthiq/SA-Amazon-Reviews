@@ -599,9 +599,9 @@ if conn:
             st.markdown("---")
         
             # --- Display Reviews and True Pagination ---
-            if not reviews_to_display.empty:
+            if not  paginated_reviews_df.empty:
                 st.write(f"Displaying Page {st.session_state.all_reviews_page + 1}")
-                for index, row in reviews_to_display.iterrows():
+                for index, row in  paginated_reviews_df.iterrows():
                     with st.container(border=True):
                         st.markdown(f"**Rating: {row['rating']} ⭐ | Sentiment: {row['sentiment']} | Date: {row['date']}**")
                         st.markdown(f"> {row['text']}")
