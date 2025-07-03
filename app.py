@@ -253,11 +253,8 @@ if conn:
         # Header Layout with Popover Image Gallery
             left_col, right_col = st.columns([1, 2])
             with left_col:
-                # ... (Image gallery code remains the same) ...
-                pass
                 image_urls_str = product_details.get('image_urls')
                 image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
-                
                 thumbnail_url = image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL
                 st.image(thumbnail_url, use_container_width=True)
     
@@ -342,7 +339,7 @@ if conn:
                 
                 st.write(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
     
-                if filtered_data.empty:
+                if chart_data.empty:
                     st.warning("No reviews match the selected filters. Please adjust your selections in the sidebar.")
                 else:
                     # --- Top Row: Existing Charts ---
@@ -368,7 +365,7 @@ if conn:
                         # We now use the 'filtered_data' DataFrame directly. No need to call the function again.
                         if not chart_data.empty:
                             plot = px.scatter(
-                                filtered_data, # Use the already fetched and processed DataFrame
+                                chart_data, # Use the already fetched and processed DataFrame
                                 x="rating_jittered",
                                 y="text_polarity_jittered",
                                 color="discrepancy",
@@ -522,7 +519,7 @@ if conn:
                 st.subheader("Interactive Word Clouds")
                 st.caption("Hover over a word to see its frequency. Based on current filters.")
                 
-                if filtered_data.empty:
+                if chart_data.empty:
                     st.warning("No data matches the selected filters. Cannot generate word clouds.")
                 else:
                     col1, col2 = st.columns(2)
