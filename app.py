@@ -411,12 +411,12 @@ if conn:
                         st.plotly_chart(rating_stream_chart, use_container_width=True)
         
                         # Pro Tip: Uncomment the code below for a 100% stacked chart to see proportions
-                        # st.markdown("#### Rating Proportion Over Time")
-                        # rating_proportion_chart = px.area(
-                        #     rating_counts_over_time, x='month', y='count', color='rating',
-                        #     groupnorm='percent', title="Proportion of Reviews by Star Rating"
-                        # )
-                        # st.plotly_chart(rating_proportion_chart, use_container_width=True)
+                        st.markdown("#### Rating Proportion Over Time")
+                        rating_proportion_chart = px.area(
+                            rating_counts_over_time, x='month', y='count', color='rating',
+                            groupnorm='percent', title="Proportion of Reviews by Star Rating"
+                        )
+                        st.plotly_chart(rating_proportion_chart, use_container_width=True)
                     else:
                         st.info("Not enough data to display a trend.")
         
