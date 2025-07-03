@@ -505,7 +505,7 @@ if conn:
                     else:
                         st.info("Not enough data to display a trend.")
         #
-       with wordcloud_tab:
+        with wordcloud_tab:
             st.subheader("Comparative Word Clouds")
             st.caption("Keywords from positive and negative reviews, based on current filters.")
         
@@ -556,6 +556,7 @@ if conn:
                         st.pyplot(negative_wc_fig, use_container_width=True)
                     else:
                         st.info("No negative reviews match the current filters.")
+                        
             # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
