@@ -182,8 +182,7 @@ def get_single_review_text(conn, review_id):
     result = conn.execute("SELECT text FROM reviews WHERE review_id = ?", (review_id,)).fetchone()
     return result[0] if result else "Review text not found."
     
-# Replace your existing get_filtered_reviews_paginated function with this one
-def get_all_reviews_paginated(_conn, asin, page_size, page_num):
+def get_all_reviews_paginated(_conn, asin, page_size, page_num, sort_order="Newest First"):
     """
     Fetches a simple, paginated list of all reviews for a product.
     This version has NO FILTERS and is therefore very fast.
@@ -194,8 +193,17 @@ def get_all_reviews_paginated(_conn, asin, page_size, page_num):
     query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
-    # Default sort order
-    query += " ORDER BY date DESC"
+    # # Add sorting
+    # if sort_order == "Newest First":
+    #     query += " ORDER BY date DESC"
+    # elif sort_order == "Oldest First":
+    #     query += " ORDER BY date ASC"
+    # elif sort_order == "Highest Rated":
+    #     query += " ORDER BY rating DESC, date DESC"
+    # elif sort_order == "Lowest Rated":
+    #     query += " ORDER BY rating ASC, date DESC"
+
+    query += " LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
     df = pd.read_sql(query, _conn, params=params)
@@ -485,39 +493,48 @@ if conn:
         with reviews_tab:
             st.subheader("Browse All Individual Reviews for this Product")
         
-            # --- "Load More" Button Logic ---
-            # We use a button to trigger the fetching of the next page
-            if st.button("Load 25 More Reviews", use_container_width=True):
-                st.session_state.all_reviews_page += 1
+            # The initial database query will be sorted by the newest reviews.
+            # The user can then sort the displayed dataframe by clicking the column headers.
+            default_sort_order = "Newest First"
         
-            # Fetch the data for all pages loaded so far
-            # This is efficient because it only grows when the user explicitly asks for more data
-            reviews_to_display, has_more_after_this = get_all_reviews_paginated(
+            # Fetch the next page of reviews
+            reviews_to_display, has_more = get_all_reviews_paginated(
                 conn,
                 selected_asin,
-                st.session_state.all_reviews_sort,
-                #page_size=10, # We'll load 25 reviews per click
-                page_num=st.session_state.all_reviews_page + 1 # page_num is 1-based
+                page_size=25,
+                page_num=st.session_state.all_reviews_page + 1,
+                sort_order=default_sort_order
             )
         
-            # Append new reviews to the existing ones in session state
+            # Append newly loaded reviews to the dataframe in the session state
             if not reviews_to_display.empty:
                 st.session_state.loaded_reviews_df = pd.concat(
                     [st.session_state.loaded_reviews_df, reviews_to_display]
-                ).drop_duplicates(subset=['review_id'])
+                ).drop_duplicates(subset=['review_id'], keep='last')
         
-        
-            # --- Display Reviews using the efficient st.dataframe ---
+            # --- Display Reviews using st.dataframe ---
             if not st.session_state.loaded_reviews_df.empty:
-                st.info(f"Displaying {len(st.session_state.loaded_reviews_df)} reviews.")
+                total_reviews_count = product_details.get('review_count', 0)
+                st.info(f"Displaying {len(st.session_state.loaded_reviews_df)} of {int(total_reviews_count)} reviews. You can sort the table by clicking on any column header.")
+        
                 st.dataframe(
                     st.session_state.loaded_reviews_df[['rating', 'sentiment', 'date', 'text']],
                     use_container_width=True,
                     hide_index=True,
-                    height=600 # Use a fixed height to make it scrollable
+                    height=600  # Use a fixed height for a scrollable view
                 )
+        
+                # --- "Load More" Button Logic ---
+                if has_more:
+                    if st.button("Load 25 More Reviews", use_container_width=True, key="load_more_reviews"):
+                        st.session_state.all_reviews_page += 1
+                        st.rerun()
+                else:
+                    st.success("You've reached the end of the reviews for this product! 🎉")
+        
             else:
-                st.warning("No reviews found for this product.")                    
+                st.warning("No reviews were found for this product.")    
+                
     # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
