@@ -218,161 +218,201 @@ if conn:
     if st.session_state.selected_product:
         
         selected_asin = st.session_state.selected_product
-    
-        # --- HELPER & DATA FUNCTIONS ---
-    
-        @st.cache_data
-        def get_product_details(_conn, asin):
-            return pd.read_sql("SELECT * FROM products WHERE parent_asin = ?", _conn, params=(asin,))
-    
-        @st.cache_data
-        def get_product_date_range(_conn, asin):
-            return _conn.execute(
-                "SELECT MIN(date), MAX(date) FROM reviews WHERE parent_asin=?", (asin,)
-            ).fetchone()
-    
-        @st.cache_data(show_spinner="Analyzing sentiment data...")
-        def get_filtered_data_for_charts(_conn, asin, rating_filter, sentiment_filter, date_range_tuple):
-            query = "SELECT review_id, rating, text_polarity, sentiment, date FROM discrepancy_data WHERE parent_asin = ?"
-            params = [asin]
-            if rating_filter:
-                query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
-                params.extend(rating_filter)
-            if sentiment_filter:
-                query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
-                params.extend(sentiment_filter)
-            if date_range_tuple and len(date_range_tuple) == 2:
-                start_date, end_date = date_range_tuple
-                query += " AND date BETWEEN ? AND ?"
-                params.extend([start_date, end_date])
-            
-            df = pd.read_sql(query, _conn, params=params)
-            if not df.empty:
-                df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
-                df['rating_jittered'] = df['rating'] + np.random.uniform(-0.1, 0.1, size=len(df))
-                df['text_polarity_jittered'] = df['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(df))
-            return df
-    
-        @st.cache_data(show_spinner=False)
-        def get_single_review_by_id(_conn, review_id):
-            result = _conn.execute("SELECT text FROM reviews WHERE review_id = ?", (review_id,)).fetchone()
-            return result[0] if result else "Review text not found."
-    
-        # --- NEW: CALLBACK FUNCTION TO CLEAR STATE ---
-        def clear_discrepancy_selection():
-            """
-            This function is called whenever a filter changes. It removes the
-            remembered 'clicked point' to prevent the IndexError.
-            """
-            if 'discrepancy_review_id' in st.session_state:
-                del st.session_state['discrepancy_review_id']
-    
-        # --- RENDER THE PAGE ---
+        product_details_df = get_single_product_details(conn, selected_asin)
         
-        product_details_df = get_product_details(conn, selected_asin)
-        if product_details_df.empty:
-            st.error("Product details could not be found.")
-            st.stop()
-        product_details = product_details_df.iloc[0]
-    
-        if st.button("⬅️ Back to Search"):
-            # Clear all session state related to the detail view
-            for key in list(st.session_state.keys()):
-                if key not in ['page', 'search_term', 'category', 'sort_by']:
-                    del st.session_state[key]
-            st.rerun()
-    
-        # --- Sidebar Filters with the new on_change callback ---
+        # --- Interactive Sidebar Filters ---
         st.sidebar.header("Interactive Filters")
-        min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
+        
+        # Get min/max dates for this specific product to set as defaults for the date picker
+        min_date_db, max_date_db = conn.execute(
+            "SELECT MIN(date), MAX(date) FROM reviews WHERE parent_asin=?", (selected_asin,)
+        ).fetchone()
+        
         min_date = datetime.strptime(min_date_db, '%Y-%m-%d').date() if min_date_db else datetime(2000, 1, 1).date()
-        max_date = datetime.strptime(max_date_db, '%Y-%m-%d').date() if max_date_db else datetime.now().date()
+        max_date = datetime.strptime(max_date_db, '%Y-%m-%d').date() if max_date_db else datetime(2000, 1, 1).date()
         
         selected_date_range = st.sidebar.date_input(
             "Filter by Date Range", 
             value=(min_date, max_date), 
             min_value=min_date, 
-            max_value=max_date,
-            on_change=clear_discrepancy_selection # <-- ADDED
+            max_value=max_date
         )
+        
+        rating_options = [1, 2, 3, 4, 5]
         selected_ratings = st.sidebar.multiselect(
             "Filter by Star Rating", 
-            options=[1, 2, 3, 4, 5], 
-            default=[1, 2, 3, 4, 5],
-            on_change=clear_discrepancy_selection # <-- ADDED
+            options=rating_options, 
+            default=rating_options
         )
+        
+        sentiment_options = ['Positive', 'Negative', 'Neutral']
         selected_sentiments = st.sidebar.multiselect(
             "Filter by Sentiment", 
-            options=['Positive', 'Negative', 'Neutral'], 
-            default=['Positive', 'Negative', 'Neutral'],
-            on_change=clear_discrepancy_selection # <-- ADDED
+            options=sentiment_options, 
+            default=sentiment_options
         )
-    
-        # --- Header and Image Gallery ---
+        
+        # --- Fetch Data Based on Live Filters ---
+        filtered_data = get_filtered_data_for_product(
+            conn, selected_asin, selected_ratings, selected_sentiments, selected_date_range
+        )
+        
+        if product_details_df.empty:
+            st.error("Product details could not be found.")
+            st.stop()
+        
+        product_details = product_details_df.iloc[0]
+        if st.button("⬅️ Back to Search"):
+            # --- Clear ALL state related to the detail view ---
+            st.session_state.selected_product = None
+            st.session_state.image_index = 0
+            st.session_state.drilldown_rating = None
+            st.session_state.drilldown_page = 1
+            # --- END OF ADDITION ---
+            st.rerun()
+
+        # Header Layout with Popover Image Gallery
         left_col, right_col = st.columns([1, 2])
         with left_col:
+            # ... (Image gallery code remains the same) ...
+            pass
             image_urls_str = product_details.get('image_urls')
             image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
+            
             thumbnail_url = image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL
             st.image(thumbnail_url, use_container_width=True)
+
+            if image_urls:
+                with st.popover("View Image Gallery"):
+                    # Ensure index is not out of bounds if the product changes
+                    if st.session_state.image_index >= len(image_urls):
+                        st.session_state.image_index = 0
+
+                    def next_image():
+                        st.session_state.image_index = (st.session_state.image_index + 1) % len(image_urls)
+                    
+                    def prev_image():
+                        st.session_state.image_index = (st.session_state.image_index - 1 + len(image_urls)) % len(image_urls)
+
+                    st.image(image_urls[st.session_state.image_index], use_container_width=True)
+
+                    if len(image_urls) > 1:
+                        g_col1, g_col2, g_col3 = st.columns([1, 8, 1])
+                        g_col1.button("⬅️", on_click=prev_image, use_container_width=True, key="gallery_prev")
+                        g_col2.caption(f"Image {st.session_state.image_index + 1} of {len(image_urls)}")
+                        g_col3.button("➡️", on_click=next_image, use_container_width=True, key="gallery_next")
+            
         with right_col:
+            # ... (Header stats remain the same) ...
+            pass
             st.header(product_details['product_title'])
             st.caption(f"Category: {product_details['category']}")
-            stat_cols = st.columns(2)
-            stat_cols[0].metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-            stat_cols[1].metric("Total Reviews", f"{int(product_details.get('review_count', 0)):,}")
-    
-        st.markdown("---")
-    
-        # --- Main Content Tabs ---
-        vis_tab, reviews_tab = st.tabs(["📊 Sentiment Analysis", "💬 Individual Reviews (Removed)"])
-    
-        with vis_tab:
-            date_tuple = (selected_date_range[0].strftime('%Y-%m-%d'), selected_date_range[1].strftime('%Y-%m-%d'))
-            filtered_data = get_filtered_data_for_charts(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple)
             
+            stat_cols = st.columns(2)
+            avg_rating = product_details.get('average_rating', 0)
+            review_count = product_details.get('review_count', 0)
+            stat_cols[0].metric("Average Rating", f"{avg_rating:.2f} ⭐")
+            stat_cols[1].metric("Total Reviews", f"{int(review_count):,}")
+
+        st.markdown("---")
+        # --- Visualization Tabs ---
+        vis_tab, new_tab_1, new_tab_2 = st.tabs(["📊 Sentiment Analysis", "New Viz 1", "New Viz 2"])
+
+        # Replace the entire 'with vis_tab:' block with this new code
+        with vis_tab:
             st.subheader("Live Analysis on Filtered Data")
+        
+            # This is the single source of truth for our visualizations
             st.write(f"Displaying analysis for **{len(filtered_data)}** reviews matching your criteria.")
-    
+        
             if filtered_data.empty:
-                st.warning("No reviews match the selected filters.")
+                st.warning("No reviews match the selected filters. Please adjust your selections in the sidebar.")
             else:
                 col1, col2 = st.columns(2)
+        
+                # NEW, DYNAMIC CHART LOGIC
                 with col1:
                     st.markdown("#### Rating Distribution (Live)")
+                
+                    # Dynamically calculate rating counts from the filtered data
                     rating_counts_df = filtered_data['rating'].value_counts().sort_index().reset_index()
                     rating_counts_df.columns = ['Rating', 'Count']
-                    chart = alt.Chart(rating_counts_df).mark_bar().encode(x='Rating:O', y='Count:Q').properties(title="Filtered Rating Distribution")
+                
+                    chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                        x=alt.X('Rating:O', title="Stars"),
+                        y=alt.Y('Count:Q', title="Number of Reviews"),
+                        tooltip=['Rating', 'Count']
+                    ).properties(
+                        title="Filtered Rating Distribution"
+                    )
                     st.altair_chart(chart, use_container_width=True)
+        
                 with col2:
                     st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
-                    plot = px.scatter(filtered_data, x="rating_jittered", y="text_polarity_jittered", color="discrepancy", custom_data=['review_id'])
-                    selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
                     
-                    # This logic is now safe because the state is cleared on filter changes
-                    if selected_point:
-                        point_data = selected_point[0]
-                        if 'pointIndex' in point_data:
-                            clicked_index = point_data['pointIndex']
-                            # Add a final safety check
-                            if clicked_index < len(filtered_data):
-                                st.session_state.discrepancy_review_id = filtered_data.iloc[clicked_index]['review_id']
+                    # This DataFrame already contains rating, sentiment, polarity, and review_id.
+                    discrepancy_df = get_filtered_data_for_product(
+                        conn, selected_asin, selected_ratings, selected_sentiments, selected_date_range
+                    )
+                
+                    if not discrepancy_df.empty:
+                        # 2. Calculate the 'discrepancy' column on the filtered data.
+                        discrepancy_df['discrepancy'] = (discrepancy_df['text_polarity'] - ((discrepancy_df['rating'] - 3.0) / 2.0)).abs()
+                
+                        # 3. Add jitter for better visualization.
+                        discrepancy_df['rating_jittered'] = discrepancy_df['rating'] + np.random.uniform(-0.1, 0.1, size=len(discrepancy_df))
+                        discrepancy_df['text_polarity_jittered'] = discrepancy_df['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(discrepancy_df))
+                
+                        # 4. Now, create the plot with the fully prepared DataFrame.
+                        plot = px.scatter(
+                            discrepancy_df, # Use the prepared DataFrame
+                            x="rating_jittered",
+                            y="text_polarity_jittered",
+                            color="discrepancy", # This column now exists
+                            color_continuous_scale=px.colors.sequential.Viridis,
+                            custom_data=['review_id'],
+                            hover_name='review_id',
+                            hover_data={
+                                'rating': True, 
+                                'text_polarity': ':.2f',
+                                'discrepancy': ':.2f',
+                                'rating_jittered': False,
+                                'text_polarity_jittered': False
+                            }
+                        )
+                        plot.update_xaxes(title_text='Rating')
+                        plot.update_yaxes(title_text='Text Sentiment Polarity')
+                
+                        selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
+
+                        # --- Display for Discrepancy Plot Drill-Down ---
+                        if st.session_state.discrepancy_review_id:
+                            st.markdown("---")
+                            st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
+                        
+                            review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
+                        
+                            with st.container(border=True):
+                                st.markdown(f"> {review_text}")
+                        
+                            # Add a button to clear the selection and hide the review
+                            if st.button("Close Review Snippet"):
+                                st.session_state.discrepancy_review_id = None
                                 st.rerun()
-    
-            # This block now safely displays the selected review
-            if st.session_state.get('discrepancy_review_id'):
-                st.markdown("---")
-                st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
-                review_text = get_single_review_by_id(conn, st.session_state.discrepancy_review_id)
-                with st.container(border=True):
-                    st.markdown(f"> {review_text}")
-                if st.button("Close Review Snippet"):
-                    del st.session_state.discrepancy_review_id
-                    st.rerun()
-    
-        with reviews_tab:
-            st.info("This feature has been temporarily removed to focus on other visualizations.")
+                                
+                        # NEW, STABLE LOGIC
+                        if selected_point:
+                            point_data = selected_point[0]
+                            if 'pointIndex' in point_data:
+                                clicked_index = point_data['pointIndex']
+                                # Set our session state variable with the ID of the clicked review
+                                st.session_state.discrepancy_review_id = discrepancy_df.iloc[clicked_index]['review_id']
+                    else:
+                        st.warning("No reviews match the selected filters.")
             
+            # This code goes at the end of the `with vis_tab:` block          
+            st.markdown("---")
+    
             # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
