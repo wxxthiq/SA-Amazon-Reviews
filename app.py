@@ -336,7 +336,7 @@ if conn:
 
         st.markdown("---")
         # --- Visualization Tabs ---
-        vis_tab, new_tab_1, new_tab_2 = st.tabs(["📊 Sentiment Analysis", "New Viz 1", "New Viz 2"])
+        vis_tab, wordcloud_tab, new_tab_2 = st.tabs(["📊 Sentiment Analysis", "☁️ Word Clouds", "New Viz 2"])
 
         # Replace the entire 'with vis_tab:' block with this new code
         with vis_tab:
@@ -475,7 +475,58 @@ if conn:
                         st.plotly_chart(sentiment_stream_chart, use_container_width=True)
                     else:
                         st.info("Not enough data to display a trend.")
-            
+        #
+        with wordcloud_tab:
+            st.subheader("Comparative Word Clouds")
+            st.caption("Keywords from positive and negative reviews, based on current filters.")
+
+            # To prevent re-calculating the word cloud on every interaction, we cache the figure generation
+            @st.cache_data
+            def create_wordcloud_figure(text_data, title):
+                """Generates a word cloud from a block of text and returns a matplotlib figure."""
+                if not text_data or pd.isna(text_data):
+                    return None
+                
+                wordcloud = WordCloud(
+                    width=800, 
+                    height=400, 
+                    background_color='white',
+                    collocations=False, # Prevents grouping words into pairs
+                    stopwords=spacy.lang.en.stop_words.STOP_WORDS # Use spaCy's default stop words
+                ).generate(text_data)
+
+                fig, ax = plt.subplots(figsize=(10, 5))
+                ax.imshow(wordcloud, interpolation='bilinear')
+                ax.axis("off")
+                ax.set_title(title, fontsize=20)
+                return fig
+
+            if filtered_data.empty:
+                st.warning("No data matches the selected filters. Cannot generate word clouds.")
+            else:
+                col1, col2 = st.columns(2)
+
+                # --- Positive Word Cloud ---
+                with col1:
+                    st.markdown("#### Key Themes in Positive Reviews")
+                    positive_text = " ".join(review for review in filtered_data[filtered_data['sentiment'] == 'Positive']['text'].dropna())
+                    
+                    if positive_text:
+                        positive_wc_fig = create_wordcloud_figure(positive_text, "Positive Keywords")
+                        st.pyplot(positive_wc_fig, use_container_width=True)
+                    else:
+                        st.info("No positive reviews match the current filters.")
+
+                # --- Negative Word Cloud ---
+                with col2:
+                    st.markdown("#### Key Themes in Negative Reviews")
+                    negative_text = " ".join(review for review in filtered_data[filtered_data['sentiment'] == 'Negative']['text'].dropna())
+
+                    if negative_text:
+                        negative_wc_fig = create_wordcloud_figure(negative_text, "Negative Keywords")
+                        st.pyplot(negative_wc_fig, use_container_width=True)
+                    else:
+                        st.info("No negative reviews match the current filters.")
             # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
