@@ -493,27 +493,7 @@ if conn:
                     if st.button("Next ➡️", use_container_width=True, key="next_reviews"):
                         st.session_state.all_reviews_page += 1
                         st.rerun()
-        
-        
-            # --- Step 3: Pagination Controls ---
-            nav_cols = st.columns([1, 1, 1])
-        
-            with nav_cols[0]:
-                if st.session_state.all_reviews_page > 1:
-                    if st.button("⬅️ Previous", use_container_width=True, key="prev_reviews"):
-                        st.session_state.all_reviews_page -= 1
-                        st.rerun()
-        
-            with nav_cols[1]:
-                if total_pages > 0:
-                    st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
-        
-            with nav_cols[2]:
-                if st.session_state.all_reviews_page < total_pages:
-                    if st.button("Next ➡️", use_container_width=True, key="next_reviews"):
-                        st.session_state.all_reviews_page += 1
-                        st.rerun()
-    
+                
             # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
