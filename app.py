@@ -541,8 +541,8 @@ if conn:
                             st.session_state.all_reviews_page += 1
                             st.rerun()
 
-    else:
-        st.warning("No reviews were found for this product.")                
+            else:
+                st.warning("No reviews were found for this product.")                
     # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
