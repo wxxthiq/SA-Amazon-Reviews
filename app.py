@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import sqlite3
-from wordcloud import WordCloud
+from wordcloud import WordCloudr
 import matplotlib.pyplot as plt
 import altair as alt
 from streamlit_plotly_events import plotly_events
@@ -423,18 +423,20 @@ if conn:
             # This code goes at the end of the `with vis_tab:` block          
             st.markdown("---")
 
-        #
         with reviews_tab:
             st.subheader("Browse Individual Reviews")
             st.caption("Displaying 25 reviews at a time for optimal performance.")
         
+            # Initialize the page number in session state if it doesn't exist
             if 'all_reviews_page' not in st.session_state:
                 st.session_state.all_reviews_page = 1
             
+            # Reset page to 1 if the selected product changes to prevent state errors
             if 'current_product_asin' not in st.session_state or st.session_state.current_product_asin != selected_asin:
                 st.session_state.current_product_asin = selected_asin
                 st.session_state.all_reviews_page = 1
         
+            # --- Step 1: Get the total review count (this is fast and can be cached) ---
             @st.cache_data(show_spinner=False)
             def get_total_review_count(_conn, asin):
                 cursor = _conn.cursor()
@@ -445,49 +447,53 @@ if conn:
             total_reviews = get_total_review_count(conn, selected_asin)
             total_pages = (total_reviews + 24) // 25
         
-            # --- The Hybrid Approach ---
-            # Fetch data with a lightweight cursor, then manually create a DataFrame.
-            # This might avoid the memory overhead of pd.read_sql.
+            # --- Step 2: Fetch and display ONLY the current page's data without pandas ---
+            st.markdown("---")
+            
+            # This is the key: we use a direct cursor and loop, which is extremely memory-efficient.
+            offset = (st.session_state.all_reviews_page - 1) * 25
+            cursor = conn.cursor()
+            
+            # Using a cached function for the main query will make pagination instant after the first load
             @st.cache_data(show_spinner="Fetching reviews...")
-            def get_paginated_reviews_as_df(_conn, asin, page_num):
-                offset = (page_num - 1) * 25
+            def get_reviews_for_page_raw(_conn, asin, page_offset):
                 cursor = _conn.cursor()
                 cursor.execute(
                     "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? ORDER BY date DESC LIMIT 25 OFFSET ?",
-                    (asin, offset)
+                    (asin, page_offset)
                 )
-                # Fetch all rows from the lightweight cursor
-                reviews_data = cursor.fetchall()
-                # Manually create the DataFrame from the fetched data
-                columns = ['rating', 'sentiment', 'date', 'text']
-                df = pd.DataFrame(reviews_data, columns=columns)
-                return df
+                return cursor.fetchall()
         
-            reviews_df = get_paginated_reviews_as_df(conn, selected_asin, st.session_state.all_reviews_page)
+            reviews_on_page = get_reviews_for_page_raw(conn, selected_asin, offset)
         
-            if not reviews_df.empty:
-                # Now, we can safely use st.dataframe with our memory-efficient DataFrame
-                st.dataframe(
-                    reviews_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=600
-                )
+            if reviews_on_page:
+                # Display each review in a clean, bordered container. No clicking required.
+                for row in reviews_on_page:
+                    rating, sentiment, date, text = row
+                    sentiment_color = "green" if sentiment == 'Positive' else "red" if sentiment == 'Negative' else "orange"
+                    
+                    with st.container(border=True):
+                        st.markdown(f"**Rating: :{sentiment_color}[{rating} ⭐]** | **Date:** {date}")
+                        # Use a blockquote for the review text for clear visual separation
+                        st.markdown(f"> {text}")
             else:
-                st.warning("No reviews were found for this product.")
+                 st.warning("No reviews were found for this product.")
         
             st.markdown("---")
         
-            # --- Pagination Controls ---
+            # --- Step 3: Pagination Controls ---
             nav_cols = st.columns([1, 1, 1])
+        
             with nav_cols[0]:
                 if st.session_state.all_reviews_page > 1:
                     if st.button("⬅️ Previous", use_container_width=True, key="prev_reviews"):
                         st.session_state.all_reviews_page -= 1
                         st.rerun()
+        
             with nav_cols[1]:
                 if total_pages > 0:
                     st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
+        
             with nav_cols[2]:
                 if st.session_state.all_reviews_page < total_pages:
                     if st.button("Next ➡️", use_container_width=True, key="next_reviews"):
