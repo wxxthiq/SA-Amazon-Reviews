@@ -225,34 +225,52 @@ if conn:
         # --- Interactive Sidebar Filters ---
         st.sidebar.header("Interactive Filters")
         
-        # Get min/max dates for this specific product to set as defaults for the date picker
+        # Get min/max dates for the product to set as the default range
         min_date_db, max_date_db = conn.execute(
             "SELECT MIN(date), MAX(date) FROM reviews WHERE parent_asin=?", (selected_asin,)
         ).fetchone()
         
         min_date = datetime.strptime(min_date_db, '%Y-%m-%d').date() if min_date_db else datetime(2000, 1, 1).date()
-        max_date = datetime.strptime(max_date_db, '%Y-%m-%d').date() if max_date_db else datetime(2000, 1, 1).date()
+        max_date = datetime.strptime(max_date_db, '%Y-%m-%d').date() if max_date_db else datetime.now().date()
         
+        # Define the default values for all filters
+        default_date_range = (min_date, max_date)
+        default_ratings = [1, 2, 3, 4, 5]
+        default_sentiments = ['Positive', 'Negative', 'Neutral']
+
+        # --- Create a callback function to reset the filters ---
+        def reset_all_filters():
+            st.session_state.date_filter = default_date_range
+            st.session_state.rating_filter = default_ratings
+            st.session_state.sentiment_filter = default_sentiments
+
+        # --- Create the filter widgets, using keys to manage state ---
         selected_date_range = st.sidebar.date_input(
             "Filter by Date Range", 
-            value=(min_date, max_date), 
+            value=default_date_range, 
             min_value=min_date, 
-            max_value=max_date
+            max_value=max_date,
+            key='date_filter' # Assign a key
         )
         
-        rating_options = [1, 2, 3, 4, 5]
         selected_ratings = st.sidebar.multiselect(
             "Filter by Star Rating", 
-            options=rating_options, 
-            default=rating_options
+            options=default_ratings, 
+            default=default_ratings,
+            key='rating_filter' # Assign a key
         )
         
-        sentiment_options = ['Positive', 'Negative', 'Neutral']
         selected_sentiments = st.sidebar.multiselect(
             "Filter by Sentiment", 
-            options=sentiment_options, 
-            default=sentiment_options
+            options=default_sentiments, 
+            default=default_sentiments,
+            key='sentiment_filter' # Assign a key
         )
+
+        st.sidebar.markdown("---") # Visual separator
+        
+        # --- Add the Reset Filters button ---
+        st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
         
         # --- Fetch Data Based on Live Filters ---
         filtered_data = get_filtered_data_for_product(
