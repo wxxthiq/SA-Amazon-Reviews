@@ -153,63 +153,11 @@ def get_filtered_products(_conn, category, search_term, sort_by, limit, offset):
 def get_single_product_details(_conn, asin):
     """Fetches details for only one product."""
     return pd.read_sql("SELECT * FROM products WHERE parent_asin = ?", _conn, params=(asin,))
-
-def get_filtered_review_ids(_conn, asin, rating_filter, sentiment_filter, date_range):
-    """
-    Fetches only the IDs of reviews that match the current filters. This is very fast.
-    """
-    query = "SELECT review_id FROM reviews WHERE parent_asin = ?"
-    params = [asin]
-
-    # Add WHERE clauses for filters
-    if rating_filter:
-        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
-        params.extend(rating_filter)
-    if sentiment_filter:
-        query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
-        params.extend(sentiment_filter)
-    if date_range and len(date_range) == 2:
-        start_date = date_range[0].strftime('%Y-%m-%d')
-        end_date = date_range[1].strftime('%Y-%m-%d')
-        query += " AND date BETWEEN ? AND ?"
-        params.extend([start_date, end_date])
-
-    df = pd.read_sql(query, _conn, params=params)
-    return df['review_id'].tolist()
         
 def get_single_review_text(conn, review_id):
     """Fetches the full text of a single review by its unique ID."""
     result = conn.execute("SELECT text FROM reviews WHERE review_id = ?", (review_id,)).fetchone()
     return result[0] if result else "Review text not found."
-    
-def get_all_reviews_paginated(_conn, asin, page_size, page_num, sort_order="Newest First"):
-    """
-    Fetches a simple, paginated list of all reviews for a product.
-    This version has NO FILTERS and is therefore very fast.
-    """
-    limit = page_size + 1  # Fetch one extra to check for a next page
-    offset = (page_num - 1) * page_size
-
-    query = "SELECT review_id, rating, sentiment, text, date FROM reviews WHERE parent_asin = ?"
-    params = [asin]
-
-    # # Add sorting
-    # if sort_order == "Newest First":
-    #     query += " ORDER BY date DESC"
-    # elif sort_order == "Oldest First":
-    #     query += " ORDER BY date ASC"
-    # elif sort_order == "Highest Rated":
-    #     query += " ORDER BY rating DESC, date DESC"
-    # elif sort_order == "Lowest Rated":
-    #     query += " ORDER BY rating ASC, date DESC"
-
-    query += " LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
-
-    df = pd.read_sql(query, _conn, params=params)
-    has_next_page = len(df) > page_size
-
-    return df.head(page_size), has_next_page
 
 # This new function replaces get_discrepancy_data and get_rating_distribution_data
 @st.cache_data
@@ -473,74 +421,52 @@ if conn:
             
             # This code goes at the end of the `with vis_tab:` block          
             st.markdown("---")
-            
-            # Get the list of review IDs that match the current filters
-            filtered_ids = get_filtered_review_ids(conn, selected_asin, selected_ratings, selected_sentiments, selected_date_range)
-            
-            if filtered_ids:
-                st.session_state.filtered_review_ids = filtered_ids
-                # Use st.info to make the button stand out
-                st.info(f"Found **{len(filtered_ids)}** reviews matching your filters.")
-                if st.button("Browse These Reviews ➡️"):
-                    # This doesn't need to do anything but the app will rerun, and the
-                    # reviews_tab will now use the filtered_review_ids from session state.
-                    # We can switch to it programmatically if desired, but for now, this is simple.
-                    pass 
-            else:
-                st.warning("No reviews match the current filter criteria.")
 
+        #he
         with reviews_tab:
-            st.subheader("Browse Individual Reviews")
-            st.caption("Displaying 25 reviews at a time for a smooth experience.")
+            st.subheader("Filtered Individual Reviews")
+            st.caption("This table shows all reviews that match the filters selected in the sidebar.")
         
-            # Initialize the page number in session state if it doesn't exist
-            if 'all_reviews_page' not in st.session_state:
-                st.session_state.all_reviews_page = 1
+            # --- Directly fetch all reviews that match the sidebar filters ---
+            # This query runs every time the tab is viewed, ensuring the data is always fresh
+            # and avoiding storing large dataframes in session state.
         
-            # --- Fetch ONLY the current page's data ---
-            # This keeps memory usage low and the app fast
-            reviews_for_this_page_df, has_more_reviews = get_all_reviews_paginated(
-                conn,
-                selected_asin,
-                page_size=25,
-                page_num=st.session_state.all_reviews_page,
-                sort_order="Newest First" # Fetches newest first by default
-            )
+            query = "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ?"
+            params = [selected_asin]
         
-            # --- Display Reviews as Individual Expanders (no flicker!) ---
-            if not reviews_for_this_page_df.empty:
-                total_reviews_count = int(product_details.get('review_count', 0))
-                total_pages = (total_reviews_count + 24) // 25
+            # Dynamically add conditions for each filter if it's being used
+            if selected_ratings:
+                query += f" AND rating IN ({','.join('?' for _ in selected_ratings)})"
+                params.extend(selected_ratings)
         
-                # Loop through the dataframe and create an expander for each review
-                for index, row in reviews_for_this_page_df.iterrows():
-                    # Use sentiment to choose a color for the rating
-                    sentiment_color = "green" if row['sentiment'] == 'Positive' else "red" if row['sentiment'] == 'Negative' else "orange"
+            if selected_sentiments:
+                query += f" AND sentiment IN ({','.join('?' for _ in selected_sentiments)})"
+                params.extend(selected_sentiments)
         
-                    with st.expander(f"**Rating: :{sentiment_color}[{row['rating']} ⭐]** - {row['date']}"):
-                        st.markdown(f"> {row['text']}")
+            if selected_date_range and len(selected_date_range) == 2:
+                start_date = selected_date_range[0].strftime('%Y-%m-%d')
+                end_date = selected_date_range[1].strftime('%Y-%m-%d')
+                query += " AND date BETWEEN ? AND ?"
+                params.extend([start_date, end_date])
         
-                st.markdown("---")
+            # Add a default sort order
+            #query += " ORDER BY date DESC"
         
-                # --- Pagination Controls ---
-                nav_cols = st.columns([1, 1, 1])
+            # Execute the query and fetch the data
+            filtered_reviews_df = pd.read_sql(query, conn, params=params)
         
-                with nav_cols[0]:
-                    if st.session_state.all_reviews_page > 1:
-                        if st.button("⬅️ Previous Reviews", use_container_width=True):
-                            st.session_state.all_reviews_page -= 1
-                            st.rerun()
-        
-                with nav_cols[1]:
-                    st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
-        
-                with nav_cols[2]:
-                    if has_more_reviews:
-                        if st.button("Next Reviews ➡️", use_container_width=True):
-                            st.session_state.all_reviews_page += 1
-                            st.rerun()
+            # --- Display the DataFrame ---
+            if not filtered_reviews_df.empty:
+                st.info(f"Displaying **{len(filtered_reviews_df)}** reviews. Click any column header to sort the table.")
+                st.dataframe(
+                    filtered_reviews_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=600 # Use a fixed height for a scrollable table
+                )
             else:
-                st.warning("No reviews were found for this product.")
+                st.warning("No reviews match the current filter criteria. Please adjust your selections in the sidebar.")
+    
             # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
