@@ -423,48 +423,44 @@ if conn:
             # This code goes at the end of the `with vis_tab:` block          
             st.markdown("---")
 
-        
+        #
         with reviews_tab:
             st.subheader("All Individual Reviews for this Product")
             st.caption("This interactive table contains all reviews. Use the controls at the bottom to navigate pages and the column headers to sort.")
         
-            # --- Step 1: Fetch ALL reviews for the product (once) ---
-            # We fetch everything into a DataFrame. This is efficient because it's a single,
-            # simple query. We are selecting only the columns we need to keep memory usage down.
-            @st.cache_data(show_spinner="Loading all reviews...")
+            # --- Step 1: Fetch ALL reviews for the product (once per visit) ---
+            # By removing the @st.cache_data decorator, we ensure this function runs
+            # every time the user enters this tab, and the data is NOT cached.
             def get_all_reviews_for_product(_conn, asin):
-                query = "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? ORDER BY date DESC"
-                df = pd.read_sql(query, _conn, params=(asin,))
-                return df
+                # This spinner will now correctly show on each visit to the tab
+                with st.spinner("Loading all reviews..."):
+                    query = "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? ORDER BY date DESC"
+                    df = pd.read_sql(query, _conn, params=(asin,))
+                    return df
         
             all_reviews_df = get_all_reviews_for_product(conn, selected_asin)
         
             if not all_reviews_df.empty:
                 # --- Step 2: Configure the AgGrid component ---
                 gb = GridOptionsBuilder.from_dataframe(all_reviews_df)
-        
-                # Configure pagination
                 gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
-        
-                # Make columns resizable
                 gb.configure_default_column(resizable=True)
-                
-                # Build the grid options
                 gridOptions = gb.build()
         
                 # --- Step 3: Display the AgGrid table ---
-                # The grid will not cause a Streamlit rerun for internal actions like sorting or pagination
                 AgGrid(
                     all_reviews_df,
                     gridOptions=gridOptions,
-                    allow_unsafe_jscode=True,  # Set to True to allow JsCode to be injected
-                    enable_enterprise_modules=False, # We don't need enterprise features
+                    allow_unsafe_jscode=True,
+                    enable_enterprise_modules=False,
                     height=600,
                     width='100%',
-                    reload_data=False # We handle data loading with the cache
+                    # Keying the grid helps Streamlit differentiate it if needed
+                    key='product_reviews_grid'
                 )
             else:
                 st.warning("No reviews were found for this product.")
+    
             # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
