@@ -428,17 +428,19 @@ if conn:
             st.subheader("Browse Individual Reviews")
             st.caption("Displaying 25 reviews at a time for optimal performance.")
         
-            # We only need to keep track of the current page number
+            # Initialize the page number in session state if it doesn't exist
             if 'all_reviews_page' not in st.session_state:
                 st.session_state.all_reviews_page = 1
             
-            # Reset page to 1 if the selected product changes
+            # If the user is viewing a new product, reset to the first page.
+            # This prevents viewing page 5 of a product with only 2 pages of reviews.
             if 'current_product_asin' not in st.session_state or st.session_state.current_product_asin != selected_asin:
                 st.session_state.current_product_asin = selected_asin
                 st.session_state.all_reviews_page = 1
         
             # --- This function will now be cached, but only for the specific page requested ---
-            # This is the most efficient way to handle this.
+            # This is the most efficient way to handle this. Caching the specific page
+            # makes navigating back and forth between pages instantaneous.
             @st.cache_data(show_spinner="Fetching reviews...")
             def get_paginated_reviews(_conn, asin, page_num):
                 """
@@ -455,7 +457,7 @@ if conn:
             def get_total_review_count(_conn, asin):
                 """
                 Gets the total number of reviews for a product.
-                This is cached for performance.
+                This is cached for performance as it never changes for a product.
                 """
                 query = "SELECT COUNT(*) FROM reviews WHERE parent_asin = ?"
                 count = pd.read_sql(query, _conn, params=(asin,)).iloc[0, 0]
@@ -483,6 +485,7 @@ if conn:
         
                 with nav_cols[0]:
                     if st.session_state.all_reviews_page > 1:
+                        # Add a unique key to each button
                         if st.button("⬅️ Previous Reviews", use_container_width=True, key="prev_reviews"):
                             st.session_state.all_reviews_page -= 1
                             st.rerun()
@@ -493,6 +496,7 @@ if conn:
         
                 with nav_cols[2]:
                     if st.session_state.all_reviews_page < total_pages:
+                        # Add a unique key to each button
                         if st.button("Next Reviews ➡️", use_container_width=True, key="next_reviews"):
                             st.session_state.all_reviews_page += 1
                             st.rerun()
