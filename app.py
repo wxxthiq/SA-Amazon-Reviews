@@ -173,7 +173,31 @@ def get_text_for_reviews(_conn, review_ids):
     # The params argument for read_sql expects a list or tuple
     text_df = pd.read_sql(query, _conn, params=tuple(review_ids))
     return " ".join(text_df['text'].dropna())
-    
+
+@st.cache_data
+def generate_word_frequency(text_data):
+    """
+    Processes raw text and returns a DataFrame of word frequencies.
+    """
+    if not text_data:
+        return pd.DataFrame(columns=['word', 'freq'])
+
+    # Simple text cleaning: lowercasing and removing non-alphanumeric characters
+    words = re.findall(r'\b\w+\b', text_data.lower())
+
+    # Use spaCy's stop words for filtering
+    from spacy.lang.en.stop_words import STOP_WORDS
+    filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
+
+    # Count frequencies
+    word_counts = Counter(filtered_words)
+
+    # Create a DataFrame
+    freq_df = pd.DataFrame(word_counts.items(), columns=['word', 'freq']).sort_values(by='freq', ascending=False)
+
+    return freq_df.head(100) # Return top 100 words for performance and clarity
+
+
 # This new function replaces get_discrepancy_data and get_rating_distribution_data
 @st.cache_data
 def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, date_range):
@@ -492,32 +516,8 @@ if conn:
         #
         with wordcloud_tab:
             st.subheader("Comparative Word Clouds")
-            st.caption("Keywords from positive and negative reviews, based on current filters.")
-
-            # --- FIX: Import STOP_WORDS directly for SpaCy v3+ ---
-            from spacy.lang.en.stop_words import STOP_WORDS
-
-            # To prevent re-calculating the word cloud on every interaction, we cache the figure generation
-            @st.cache_data
-            def create_wordcloud_figure(text_data, title):
-                """Generates a word cloud from a block of text and returns a matplotlib figure."""
-                if not text_data or pd.isna(text_data):
-                    return None
-                
-                wordcloud = WordCloud(
-                    width=800, 
-                    height=400, 
-                    background_color='white',
-                    collocations=False, # Prevents grouping words into pairs
-                    stopwords=STOP_WORDS # Use the correctly imported set
-                ).generate(text_data)
-
-                fig, ax = plt.subplots(figsize=(10, 5))
-                ax.imshow(wordcloud, interpolation='bilinear')
-                ax.axis("off")
-                ax.set_title(title, fontsize=20)
-                return fig
-
+            st.caption("Keywords from positive and negative reviews, based on current filters.")    
+            
             if filtered_data.empty:
                 st.warning("No data matches the selected filters. Cannot generate word clouds.")
             else:
