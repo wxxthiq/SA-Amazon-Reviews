@@ -327,7 +327,6 @@ if conn:
         with vis_tab:
             st.subheader("Live Analysis on Filtered Data")
         
-            # This is the single source of truth for our visualizations
             st.write(f"Displaying analysis for **{len(filtered_data)}** reviews matching your criteria.")
         
             if filtered_data.empty:
@@ -353,87 +352,76 @@ if conn:
                 with col2:
                     st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
                     
-                    # The 'filtered_data' DataFrame is already prepared with jitter
                     plot = px.scatter(
-                        filtered_data,
-                        x="rating_jittered",
-                        y="text_polarity_jittered",
-                        color="discrepancy",
-                        color_continuous_scale=px.colors.sequential.Viridis,
-                        custom_data=['review_id'],
-                        hover_name='review_id',
-                        hover_data={
-                            'rating': True, 
-                            'text_polarity': ':.2f',
-                            'discrepancy': ':.2f',
-                            'rating_jittered': False,
-                            'text_polarity_jittered': False
-                        }
+                        filtered_data, x="rating_jittered", y="text_polarity_jittered",
+                        color="discrepancy", color_continuous_scale=px.colors.sequential.Viridis,
+                        custom_data=['review_id'], hover_name='review_id',
+                        hover_data={'rating': True, 'text_polarity': ':.2f', 'discrepancy': ':.2f',
+                                      'rating_jittered': False, 'text_polarity_jittered': False}
                     )
                     plot.update_xaxes(title_text='Rating')
                     plot.update_yaxes(title_text='Text Sentiment Polarity')
-        
                     selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
         
-                    # Logic for displaying the selected review text
                     if selected_point:
-                        point_data = selected_point[0]
-                        if 'pointIndex' in point_data:
-                            clicked_index = point_data['pointIndex']
-                            st.session_state.discrepancy_review_id = filtered_data.iloc[clicked_index]['review_id']
+                        st.session_state.discrepancy_review_id = selected_point[0]['customdata'][0]
                     
-                    if st.session_state.discrepancy_review_id:
+                    if st.session_state.get('discrepancy_review_id'):
                         st.markdown("---")
                         st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
                         review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
                         with st.container(border=True):
                             st.markdown(f"> {review_text}")
                         if st.button("Close Review Snippet"):
-                            st.session_state.discrepancy_review_id = None
+                            del st.session_state.discrepancy_review_id
                             st.rerun()
         
-                st.markdown("---") # Visual separator
+                st.markdown("---")
         
-                # --- Bottom Row: NEW Time-Series Charts ---
+                # --- Bottom Row: NEW Interactive Time-Series Charts using Plotly ---
                 
-                # Prepare data for time-series charts
-                # Ensure 'date' column is in datetime format
+                # Prepare data for time-series analysis
                 time_df = filtered_data.copy()
                 time_df['date'] = pd.to_datetime(time_df['date'])
-                
-                # Resample data by month to get a smoother trend line
-                monthly_data = time_df.set_index('date').resample('M').agg({
-                    'rating': 'mean',
-                    'text_polarity': 'mean'
-                }).reset_index()
+                time_df['month'] = time_df['date'].dt.to_period('M').astype(str) # Group by month
         
                 col3, col4 = st.columns(2)
         
                 with col3:
                     st.markdown("#### Average Rating Over Time")
-                    if not monthly_data.empty:
-                        rating_chart = alt.Chart(monthly_data).mark_line(point=True).encode(
-                            x=alt.X('date:T', title='Month'),
-                            y=alt.Y('rating:Q', title='Average Star Rating', scale=alt.Scale(domain=[1, 5])),
-                            tooltip=[alt.Tooltip('date:T', title='Month'), alt.Tooltip('rating:Q', title='Avg. Rating', format='.2f')]
-                        ).properties(
-                            title="Monthly Average Rating"
+                    # Group by month and calculate the mean rating
+                    monthly_rating = time_df.groupby('month')['rating'].mean().reset_index()
+                    
+                    if not monthly_rating.empty:
+                        rating_chart = px.line(
+                            monthly_rating, x='month', y='rating',
+                            title="Monthly Average Rating", markers=True,
+                            labels={'month': 'Month', 'rating': 'Average Star Rating'}
                         )
-                        st.altair_chart(rating_chart, use_container_width=True)
+                        rating_chart.update_yaxes(range=[1, 5]) # Keep y-axis scale consistent
+                        st.plotly_chart(rating_chart, use_container_width=True)
                     else:
                         st.info("Not enough data to display a trend.")
         
                 with col4:
-                    st.markdown("#### Average Sentiment Over Time")
-                    if not monthly_data.empty:
-                        sentiment_chart = alt.Chart(monthly_data).mark_line(point=True, color='orange').encode(
-                            x=alt.X('date:T', title='Month'),
-                            y=alt.Y('text_polarity:Q', title='Average Sentiment Polarity', scale=alt.Scale(domain=[-1, 1])),
-                            tooltip=[alt.Tooltip('date:T', title='Month'), alt.Tooltip('text_polarity:Q', title='Avg. Polarity', format='.2f')]
-                        ).properties(
-                            title="Monthly Average Sentiment Polarity"
+                    st.markdown("#### Sentiment Volume Over Time (Stream Chart)")
+                    # Count the occurrences of each sentiment per month
+                    sentiment_counts = time_df.groupby(['month', 'sentiment']).size().reset_index(name='count')
+                    
+                    if not sentiment_counts.empty:
+                        # Create a stacked area chart (streamgraph)
+                        sentiment_stream_chart = px.area(
+                            sentiment_counts, x='month', y='count', color='sentiment',
+                            title="Volume of Reviews by Sentiment",
+                            labels={'month': 'Month', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
+                            color_discrete_map={
+                                'Positive': 'green',
+                                'Negative': 'red',
+                                'Neutral': 'grey'
+                            },
+                            category_orders={"sentiment": ["Positive", "Neutral", "Negative"]} # Control stacking order
                         )
-                        st.altair_chart(sentiment_chart, use_container_width=True)
+                        st.plotly_chart(sentiment_stream_chart, use_container_width=True)
                     else:
                         st.info("Not enough data to display a trend.")
             
