@@ -348,30 +348,52 @@ if conn:
         
                 with col2:
                     st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
-                    
-                    plot = px.scatter(
-                        filtered_data, x="rating_jittered", y="text_polarity_jittered",
-                        color="discrepancy", color_continuous_scale=px.colors.sequential.Viridis,
-                        custom_data=['review_id'], hover_name='review_id',
-                        hover_data={'rating': True, 'text_polarity': ':.2f', 'discrepancy': ':.2f',
-                                      'rating_jittered': False, 'text_polarity_jittered': False}
-                    )
-                    plot.update_xaxes(title_text='Rating')
-                    plot.update_yaxes(title_text='Text Sentiment Polarity')
-                    selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
         
-                    if selected_point:
-                        st.session_state.discrepancy_review_id = selected_point[0]['customdata'][0]
-                    
-                    if st.session_state.get('discrepancy_review_id'):
-                        st.markdown("---")
-                        st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
-                        review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
-                        with st.container(border=True):
-                            st.markdown(f"> {review_text}")
-                        if st.button("Close Review Snippet"):
-                            del st.session_state.discrepancy_review_id
-                            st.rerun()
+                    # We now use the 'filtered_data' DataFrame directly. No need to call the function again.
+                    if not filtered_data.empty:
+                        plot = px.scatter(
+                            filtered_data, # Use the already fetched and processed DataFrame
+                            x="rating_jittered",
+                            y="text_polarity_jittered",
+                            color="discrepancy",
+                            color_continuous_scale=px.colors.sequential.Viridis,
+                            custom_data=['review_id'],
+                            hover_name='review_id',
+                            hover_data={
+                                'rating': True, 
+                                'text_polarity': ':.2f',
+                                'discrepancy': ':.2f',
+                                'rating_jittered': False,
+                                'text_polarity_jittered': False
+                            }
+                        )
+                        plot.update_xaxes(title_text='Rating')
+                        plot.update_yaxes(title_text='Text Sentiment Polarity')
+        
+                        selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
+        
+                        if st.session_state.get('discrepancy_review_id'):
+                            st.markdown("---")
+                            st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
+                            review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
+                            with st.container(border=True):
+                                st.markdown(f"> {review_text}")
+                            if st.button("Close Review Snippet"):
+                                st.session_state.discrepancy_review_id = None
+                                st.rerun()
+        
+                        # This logic now reliably uses the stable 'pointIndex'
+                        if selected_point:
+                            point_data = selected_point[0]
+                            if 'pointIndex' in point_data:
+                                clicked_index = point_data['pointIndex']
+                                review_id = filtered_data.iloc[clicked_index]['review_id']
+                                # Set session state and rerun to display the review text
+                                if st.session_state.get('discrepancy_review_id') != review_id:
+                                    st.session_state.discrepancy_review_id = review_id
+                                    st.rerun()
+                    else:
+                        st.warning("No reviews match the selected filters.")
         
                 st.markdown("---")
         
