@@ -488,52 +488,59 @@ if conn:
                     pass 
             else:
                 st.warning("No reviews match the current filter criteria.")
-        
-        # Replace the entire 'with reviews_tab:' block with this new code
+
         with reviews_tab:
-            st.subheader("Browse All Individual Reviews for this Product")
-        
-            # The initial database query will be sorted by the newest reviews.
-            # The user can then sort the displayed dataframe by clicking the column headers.
-            default_sort_order = "Newest First"
-        
-            # Fetch the next page of reviews
-            reviews_to_display, has_more = get_all_reviews_paginated(
+        st.subheader("Browse All Individual Reviews for this Product")
+    
+        # This function is now more robust for pagination
+        def get_reviews_for_page(page_num):
+            return get_all_reviews_paginated(
                 conn,
                 selected_asin,
                 page_size=25,
-                page_num=st.session_state.all_reviews_page + 1,
-                sort_order=default_sort_order
+                page_num=page_num,
+                sort_order="Newest First" # Default sort, user can change in the table
             )
-        
-            # Append newly loaded reviews to the dataframe in the session state
-            if not reviews_to_display.empty:
+    
+        # If it's the first time loading this tab, fetch the initial page
+        if 'loaded_reviews_df' not in st.session_state or st.session_state.loaded_reviews_df.empty:
+            initial_reviews, has_more = get_reviews_for_page(1)
+            st.session_state.loaded_reviews_df = initial_reviews
+            st.session_state.has_more_reviews = has_more
+            st.session_state.all_reviews_page = 1
+    
+        # --- "Load More" Button ---
+        # This button now only appears if there are more reviews to fetch
+        if st.session_state.get('has_more_reviews', False):
+            if st.button("Load 25 More Reviews", use_container_width=True):
+                st.session_state.all_reviews_page += 1
+                new_reviews, has_more = get_reviews_for_page(st.session_state.all_reviews_page)
+                
+                # Efficiently append only the new reviews
                 st.session_state.loaded_reviews_df = pd.concat(
-                    [st.session_state.loaded_reviews_df, reviews_to_display]
-                ).drop_duplicates(subset=['review_id'], keep='last')
-        
-            # --- Display Reviews using st.dataframe ---
-            if not st.session_state.loaded_reviews_df.empty:
-                total_reviews_count = product_details.get('review_count', 0)
-                st.info(f"Displaying {len(st.session_state.loaded_reviews_df)} of {int(total_reviews_count)} reviews. You can sort the table by clicking on any column header.")
-        
-                st.dataframe(
-                    st.session_state.loaded_reviews_df[['rating', 'sentiment', 'date', 'text']],
-                    use_container_width=True,
-                    hide_index=True,
-                    height=600  # Use a fixed height for a scrollable view
+                    [st.session_state.loaded_reviews_df, new_reviews], 
+                    ignore_index=True
                 )
-        
-                # --- "Load More" Button Logic ---
-                if has_more:
-                    if st.button("Load 25 More Reviews", use_container_width=True, key="load_more_reviews"):
-                        st.session_state.all_reviews_page += 1
-                        st.rerun()
-                else:
-                    st.success("You've reached the end of the reviews for this product! 🎉")
-        
-            else:
-                st.warning("No reviews were found for this product.")    
+                st.session_state.has_more_reviews = has_more
+                st.rerun() # Rerun to update the view with the new data
+    
+        # --- Display the DataFrame ---
+        if not st.session_state.loaded_reviews_df.empty:
+            total_reviews_count = product_details.get('review_count', 0)
+            st.info(f"Displaying {len(st.session_state.loaded_reviews_df)} of {int(total_reviews_count)} reviews. Click any column header to sort.")
+            
+            st.dataframe(
+                st.session_state.loaded_reviews_df[['rating', 'sentiment', 'date', 'text']],
+                use_container_width=True,
+                hide_index=True,
+                height=600
+            )
+            
+            # Display a message when all reviews are loaded
+            if not st.session_state.get('has_more_reviews', True):
+                st.success("You've reached the end of the reviews for this product! 🎉")
+        else:
+            st.warning("No reviews were found for this product.")
                 
     # --- MAIN SEARCH PAGE ---
     else:
