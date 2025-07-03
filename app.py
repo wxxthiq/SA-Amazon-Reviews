@@ -398,7 +398,15 @@ if conn:
                             rating_counts_over_time, x='month', y='count', color='rating',
                             title="Volume of Reviews by Star Rating",
                             labels={'month': 'Month', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
-                            category_orders={"rating": [5, 4, 3, 2, 1]} # Control stacking order
+                            # --- ADD THIS COLOR MAP ---
+                            color_discrete_map={
+                                '5': '#1a9850', # Dark Green
+                                '4': '#91cf60', # Light Green
+                                '3': '#d9ef8b', # Yellow-Green
+                                '2': '#fee08b', # Orange-Yellow
+                                '1': '#d73027'  # Red
+                            },
+                            category_orders={"rating": [5, 4, 3, 2, 1]} # This keeps the stacking order logical
                         )
                         st.plotly_chart(rating_stream_chart, use_container_width=True)
         
