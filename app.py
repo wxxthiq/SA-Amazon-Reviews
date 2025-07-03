@@ -388,18 +388,27 @@ if conn:
                 col3, col4 = st.columns(2)
         
                 with col3:
-                    st.markdown("#### Average Rating Over Time")
-                    # Group by month and calculate the mean rating
-                    monthly_rating = time_df.groupby('month')['rating'].mean().reset_index()
+                    st.markdown("#### Rating Distribution Over Time")
+                    # Count the occurrences of each rating per month
+                    rating_counts_over_time = time_df.groupby(['month', 'rating']).size().reset_index(name='count')
                     
-                    if not monthly_rating.empty:
-                        rating_chart = px.line(
-                            monthly_rating, x='month', y='rating',
-                            title="Monthly Average Rating", markers=True,
-                            labels={'month': 'Month', 'rating': 'Average Star Rating'}
+                    if not rating_counts_over_time.empty:
+                        # Create the streamgraph (stacked area chart)
+                        rating_stream_chart = px.area(
+                            rating_counts_over_time, x='month', y='count', color='rating',
+                            title="Volume of Reviews by Star Rating",
+                            labels={'month': 'Month', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
+                            category_orders={"rating": [5, 4, 3, 2, 1]} # Control stacking order
                         )
-                        rating_chart.update_yaxes(range=[1, 5]) # Keep y-axis scale consistent
-                        st.plotly_chart(rating_chart, use_container_width=True)
+                        st.plotly_chart(rating_stream_chart, use_container_width=True)
+        
+                        # Pro Tip: Uncomment the code below for a 100% stacked chart to see proportions
+                        # st.markdown("#### Rating Proportion Over Time")
+                        # rating_proportion_chart = px.area(
+                        #     rating_counts_over_time, x='month', y='count', color='rating',
+                        #     groupnorm='percent', title="Proportion of Reviews by Star Rating"
+                        # )
+                        # st.plotly_chart(rating_proportion_chart, use_container_width=True)
                     else:
                         st.info("Not enough data to display a trend.")
         
