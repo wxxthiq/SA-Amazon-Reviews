@@ -161,41 +161,36 @@ def get_single_review_text(conn, review_id):
     return result[0] if result else "Review text not found."
     
 @st.cache_data
-def get_text_for_reviews(_conn, review_ids):
+def generate_word_frequency_incrementally(_conn, review_ids):
     """
-    Efficiently fetches the text for a specific list of review IDs.
+    Processes a list of review_ids incrementally to generate word frequencies,
+    avoiding loading all text into memory at once. This is highly memory-efficient.
     """
     if not review_ids:
-        return "" # Return empty string if list is empty
-    # Use a placeholder for each ID to prevent SQL injection
-    placeholders = ','.join('?' for _ in review_ids)
-    query = f"SELECT text FROM reviews WHERE review_id IN ({placeholders})"
-    # The params argument for read_sql expects a list or tuple
-    text_df = pd.read_sql(query, _conn, params=tuple(review_ids))
-    return " ".join(text_df['text'].dropna())
-
-@st.cache_data
-def generate_word_frequency(text_data):
-    """
-    Processes raw text and returns a DataFrame of word frequencies.
-    """
-    if not text_data:
         return pd.DataFrame(columns=['word', 'freq'])
 
-    # Simple text cleaning: lowercasing and removing non-alphanumeric characters
-    words = re.findall(r'\b\w+\b', text_data.lower())
-
-    # Use spaCy's stop words for filtering
     from spacy.lang.en.stop_words import STOP_WORDS
-    filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
+    word_counts = Counter()
 
-    # Count frequencies
-    word_counts = Counter(filtered_words)
+    # Process in batches to keep memory usage low
+    batch_size = 500
+    for i in range(0, len(review_ids), batch_size):
+        batch_ids = review_ids[i:i + batch_size]
 
-    # Create a DataFrame
+        placeholders = ','.join('?' for _ in batch_ids)
+        query = f"SELECT text FROM reviews WHERE review_id IN ({placeholders})"
+        text_df = pd.read_sql(query, _conn, params=tuple(batch_ids))
+
+        # Process text for the current batch
+        for text in text_df['text'].dropna():
+            words = re.findall(r'\b\w+\b', text.lower())
+            filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
+            word_counts.update(filtered_words)
+
+    # Create a DataFrame from the final counts
     freq_df = pd.DataFrame(word_counts.items(), columns=['word', 'freq']).sort_values(by='freq', ascending=False)
 
-    return freq_df.head(100) # Return top 100 words for performance and clarity
+    return freq_df.head(100) # Return top 100 words
 
 
 # This new function replaces get_discrepancy_data and get_rating_distribution_data
@@ -527,13 +522,11 @@ if conn:
                 with col1:
                     st.markdown("#### Key Themes in Positive Reviews")
                     positive_ids = filtered_data[filtered_data['sentiment'] == 'Positive']['review_id'].tolist()
-                    positive_text = get_text_for_reviews(conn, positive_ids)
         
-                    if positive_text:
-                        # Generate frequency data
-                        positive_freq_df = generate_word_frequency(positive_text)
+                    if positive_ids:
+                        # Generate frequency data using the new incremental function
+                        positive_freq_df = generate_word_frequency_incrementally(conn, positive_ids)
                         if not positive_freq_df.empty:
-                            # Create interactive word cloud with Plotly
                             fig = px.treemap(positive_freq_df, path=[px.Constant("Positive Reviews"), 'word'], values='freq',
                                            color='freq', hover_data={'freq': True},
                                            color_continuous_scale='Greens')
@@ -549,13 +542,11 @@ if conn:
                 with col2:
                     st.markdown("#### Key Themes in Negative Reviews")
                     negative_ids = filtered_data[filtered_data['sentiment'] == 'Negative']['review_id'].tolist()
-                    negative_text = get_text_for_reviews(conn, negative_ids)
         
-                    if negative_text:
-                        # Generate frequency data
-                        negative_freq_df = generate_word_frequency(negative_text)
+                    if negative_ids:
+                        # Generate frequency data using the new incremental function
+                        negative_freq_df = generate_word_frequency_incrementally(conn, negative_ids)
                         if not negative_freq_df.empty:
-                            # Create interactive word cloud with Plotly
                             fig = px.treemap(negative_freq_df, path=[px.Constant("Negative Reviews"), 'word'], values='freq',
                                            color='freq', hover_data={'freq': True},
                                            color_continuous_scale='Reds')
@@ -565,8 +556,8 @@ if conn:
                         else:
                             st.info("Not enough text to generate a negative word cloud.")
                     else:
-                        st.info("No negative reviews match the current filters.")     
-            # --- MAIN SEARCH PAGE ---
+                        st.info("No negative reviews match the current filters.")    
+    # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
         
