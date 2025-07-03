@@ -383,7 +383,8 @@ if conn:
                 # Prepare data for time-series analysis
                 time_df = filtered_data.copy()
                 time_df['date'] = pd.to_datetime(time_df['date'])
-                time_df['month'] = time_df['date'].dt.to_period('M').astype(str) # Group by month
+                time_df['month'] = time_df['date'].dt.to_period('M').dt.start_time
+                
         
                 col3, col4 = st.columns(2)
         
@@ -400,11 +401,11 @@ if conn:
                             labels={'month': 'Month', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
                             # --- ADD THIS COLOR MAP ---
                             color_discrete_map={
-                                '5': '#1a9850', # Dark Green
-                                '4': '#91cf60', # Light Green
-                                '3': '#d9ef8b', # Yellow-Green
-                                '2': '#fee08b', # Orange-Yellow
-                                '1': '#d73027'  # Red
+                                5: '#1a9850', # Dark Green
+                                4: '#91cf60', # Light Green
+                                3: '#d9ef8b', # Yellow-Green
+                                2: '#fee08b', # Orange-Yellow
+                                1: '#d73027'  # Red
                             },
                             category_orders={"rating": [5, 4, 3, 2, 1]} # This keeps the stacking order logical
                         )
