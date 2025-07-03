@@ -160,49 +160,6 @@ def get_single_review_text(conn, review_id):
     result = conn.execute("SELECT text FROM reviews WHERE review_id = ?", (review_id,)).fetchone()
     return result[0] if result else "Review text not found."
     
-@st.cache_data
-def generate_word_frequency_for_filters(_conn, asin, rating_filter, sentiment_filter, date_range_tuple, target_sentiment):
-    """
-    Generates word frequencies based on filters, not a list of IDs.
-    This creates a stable cache key and prevents memory leaks.
-    """
-    # Build the query to get the review_ids based on the filters
-    query = f"SELECT review_id FROM reviews WHERE parent_asin = ? AND sentiment = ?"
-    params = [asin, target_sentiment]
-
-    if rating_filter:
-        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
-        params.extend(rating_filter)
-    if date_range_tuple and len(date_range_tuple) == 2:
-        start_date, end_date = date_range_tuple
-        query += " AND date BETWEEN ? AND ?"
-        params.extend([start_date, end_date])
-
-    id_df = pd.read_sql(query, _conn, params=params)
-    review_ids = id_df['review_id'].tolist()
-
-    if not review_ids:
-        return pd.DataFrame(columns=['word', 'freq'])
-
-    from spacy.lang.en.stop_words import STOP_WORDS
-    word_counts = Counter()
-
-    # Process in batches to keep memory usage low
-    batch_size = 500
-    for i in range(0, len(review_ids), batch_size):
-        batch_ids = review_ids[i:i + batch_size]
-        placeholders = ','.join('?' for _ in batch_ids)
-        text_query = f"SELECT text FROM reviews WHERE review_id IN ({placeholders})"
-        text_df = pd.read_sql(text_query, _conn, params=tuple(batch_ids))
-
-        for text in text_df['text'].dropna():
-            words = re.findall(r'\b\w+\b', text.lower())
-            filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
-            word_counts.update(filtered_words)
-
-    freq_df = pd.DataFrame(word_counts.items(), columns=['word', 'freq']).sort_values(by='freq', ascending=False)
-    return freq_df.head(100)
-
 # This new function replaces get_discrepancy_data and get_rating_distribution_data
 @st.cache_data
 def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, date_range):
@@ -263,301 +220,343 @@ if conn:
     if st.session_state.selected_product:
         
         selected_asin = st.session_state.selected_product
-        product_details_df = get_single_product_details(conn, selected_asin)
+    
+        # --- HELPER FUNCTIONS FOR THE DETAIL PAGE ---
+        # These functions are now defined here to be used by the tabs as needed.
+    
+        @st.cache_data
+        def get_product_details(_conn, asin):
+            return pd.read_sql("SELECT * FROM products WHERE parent_asin = ?", _conn, params=(asin,))
+    
+        @st.cache_data
+        def get_product_date_range(_conn, asin):
+            return _conn.execute("SELECT MIN(date), MAX(date) FROM reviews WHERE parent_asin=?", (asin,)).fetchone()
+    
+        @st.cache_data
+        def get_single_review_text(_conn, review_id):
+            result = _conn.execute("SELECT text FROM reviews WHERE review_id = ?", (_conn, review_id,)).fetchone()
+            return result[0] if result else "Review text not found."
         
-        # --- Interactive Sidebar Filters ---
-        st.sidebar.header("Interactive Filters")
-        
-        # Get min/max dates for the product to set as the default range
-        min_date_db, max_date_db = conn.execute(
-            "SELECT MIN(date), MAX(date) FROM reviews WHERE parent_asin=?", (selected_asin,)
-        ).fetchone()
-        
-        min_date = datetime.strptime(min_date_db, '%Y-%m-%d').date() if min_date_db else datetime(2000, 1, 1).date()
-        max_date = datetime.strptime(max_date_db, '%Y-%m-%d').date() if max_date_db else datetime.now().date()
-        
-        # Define the default values for all filters
-        default_date_range = (min_date, max_date)
-        default_ratings = [1, 2, 3, 4, 5]
-        default_sentiments = ['Positive', 'Negative', 'Neutral']
-
-        # --- Create a callback function to reset the filters ---
-        def reset_all_filters():
-            st.session_state.date_filter = default_date_range
-            st.session_state.rating_filter = default_ratings
-            st.session_state.sentiment_filter = default_sentiments
-
-        # --- Create the filter widgets, using keys to manage state ---
-        selected_date_range = st.sidebar.date_input(
-            "Filter by Date Range", 
-            value=default_date_range, 
-            min_value=min_date, 
-            max_value=max_date,
-            key='date_filter' # Assign a key
-        )
-        
-        selected_ratings = st.sidebar.multiselect(
-            "Filter by Star Rating", 
-            options=default_ratings, 
-            default=default_ratings,
-            key='rating_filter' # Assign a key
-        )
-        
-        selected_sentiments = st.sidebar.multiselect(
-            "Filter by Sentiment", 
-            options=default_sentiments, 
-            default=default_sentiments,
-            key='sentiment_filter' # Assign a key
-        )
-
-        st.sidebar.markdown("---") # Visual separator
-        
-        # --- Add the Reset Filters button ---
-        st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
-        
-        # --- Fetch Data Based on Live Filters ---
-        filtered_data = get_filtered_data_for_product(
-            conn, selected_asin, selected_ratings, selected_sentiments, selected_date_range
-        )
-        
+        # --- RENDER THE PAGE HEADER ---
+        product_details_df = get_product_details(conn, selected_asin)
         if product_details_df.empty:
             st.error("Product details could not be found.")
             st.stop()
-        
         product_details = product_details_df.iloc[0]
+    
         if st.button("⬅️ Back to Search"):
-            # --- Clear ALL state related to the detail view ---
-            st.session_state.selected_product = None
-            st.session_state.image_index = 0
-            st.session_state.drilldown_rating = None
-            st.session_state.drilldown_page = 1
-            # --- END OF ADDITION ---
+            # Clear all session state keys related to the detail view
+            for key in list(st.session_state.keys()):
+                if key not in ['page', 'category', 'search_term', 'sort_by']:
+                    del st.session_state[key]
             st.rerun()
-
         # Header Layout with Popover Image Gallery
-        left_col, right_col = st.columns([1, 2])
-        with left_col:
-            # ... (Image gallery code remains the same) ...
-            pass
-            image_urls_str = product_details.get('image_urls')
-            image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
-            
-            thumbnail_url = image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL
-            st.image(thumbnail_url, use_container_width=True)
-
-            if image_urls:
-                with st.popover("View Image Gallery"):
-                    # Ensure index is not out of bounds if the product changes
-                    if st.session_state.image_index >= len(image_urls):
-                        st.session_state.image_index = 0
-
-                    def next_image():
-                        st.session_state.image_index = (st.session_state.image_index + 1) % len(image_urls)
-                    
-                    def prev_image():
-                        st.session_state.image_index = (st.session_state.image_index - 1 + len(image_urls)) % len(image_urls)
-
-                    st.image(image_urls[st.session_state.image_index], use_container_width=True)
-
-                    if len(image_urls) > 1:
-                        g_col1, g_col2, g_col3 = st.columns([1, 8, 1])
-                        g_col1.button("⬅️", on_click=prev_image, use_container_width=True, key="gallery_prev")
-                        g_col2.caption(f"Image {st.session_state.image_index + 1} of {len(image_urls)}")
-                        g_col3.button("➡️", on_click=next_image, use_container_width=True, key="gallery_next")
-            
-        with right_col:
-            # ... (Header stats remain the same) ...
-            pass
-            st.header(product_details['product_title'])
-            st.caption(f"Category: {product_details['category']}")
-            
-            stat_cols = st.columns(2)
-            avg_rating = product_details.get('average_rating', 0)
-            review_count = product_details.get('review_count', 0)
-            stat_cols[0].metric("Average Rating", f"{avg_rating:.2f} ⭐")
-            stat_cols[1].metric("Total Reviews", f"{int(review_count):,}")
-
-        st.markdown("---")
-        # --- Visualization Tabs ---
-        vis_tab, wordcloud_tab, new_tab_2 = st.tabs(["📊 Sentiment Analysis", "☁️ Word Clouds", "New Viz 2"])
-
-        # Replace the entire 'with vis_tab:' block with this new code
-        with vis_tab:
-            st.subheader("Live Analysis on Filtered Data")
-        
-            st.write(f"Displaying analysis for **{len(filtered_data)}** reviews matching your criteria.")
-        
-            if filtered_data.empty:
-                st.warning("No reviews match the selected filters. Please adjust your selections in the sidebar.")
-            else:
-                # --- Top Row: Existing Charts ---
-                col1, col2 = st.columns(2)
-        
-                with col1:
-                    st.markdown("#### Rating Distribution (Live)")
-                    rating_counts_df = filtered_data['rating'].value_counts().sort_index().reset_index()
-                    rating_counts_df.columns = ['Rating', 'Count']
-                    
-                    chart = alt.Chart(rating_counts_df).mark_bar().encode(
-                        x=alt.X('Rating:O', title="Stars"),
-                        y=alt.Y('Count:Q', title="Number of Reviews"),
-                        tooltip=['Rating', 'Count']
-                    ).properties(
-                        title="Filtered Rating Distribution"
-                    )
-                    st.altair_chart(chart, use_container_width=True)
-        
-                with col2:
-                    st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
-        
-                    # We now use the 'filtered_data' DataFrame directly. No need to call the function again.
-                    if not filtered_data.empty:
-                        plot = px.scatter(
-                            filtered_data, # Use the already fetched and processed DataFrame
-                            x="rating_jittered",
-                            y="text_polarity_jittered",
-                            color="discrepancy",
-                            color_continuous_scale=px.colors.sequential.Viridis,
-                            custom_data=['review_id'],
-                            hover_name='review_id',
-                            hover_data={
-                                'rating': True, 
-                                'text_polarity': ':.2f',
-                                'discrepancy': ':.2f',
-                                'rating_jittered': False,
-                                'text_polarity_jittered': False
-                            }
-                        )
-                        plot.update_xaxes(title_text='Rating')
-                        plot.update_yaxes(title_text='Text Sentiment Polarity')
-        
-                        selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
-        
-                        if st.session_state.get('discrepancy_review_id'):
-                            st.markdown("---")
-                            st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
-                            review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
-                            with st.container(border=True):
-                                st.markdown(f"> {review_text}")
-                            if st.button("Close Review Snippet"):
-                                st.session_state.discrepancy_review_id = None
-                                st.rerun()
-        
-                        # This logic now reliably uses the stable 'pointIndex' and validates it
-                        if selected_point:
-                            point_data = selected_point[0]
-                            if 'pointIndex' in point_data:
-                                clicked_index = point_data['pointIndex']
-                                
-                                # --- FIX: Check if the index is valid before accessing the DataFrame ---
-                                if clicked_index < len(filtered_data):
-                                    review_id = filtered_data.iloc[clicked_index]['review_id']
-                                    # Set session state and rerun to display the review text
-                                    if st.session_state.get('discrepancy_review_id') != review_id:
-                                        st.session_state.discrepancy_review_id = review_id
-                                        st.rerun()
-                    else:
-                        st.warning("No reviews match the selected filters.")
-        
-                st.markdown("---")
-        
-                # --- Bottom Row: NEW Interactive Time-Series Charts using Plotly ---
+            left_col, right_col = st.columns([1, 2])
+            with left_col:
+                # ... (Image gallery code remains the same) ...
+                pass
+                image_urls_str = product_details.get('image_urls')
+                image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
                 
-                # Prepare data for time-series analysis
-                time_df = filtered_data.copy()
-                time_df['date'] = pd.to_datetime(time_df['date'])
-                time_df['month'] = time_df['date'].dt.to_period('M').dt.start_time
+                thumbnail_url = image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL
+                st.image(thumbnail_url, use_container_width=True)
+    
+                if image_urls:
+                    with st.popover("View Image Gallery"):
+                        # Ensure index is not out of bounds if the product changes
+                        if st.session_state.image_index >= len(image_urls):
+                            st.session_state.image_index = 0
+    
+                        def next_image():
+                            st.session_state.image_index = (st.session_state.image_index + 1) % len(image_urls)
+                        
+                        def prev_image():
+                            st.session_state.image_index = (st.session_state.image_index - 1 + len(image_urls)) % len(image_urls)
+    
+                        st.image(image_urls[st.session_state.image_index], use_container_width=True)
+    
+                        if len(image_urls) > 1:
+                            g_col1, g_col2, g_col3 = st.columns([1, 8, 1])
+                            g_col1.button("⬅️", on_click=prev_image, use_container_width=True, key="gallery_prev")
+                            g_col2.caption(f"Image {st.session_state.image_index + 1} of {len(image_urls)}")
+                            g_col3.button("➡️", on_click=next_image, use_container_width=True, key="gallery_next")
                 
+            with right_col:
+                st.header(product_details['product_title'])
+                st.caption(f"Category: {product_details['category']}")
+                stat_cols = st.columns(2)
+                avg_rating = product_details.get('average_rating', 0)
+                review_count = product_details.get('review_count', 0)
+                stat_cols[0].metric("Average Rating", f"{avg_rating:.2f} ⭐")
+                stat_cols[1].metric("Total Reviews", f"{int(review_count):,}")
+    
+            # --- RENDER SIDEBAR FILTERS ---
+            st.sidebar.header("Interactive Filters")
+            min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
+            min_date = datetime.strptime(min_date_db, '%Y-%m-%d').date() if min_date_db else datetime(2000, 1, 1).date()
+            max_date = datetime.strptime(max_date_db, '%Y-%m-%d').date() if max_date_db else datetime.now().date()
+            
+            default_date_range = (min_date, max_date)
+            default_ratings = [1, 2, 3, 4, 5]
+            default_sentiments = ['Positive', 'Negative', 'Neutral']
         
-                col3, col4 = st.columns(2)
+            def reset_all_filters():
+                st.session_state.date_filter = default_date_range
+                st.session_state.rating_filter = default_ratings
+                st.session_state.sentiment_filter = default_sentiments
         
-                with col3:
-                    st.markdown("#### Rating Distribution Over Time")
-                    # Count the occurrences of each rating per month
-                    rating_counts_over_time = time_df.groupby(['month', 'rating']).size().reset_index(name='count')
+            selected_date_range = st.sidebar.date_input("Filter by Date Range", key='date_filter', default=default_date_range)
+            selected_ratings = st.sidebar.multiselect("Filter by Star Rating", default_ratings, key='rating_filter', default=default_ratings)
+            selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", default_sentiments, key='sentiment_filter', default=default_sentiments)
+            st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
+    
+            # --- RENDER TABS (Each tab is now self-contained) ---
+            vis_tab, wordcloud_tab, new_tab_2 = st.tabs(["📊 Sentiment Analysis", "☁️ Word Clouds", "New Viz 2"])
+        
+            with vis_tab:
+                # This function is now LOCAL to this tab. It will only run when this tab is active.
+                @st.cache_data
+                def get_data_for_sentiment_charts(_conn, asin, rating_filter, sentiment_filter, date_range_tuple):
+                    query = "SELECT review_id, rating, text_polarity FROM discrepancy_data WHERE parent_asin = ?"
+                    params = [asin]
+                    if rating_filter:
+                        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
+                        params.extend(rating_filter)
+                    # Note: We query from discrepancy_data which doesn't have sentiment text, so we can't filter by it here
+                    # This is a limitation of the current DB schema for this tab, but it will be performant.
+                    if date_range_tuple and len(date_range_tuple) == 2:
+                        start_date, end_date = date_range_tuple
+                        query += " AND date BETWEEN ? AND ?"
+                        params.extend([start_date, end_date])
                     
-                    if not rating_counts_over_time.empty:
-                        # Create the streamgraph (stacked area chart)
-                        rating_stream_chart = px.area(
-                            rating_counts_over_time, x='month', y='count', color='rating',
-                            title="Volume of Reviews by Star Rating",
-                            labels={'month': 'Month', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
-                            # --- ADD THIS COLOR MAP ---
-                            color_discrete_map={
-                                5: '#1a9850', # Dark Green
-                                4: '#91cf60', # Light Green
-                                3: '#d9ef8b', # Yellow-Green
-                                2: '#fee08b', # Orange-Yellow
-                                1: '#d73027'  # Red
-                            },
-                            category_orders={"rating": [5, 4, 3, 2, 1]} # This keeps the stacking order logical
-                        )
-                        st.plotly_chart(rating_stream_chart, use_container_width=True)
-
-                    else:
-                        st.info("Not enough data to display a trend.")
+                    df = pd.read_sql(query, _conn, params=params)
+                    if not df.empty:
+                        rng = np.random.default_rng(seed=42)
+                        df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
+                        df['rating_jittered'] = df['rating'] + rng.uniform(-0.1, 0.1, size=len(df))
+                        df['text_polarity_jittered'] = df['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(df))
+                    return df
         
-                with col4:
-                    st.markdown("#### Sentiment Volume Over Time (Stream Chart)")
-                    # Count the occurrences of each sentiment per month
-                    sentiment_counts = time_df.groupby(['month', 'sentiment']).size().reset_index(name='count')
-                    
-                    if not sentiment_counts.empty:
-                        # Create a stacked area chart (streamgraph)
-                        sentiment_stream_chart = px.area(
-                            sentiment_counts, x='month', y='count', color='sentiment',
-                            title="Volume of Reviews by Sentiment",
-                            labels={'month': 'Month', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
-                            color_discrete_map={
-                                'Positive': 'green',
-                                'Negative': 'red',
-                                'Neutral': 'grey'
-                            },
-                            category_orders={"sentiment": ["Positive", "Neutral", "Negative"]} # Control stacking order
-                        )
-                        st.plotly_chart(sentiment_stream_chart, use_container_width=True)
-                    else:
-                        st.info("Not enough data to display a trend.")
-        #
-        with wordcloud_tab:
-            st.subheader("Interactive Word Clouds")
-            st.caption("Hover over a word to see its frequency. Based on current filters.")
-        
-            if filtered_data.empty:
-                st.warning("No data matches the selected filters. Cannot generate word clouds.")
-            else:
-                col1, col2 = st.columns(2)
-        
-                # Create a stable, hashable tuple for the date range to use as a cache key
                 date_tuple = (selected_date_range[0].strftime('%Y-%m-%d'), selected_date_range[1].strftime('%Y-%m-%d'))
+                chart_data = get_data_for_sentiment_charts(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple)
+                
+                st.write(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
+    
+                if filtered_data.empty:
+                    st.warning("No reviews match the selected filters. Please adjust your selections in the sidebar.")
+                else:
+                    # --- Top Row: Existing Charts ---
+                    col1, col2 = st.columns(2)
+            
+                    with col1:
+                        st.markdown("#### Rating Distribution (Live)")
+                        rating_counts_df = chart_data['rating'].value_counts().sort_index().reset_index()
+                        rating_counts_df.columns = ['Rating', 'Count']
+                        
+                        chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                            x=alt.X('Rating:O', title="Stars"),
+                            y=alt.Y('Count:Q', title="Number of Reviews"),
+                            tooltip=['Rating', 'Count']
+                        ).properties(
+                            title="Filtered Rating Distribution"
+                        )
+                        st.altair_chart(chart, use_container_width=True)
+    
+                    with col2:
+                        st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
+            
+                        # We now use the 'filtered_data' DataFrame directly. No need to call the function again.
+                        if not chart_data.empty:
+                            plot = px.scatter(
+                                filtered_data, # Use the already fetched and processed DataFrame
+                                x="rating_jittered",
+                                y="text_polarity_jittered",
+                                color="discrepancy",
+                                color_continuous_scale=px.colors.sequential.Viridis,
+                                custom_data=['review_id'],
+                                hover_name='review_id',
+                                hover_data={
+                                    'rating': True, 
+                                    'text_polarity': ':.2f',
+                                    'discrepancy': ':.2f',
+                                    'rating_jittered': False,
+                                    'text_polarity_jittered': False
+                                }
+                            )
+                            plot.update_xaxes(title_text='Rating')
+                            plot.update_yaxes(title_text='Text Sentiment Polarity')
+            
+                            selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
+            
+                            if st.session_state.get('discrepancy_review_id'):
+                                st.markdown("---")
+                                st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
+                                review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
+                                with st.container(border=True):
+                                    st.markdown(f"> {review_text}")
+                                if st.button("Close Review Snippet"):
+                                    st.session_state.discrepancy_review_id = None
+                                    st.rerun()
+            
+                            # This logic now reliably uses the stable 'pointIndex' and validates it
+                            if selected_point:
+                                point_data = selected_point[0]
+                                if 'pointIndex' in point_data:
+                                    clicked_index = point_data['pointIndex']
+                                    
+                                    # --- FIX: Check if the index is valid before accessing the DataFrame ---
+                                    if clicked_index < len(chart_data):
+                                        review_id = chart_data_data.iloc[clicked_index]['review_id']
+                                        # Set session state and rerun to display the review text
+                                        if st.session_state.get('discrepancy_review_id') != review_id:
+                                            st.session_state.discrepancy_review_id = review_id
+                                            st.rerun()
+                        else:
+                            st.warning("No reviews match the selected filters.")
+            
+                    st.markdown("---")
+            
+                    # --- Bottom Row: NEW Interactive Time-Series Charts using Plotly ---
+                    
+                    # Prepare data for time-series analysis
+                    time_df = chart_data.copy()
+                    time_df['date'] = pd.to_datetime(time_df['date'])
+                    time_df['month'] = time_df['date'].dt.to_period('M').dt.start_time
+                    
+            
+                    col3, col4 = st.columns(2)
+            
+                    with col3:
+                        st.markdown("#### Rating Distribution Over Time")
+                        # Count the occurrences of each rating per month
+                        rating_counts_over_time = time_df.groupby(['month', 'rating']).size().reset_index(name='count')
+                        
+                        if not rating_counts_over_time.empty:
+                            # Create the streamgraph (stacked area chart)
+                            rating_stream_chart = px.area(
+                                rating_counts_over_time, x='month', y='count', color='rating',
+                                title="Volume of Reviews by Star Rating",
+                                labels={'month': 'Month', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
+                                # --- ADD THIS COLOR MAP ---
+                                color_discrete_map={
+                                    5: '#1a9850', # Dark Green
+                                    4: '#91cf60', # Light Green
+                                    3: '#d9ef8b', # Yellow-Green
+                                    2: '#fee08b', # Orange-Yellow
+                                    1: '#d73027'  # Red
+                                },
+                                category_orders={"rating": [5, 4, 3, 2, 1]} # This keeps the stacking order logical
+                            )
+                            st.plotly_chart(rating_stream_chart, use_container_width=True)
+    
+                        else:
+                            st.info("Not enough data to display a trend.")
+            
+                    with col4:
+                        st.markdown("#### Sentiment Volume Over Time (Stream Chart)")
+                        # Count the occurrences of each sentiment per month
+                        sentiment_counts = time_df.groupby(['month', 'sentiment']).size().reset_index(name='count')
+                        
+                        if not sentiment_counts.empty:
+                            # Create a stacked area chart (streamgraph)
+                            sentiment_stream_chart = px.area(
+                                sentiment_counts, x='month', y='count', color='sentiment',
+                                title="Volume of Reviews by Sentiment",
+                                labels={'month': 'Month', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
+                                color_discrete_map={
+                                    'Positive': 'green',
+                                    'Negative': 'red',
+                                    'Neutral': 'grey'
+                                },
+                                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]} # Control stacking order
+                            )
+                            st.plotly_chart(sentiment_stream_chart, use_container_width=True)
+                        else:
+                            st.info("Not enough data to display a trend.")
+            
+            with wordcloud_tab:
+                # This function is LOCAL to the word cloud tab.
+                @st.cache_data
+                def generate_word_frequency_for_filters(_conn, asin, rating_filter, sentiment_filter, date_range_tuple, target_sentiment):
+                    """
+                    Generates word frequencies based on filters, not a list of IDs.
+                    This creates a stable cache key and prevents memory leaks.
+                    """
+                    # Build the query to get the review_ids based on the filters
+                    query = f"SELECT review_id FROM reviews WHERE parent_asin = ? AND sentiment = ?"
+                    params = [asin, target_sentiment]
+                
+                    if rating_filter:
+                        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
+                        params.extend(rating_filter)
+                    if date_range_tuple and len(date_range_tuple) == 2:
+                        start_date, end_date = date_range_tuple
+                        query += " AND date BETWEEN ? AND ?"
+                        params.extend([start_date, end_date])
+                
+                    id_df = pd.read_sql(query, _conn, params=params)
+                    review_ids = id_df['review_id'].tolist()
+                
+                    if not review_ids:
+                        return pd.DataFrame(columns=['word', 'freq'])
+                
+                    from spacy.lang.en.stop_words import STOP_WORDS
+                    word_counts = Counter()
+                
+                    # Process in batches to keep memory usage low
+                    batch_size = 500
+                    for i in range(0, len(review_ids), batch_size):
+                        batch_ids = review_ids[i:i + batch_size]
+                        placeholders = ','.join('?' for _ in batch_ids)
+                        text_query = f"SELECT text FROM reviews WHERE review_id IN ({placeholders})"
+                        text_df = pd.read_sql(text_query, _conn, params=tuple(batch_ids))
+                
+                        for text in text_df['text'].dropna():
+                            words = re.findall(r'\b\w+\b', text.lower())
+                            filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
+                            word_counts.update(filtered_words)
+                
+                    freq_df = pd.DataFrame(word_counts.items(), columns=['word', 'freq']).sort_values(by='freq', ascending=False)
+                    return freq_df.head(100)
         
-                with col1:
-                    st.markdown("#### Key Themes in Positive Reviews")
-                    # Call the new function with filter parameters, not the huge list of IDs
-                    positive_freq_df = generate_word_frequency_for_filters(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple, 'Positive')
-        
-                    if not positive_freq_df.empty:
-                        fig = px.treemap(positive_freq_df, path=[px.Constant("Positive Reviews"), 'word'], values='freq',
-                                       color='freq', hover_data={'freq': True}, color_continuous_scale='Greens')
-                        fig.update_traces(textinfo="label", textfont_size=20)
-                        fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("No positive reviews match the current filters.")
-        
-                with col2:
-                    st.markdown("#### Key Themes in Negative Reviews")
-                    # Call the new function for negative reviews
-                    negative_freq_df = generate_word_frequency_for_filters(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple, 'Negative')
-        
-                    if not negative_freq_df.empty:
-                        fig = px.treemap(negative_freq_df, path=[px.Constant("Negative Reviews"), 'word'], values='freq',
-                                       color='freq', hover_data={'freq': True}, color_continuous_scale='Reds')
-                        fig.update_traces(textinfo="label", textfont_size=20)
-                        fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("No negative reviews match the current filters.")
+                st.subheader("Interactive Word Clouds")
+                st.caption("Hover over a word to see its frequency. Based on current filters.")
+                
+                if filtered_data.empty:
+                    st.warning("No data matches the selected filters. Cannot generate word clouds.")
+                else:
+                    col1, col2 = st.columns(2)
+            
+                    # Create a stable, hashable tuple for the date range to use as a cache key
+                    date_tuple = (selected_date_range[0].strftime('%Y-%m-%d'), selected_date_range[1].strftime('%Y-%m-%d'))
+            
+                    with col1:
+                        st.markdown("#### Key Themes in Positive Reviews")
+                        # Call the new function with filter parameters, not the huge list of IDs
+                        positive_freq_df = generate_word_frequency_for_filters(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple, 'Positive')
+            
+                        if not positive_freq_df.empty:
+                            fig = px.treemap(positive_freq_df, path=[px.Constant("Positive Reviews"), 'word'], values='freq',
+                                           color='freq', hover_data={'freq': True}, color_continuous_scale='Greens')
+                            fig.update_traces(textinfo="label", textfont_size=20)
+                            fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("No positive reviews match the current filters.")
+            
+                    with col2:
+                        st.markdown("#### Key Themes in Negative Reviews")
+                        # Call the new function for negative reviews
+                        negative_freq_df = generate_word_frequency_for_filters(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple, 'Negative')
+            
+                        if not negative_freq_df.empty:
+                            fig = px.treemap(negative_freq_df, path=[px.Constant("Negative Reviews"), 'word'], values='freq',
+                                           color='freq', hover_data={'freq': True}, color_continuous_scale='Reds')
+                            fig.update_traces(textinfo="label", textfont_size=20)
+                            fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("No negative reviews match the current filters.")
         
     # --- MAIN SEARCH PAGE ---
     else:
@@ -606,7 +605,7 @@ if conn:
                                 if st.button("View Details", key=row['parent_asin']):
                                     st.session_state.selected_product = row['parent_asin']
                                     st.rerun()
-                    pass
+                    
     
                 # --- Pagination Buttons ---
                 st.markdown("---")
@@ -625,5 +624,6 @@ if conn:
                             if st.button("Next Page ➡️"):
                                 st.session_state.page += 1
                                 st.rerun()
+
 else:
     st.error("Application setup failed. Please check database connection.")
