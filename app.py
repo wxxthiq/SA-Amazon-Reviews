@@ -161,6 +161,20 @@ def get_single_review_text(conn, review_id):
     return result[0] if result else "Review text not found."
 
 @st.cache_data
+def get_text_for_reviews(_conn, review_ids):
+    """
+    Efficiently fetches the text for a specific list of review IDs.
+    """
+    if not review_ids:
+        return "" # Return empty string if list is empty
+    # Use a placeholder for each ID to prevent SQL injection
+    placeholders = ','.join('?' for _ in review_ids)
+    query = f"SELECT text FROM reviews WHERE review_id IN ({placeholders})"
+    # The params argument for read_sql expects a list or tuple
+    text_df = pd.read_sql(query, _conn, params=tuple(review_ids))
+    return " ".join(text_df['text'].dropna())
+    
+@st.cache_data
 def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, date_range):
     """
     Fetches all necessary data for the detail page, applying all filters directly in SQL.
@@ -491,52 +505,52 @@ if conn:
                     else:
                         st.info("Not enough data to display a trend.")
         #
-        with wordcloud_tab:
+       with wordcloud_tab:
             st.subheader("Comparative Word Clouds")
             st.caption("Keywords from positive and negative reviews, based on current filters.")
-
-            # To prevent re-calculating the word cloud on every interaction, we cache the figure generation
+        
             @st.cache_data
             def create_wordcloud_figure(text_data, title):
                 """Generates a word cloud from a block of text and returns a matplotlib figure."""
                 if not text_data or pd.isna(text_data):
                     return None
-                
+        
                 wordcloud = WordCloud(
-                    width=800, 
-                    height=400, 
-                    background_color='white',
-                    collocations=False, # Prevents grouping words into pairs
-                    stopwords=spacy.lang.en.stop_words.STOP_WORDS # Use spaCy's default stop words
+                    width=800, height=400, background_color='white',
+                    collocations=False, stopwords=spacy.lang.en.stop_words.STOP_WORDS
                 ).generate(text_data)
-
+        
                 fig, ax = plt.subplots(figsize=(10, 5))
                 ax.imshow(wordcloud, interpolation='bilinear')
                 ax.axis("off")
                 ax.set_title(title, fontsize=20)
                 return fig
-
+        
             if filtered_data.empty:
                 st.warning("No data matches the selected filters. Cannot generate word clouds.")
             else:
                 col1, col2 = st.columns(2)
-
-                # --- Positive Word Cloud ---
+        
                 with col1:
                     st.markdown("#### Key Themes in Positive Reviews")
-                    positive_text = " ".join(review for review in filtered_data[filtered_data['sentiment'] == 'Positive']['text'].dropna())
-                    
+                    # Get the list of IDs for positive reviews
+                    positive_ids = filtered_data[filtered_data['sentiment'] == 'Positive']['review_id'].tolist()
+                    # Fetch text using the new efficient function
+                    positive_text = get_text_for_reviews(conn, positive_ids)
+        
                     if positive_text:
                         positive_wc_fig = create_wordcloud_figure(positive_text, "Positive Keywords")
                         st.pyplot(positive_wc_fig, use_container_width=True)
                     else:
                         st.info("No positive reviews match the current filters.")
-
-                # --- Negative Word Cloud ---
+        
                 with col2:
                     st.markdown("#### Key Themes in Negative Reviews")
-                    negative_text = " ".join(review for review in filtered_data[filtered_data['sentiment'] == 'Negative']['text'].dropna())
-
+                    # Get the list of IDs for negative reviews
+                    negative_ids = filtered_data[filtered_data['sentiment'] == 'Negative']['review_id'].tolist()
+                    # Fetch text using the new efficient function
+                    negative_text = get_text_for_reviews(conn, negative_ids)
+        
                     if negative_text:
                         negative_wc_fig = create_wordcloud_figure(negative_text, "Negative Keywords")
                         st.pyplot(negative_wc_fig, use_container_width=True)
