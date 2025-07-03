@@ -1,6 +1,6 @@
-# database_builder.py (Final Modular & Updatable Version)
-# This script allows re-running to add new features without rebuilding everything from scratch.
-# Includes category-specific aspects and rating distribution pre-computation.
+# database_builder.py (Final, Interactive, Future-Proof Version)
+# This script creates all tables with the necessary columns and IDs to support a
+# fast, stable, and highly interactive Streamlit dashboard with rich filtering.
 
 import pandas as pd
 import sqlite3
@@ -11,31 +11,16 @@ import os
 import json
 
 # --- Configuration ---
-# This should match the directory where your JSONL files are located on your build machine (e.g., Kaggle)
 KAGGLE_INPUT_DIR = 'mcauley-jsonl'
 OUTPUT_FOLDER = '/kaggle/working/'
-# I've named the output DB 'final_v2.db' to distinguish it from previous versions.
-OUTPUT_DB_PATH = os.path.join(OUTPUT_FOLDER, 'amazon_reviews_v3.db')
+OUTPUT_DB_PATH = os.path.join(OUTPUT_FOLDER, 'amazon_reviews_v5.db')
 
 CATEGORIES_TO_PROCESS = {
     'Amazon Fashion': ('Amazon_Fashion.jsonl', 'meta_Amazon_Fashion.jsonl'),
     'All Beauty': ('All_Beauty.jsonl', 'meta_All_Beauty.jsonl'),
     'Appliances': ('Appliances.jsonl', 'meta_Appliances.jsonl')
 }
-CHUNK_SIZE = 100000 # Reduced for memory safety during the build process
-
-# --- PERFECTED ASPECT LISTS ---
-# Aspects common to all product types
-COMMON_ASPECTS = ['price', 'value', 'quality', 'packaging', 'shipping', 'delivery', 'service', 'return', 'customer service']
-
-# Category-specific aspects
-FASHION_ASPECTS = ['fit', 'size', 'color', 'fabric', 'style', 'comfort', 'stitching', 'zipper', 'material', 'durability', 'design', 'look']
-BEAUTY_ASPECTS = ['scent', 'fragrance', 'texture', 'consistency', 'longevity', 'coverage', 'formula', 'ingredients', 'application', 'pigmentation', 'moisture']
-APPLIANCES_ASPECTS = ['power', 'noise', 'performance', 'battery', 'durability', 'ease of use', 'features', 'design', 'size', 'installation', 'efficiency']
-
-# Combine all aspects into a single list for analysis
-ALL_ASPECTS = list(set(COMMON_ASPECTS + FASHION_ASPECTS + BEAUTY_ASPECTS + APPLIANCES_ASPECTS))
-
+CHUNK_SIZE = 150000
 
 # --- Helper Functions ---
 def parse_jsonl_to_df(path):
@@ -61,10 +46,10 @@ def extract_and_join_image_urls(image_data):
 
 def stage_raw_data(conn, full_input_path):
     """
-    Reads all source JSONL files, enriches them, and stages them into a single 'raw_reviews' table.
-    This is the longest-running step and should only be run once.
+    Reads all source JSONL files, enriches them with a unique review_id and all
+    necessary fields for filtering, and stages them into a single 'raw_reviews' table.
     """
-    print("\n--- STAGE 1: Staging Raw Data ---")
+    print("\n--- STAGE 1: Staging Raw Data with Unique IDs and All Filterable Fields ---")
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='raw_reviews'")
     if cursor.fetchone():
@@ -95,12 +80,16 @@ def stage_raw_data(conn, full_input_path):
             merged_chunk_df['rating'] = pd.to_numeric(merged_chunk_df['rating'], errors='coerce')
             merged_chunk_df.dropna(subset=['rating', 'text', 'parent_asin'], inplace=True)
             
+            # --- KEY MODIFICATION: Create a unique review_id ---
+            merged_chunk_df.reset_index(inplace=True)
+            merged_chunk_df['review_id'] = merged_chunk_df['parent_asin'] + '-' + merged_chunk_df['index'].astype(str) + '-' + str(chunk_num)
+            
             sentiments = merged_chunk_df['text'].astype(str).apply(lambda text: TextBlob(text).sentiment)
             merged_chunk_df['sentiment'] = sentiments.apply(lambda s: 'Positive' if s.polarity > 0.1 else ('Negative' if s.polarity < -0.1 else 'Neutral'))
             merged_chunk_df['text_polarity'] = sentiments.apply(lambda s: s.polarity)
-            merged_chunk_df['timestamp'] = pd.to_datetime(merged_chunk_df['timestamp'], unit='s', errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
+            merged_chunk_df['date'] = pd.to_datetime(merged_chunk_df['timestamp'], unit='s', errors='coerce').dt.strftime('%Y-%m-%d')
 
-            final_columns = ['parent_asin', 'product_title', 'category', 'image_urls', 'rating', 'text', 'sentiment', 'text_polarity', 'timestamp']
+            final_columns = ['review_id', 'parent_asin', 'product_title', 'category', 'image_urls', 'rating', 'text', 'sentiment', 'text_polarity', 'date']
             
             write_mode = 'replace' if is_first_write and chunk_num == 1 else 'append'
             merged_chunk_df[final_columns].to_sql('raw_reviews', conn, if_exists=write_mode, index=False)
@@ -110,153 +99,85 @@ def stage_raw_data(conn, full_input_path):
         print(f"✅ Finished staging '{category_name}' in {time.time() - phase_start_time:.2f} seconds.")
     print("✅ Raw data staging complete.")
 
-def create_products_table(conn):
-    """Creates the aggregated 'products' table for the main gallery."""
-    print("\n--- Building: products table ---")
+
+def create_final_tables(conn):
+    """
+    Creates all the final, optimized tables from the 'raw_reviews' staging table.
+    """
+    print("\n--- STAGE 2: Creating Final, Optimized Tables ---")
     cursor = conn.cursor()
+
+    # Products Table
+    print("-> Building 'products' table...")
     cursor.execute("DROP TABLE IF EXISTS products")
     cursor.execute("""
-        CREATE TABLE products AS
-        SELECT
-            parent_asin,
+        CREATE TABLE products AS SELECT parent_asin,
             FIRST_VALUE(product_title) OVER (PARTITION BY parent_asin ORDER BY rowid) as product_title,
             FIRST_VALUE(image_urls) OVER (PARTITION BY parent_asin ORDER BY rowid) as image_urls,
             FIRST_VALUE(category) OVER (PARTITION BY parent_asin ORDER BY rowid) as category,
-            AVG(rating) as average_rating,
-            COUNT(rating) as review_count
+            AVG(rating) as average_rating, COUNT(rating) as review_count
         FROM raw_reviews GROUP BY parent_asin;
     """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_category ON products (category);")
-    conn.commit()
-    print("✅ 'products' table created.")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_parent_asin ON products (parent_asin);")
 
-def create_reviews_table(conn):
-    """Creates the lean 'reviews' table for paginated display."""
-    print("\n--- Building: reviews table ---")
-    cursor = conn.cursor()
+    # Reviews Table (for drill-down and pagination)
+    print("-> Building 'reviews' table...")
     cursor.execute("DROP TABLE IF EXISTS reviews")
     cursor.execute("""
         CREATE TABLE reviews AS
-        SELECT parent_asin, rating, sentiment, text FROM raw_reviews;
+        SELECT review_id, parent_asin, rating, sentiment, text, date FROM raw_reviews;
     """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_reviews_review_id ON reviews (review_id);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_reviews_parent_asin ON reviews (parent_asin);")
-    conn.commit()
-    print("✅ 'reviews' table created.")
-
-def create_discrepancy_table(conn):
-    """Creates the lightweight table for the discrepancy plot."""
-    print("\n--- Building: discrepancy_data table ---")
-    cursor = conn.cursor()
+    
+    # Discrepancy Table (now with all data needed for filtering and drill-down)
+    print("-> Building 'discrepancy_data' table...")
     cursor.execute("DROP TABLE IF EXISTS discrepancy_data")
     cursor.execute("""
         CREATE TABLE discrepancy_data AS
-        SELECT parent_asin, rating, text_polarity FROM raw_reviews;
+        SELECT review_id, parent_asin, rating, text_polarity, sentiment, date FROM raw_reviews;
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_discrepancy_parent_asin ON discrepancy_data (parent_asin);")
-    conn.commit()
-    print("✅ 'discrepancy_data' table created.")
-
-def create_rating_distribution_table(conn):
-    """(NEW) Pre-computes the count of each rating (1-5 stars) for every product."""
-    print("\n--- Building: rating_distribution table ---")
-    cursor = conn.cursor()
+    
+    # Rating Distribution Table
+    print("-> Building 'rating_distribution' table...")
     cursor.execute("DROP TABLE IF EXISTS rating_distribution")
     cursor.execute("""
-        CREATE TABLE rating_distribution AS
-        SELECT
-            parent_asin,
+        CREATE TABLE rating_distribution AS SELECT parent_asin,
             COUNT(CASE WHEN rating = 1.0 THEN 1 END) as '1_star',
             COUNT(CASE WHEN rating = 2.0 THEN 1 END) as '2_star',
             COUNT(CASE WHEN rating = 3.0 THEN 1 END) as '3_star',
             COUNT(CASE WHEN rating = 4.0 THEN 1 END) as '4_star',
             COUNT(CASE WHEN rating = 5.0 THEN 1 END) as '5_star'
-        FROM raw_reviews
-        GROUP BY parent_asin;
+        FROM raw_reviews GROUP BY parent_asin;
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_rating_dist_parent_asin ON rating_distribution (parent_asin);")
-    conn.commit()
-    print("✅ 'rating_distribution' table created.")
 
-def create_aspects_table(conn, nlp):
-    """Performs the intensive aspect analysis and saves the results."""
-    print("\n--- Building: aspect_sentiments table ---")
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='aspect_sentiments'")
-    if cursor.fetchone():
-        print("✅ 'aspect_sentiments' table already exists. Skipping.")
-        return
-        
-    print("Pre-computing all aspect sentiments (this will take a very long time)...")
-    df_for_aspects = pd.read_sql("SELECT parent_asin, text FROM raw_reviews", conn)
-    aspect_results = []
-    
-    for parent_asin, group in df_for_aspects.groupby('parent_asin'):
-        print(f"  - Analyzing aspects for product: {parent_asin}...")
-        aspect_sentiments = {aspect: {'positive': 0, 'negative': 0, 'neutral': 0} for aspect in ALL_ASPECTS}
-        for review_text in group['text'].dropna():
-            try:
-                doc = nlp(review_text)
-                for sentence in doc.sents:
-                    for aspect in ALL_ASPECTS:
-                        if f' {aspect.lower()} ' in f' {sentence.text.lower()} ':
-                            sentiment = TextBlob(sentence.text).sentiment.polarity
-                            if sentiment > 0.1: aspect_sentiments[aspect]['positive'] += 1
-                            elif sentiment < -0.1: aspect_sentiments[aspect]['negative'] += 1
-                            else: aspect_sentiments[aspect]['neutral'] += 1
-            except Exception:
-                continue
-        
-        for aspect, scores in aspect_sentiments.items():
-            if scores['positive'] > 0 or scores['negative'] > 0 or scores['neutral'] > 0:
-                aspect_results.append({
-                    'parent_asin': parent_asin,
-                    'aspect': aspect,
-                    'positive': scores['positive'],
-                    'negative': scores['negative'],
-                    'neutral': scores['neutral']
-                })
-    
-    pd.DataFrame(aspect_results).to_sql('aspect_sentiments', conn, if_exists='replace', index=False)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_aspects_parent_asin ON aspect_sentiments (parent_asin);")
     conn.commit()
-    print("✅ 'aspect_sentiments' table created.")
+    print("✅ Core tables created successfully.")
 
 # --- Main Execution Controller ---
 def main():
     start_time = time.time()
-    
     conn = sqlite3.connect(OUTPUT_DB_PATH)
-    nlp = None
     
-    # --- CONTROL PANEL ---
-    # Comment or un-comment the steps you want to run.
-    
-    # STEP 1: Stage raw data. This is the longest step. Run it only once.
-    print("--- Checking Step 1: Staging Raw Data ---")
+    # Run the staging process
     stage_raw_data(conn, '/kaggle/input/' + KAGGLE_INPUT_DIR)
     
-    # STEP 2: Create the main aggregated tables. These are fast and can be re-run.
-    print("\n--- Checking Step 2: Creating Core Tables ---")
-    create_products_table(conn)
-    create_reviews_table(conn)
-    create_discrepancy_table(conn)
-    create_rating_distribution_table(conn) # <-- Includes the new rating distribution table
+    # Create all final tables from the staged data
+    create_final_tables(conn)
     
-    # STEP 3: Run the most expensive analysis. Run it only once.
-    print("\n--- Checking Step 3: Creating Aspect Sentiments Table ---")
-    print("Loading spaCy model for aspect analysis...")
-    nlp = spacy.load("en_core_web_sm")
-    create_aspects_table(conn, nlp)
+    # NOTE: Aspect analysis is not included in this build for speed,
+    # but can be added later as a new modular function.
     
-    # STEP 4: Clean up the raw data table to save space (optional, but recommended for the final DB).
-    print("\n--- Checking Step 4: Final Cleanup ---")
+    # Final cleanup
+    print("\n--- Finalizing Database ---")
     conn.execute("DROP TABLE IF EXISTS raw_reviews;")
     conn.execute("VACUUM;")
     conn.commit()
     print("✅ Cleanup complete.")
     
     conn.close()
-
     end_time = time.time()
     print(f"\n✅ Database build complete in {end_time - start_time:.2f} seconds.")
 
