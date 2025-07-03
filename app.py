@@ -491,33 +491,34 @@ if conn:
 
         with reviews_tab:
             st.subheader("Browse Individual Reviews")
-            st.caption("Displaying 25 reviews at a time for optimal performance.")
+            st.caption("Displaying 25 reviews at a time for a smooth experience.")
         
-            # We only need to keep track of the current page number
+            # Initialize the page number in session state if it doesn't exist
             if 'all_reviews_page' not in st.session_state:
                 st.session_state.all_reviews_page = 1
         
             # --- Fetch ONLY the current page's data ---
-            # This is the key to performance: we never store more than one page of reviews in memory.
+            # This keeps memory usage low and the app fast
             reviews_for_this_page_df, has_more_reviews = get_all_reviews_paginated(
                 conn,
                 selected_asin,
                 page_size=25,
                 page_num=st.session_state.all_reviews_page,
-                sort_order="Newest First" # Default sort, user can change in table
+                sort_order="Newest First" # Fetches newest first by default
             )
         
-            # --- Display the DataFrame ---
+            # --- Display Reviews as Individual Expanders (no flicker!) ---
             if not reviews_for_this_page_df.empty:
                 total_reviews_count = int(product_details.get('review_count', 0))
                 total_pages = (total_reviews_count + 24) // 25
         
-                st.dataframe(
-                    reviews_for_this_page_df[['rating', 'sentiment', 'date', 'text']],
-                    use_container_width=True,
-                    hide_index=True,
-                    height=600
-                )
+                # Loop through the dataframe and create an expander for each review
+                for index, row in reviews_for_this_page_df.iterrows():
+                    # Use sentiment to choose a color for the rating
+                    sentiment_color = "green" if row['sentiment'] == 'Positive' else "red" if row['sentiment'] == 'Negative' else "orange"
+        
+                    with st.expander(f"**Rating: :{sentiment_color}[{row['rating']} ⭐]** - {row['date']}"):
+                        st.markdown(f"> {row['text']}")
         
                 st.markdown("---")
         
@@ -531,19 +532,16 @@ if conn:
                             st.rerun()
         
                 with nav_cols[1]:
-                    # Display current page and total pages
                     st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
         
                 with nav_cols[2]:
-                    # The `has_more_reviews` flag tells us if a "Next" button is needed
                     if has_more_reviews:
                         if st.button("Next Reviews ➡️", use_container_width=True):
                             st.session_state.all_reviews_page += 1
                             st.rerun()
-
             else:
-                st.warning("No reviews were found for this product.")                
-    # --- MAIN SEARCH PAGE ---
+                st.warning("No reviews were found for this product.")
+            # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
         st.header("Search for Products")
