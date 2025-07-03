@@ -333,7 +333,7 @@ if conn:
             # This function is now LOCAL to this tab. It will only run when this tab is active.
             @st.cache_data
             def get_data_for_sentiment_charts(_conn, asin, rating_filter, sentiment_filter, date_range_tuple):
-                query = "SELECT review_id, rating, text_polarity FROM discrepancy_data WHERE parent_asin = ?"
+                query = "SELECT review_id, rating, text_polarity, sentiment, date FROM discrepancy_data WHERE parent_asin = ?"
                 params = [asin]
                 if rating_filter:
                     query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
