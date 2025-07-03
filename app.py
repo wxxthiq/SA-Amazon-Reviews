@@ -526,31 +526,34 @@ if conn:
                 # --- Positive Word Cloud ---
                 with col1:
                     st.markdown("#### Key Themes in Positive Reviews")
-                    # Get the list of IDs for positive reviews
                     positive_ids = filtered_data[filtered_data['sentiment'] == 'Positive']['review_id'].tolist()
-                    # Fetch text using the efficient function
                     positive_text = get_text_for_reviews(conn, positive_ids)
                     
                     if positive_text:
                         positive_wc_fig = create_wordcloud_figure(positive_text, "Positive Keywords")
-                        st.pyplot(positive_wc_fig, use_container_width=True)
+                        # --- FIX: Check if the figure was created before displaying it ---
+                        if positive_wc_fig:
+                            st.pyplot(positive_wc_fig, use_container_width=True)
+                        else:
+                            st.info("Not enough text to generate a positive word cloud.")
                     else:
                         st.info("No positive reviews match the current filters.")
 
                 # --- Negative Word Cloud ---
                 with col2:
                     st.markdown("#### Key Themes in Negative Reviews")
-                    # Get the list of IDs for negative reviews
                     negative_ids = filtered_data[filtered_data['sentiment'] == 'Negative']['review_id'].tolist()
-                    # Fetch text using the efficient function
                     negative_text = get_text_for_reviews(conn, negative_ids)
 
                     if negative_text:
                         negative_wc_fig = create_wordcloud_figure(negative_text, "Negative Keywords")
-                        st.pyplot(negative_wc_fig, use_container_width=True)
+                        # --- FIX: Check if the figure was created before displaying it ---
+                        if negative_wc_fig:
+                            st.pyplot(negative_wc_fig, use_container_width=True)
+                        else:
+                            st.info("Not enough text to generate a negative word cloud.")
                     else:
-                        st.info("No negative reviews match the current filters.")
-                        
+                        st.info("No negative reviews match the current filters.")                
             # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
