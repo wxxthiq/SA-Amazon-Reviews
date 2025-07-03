@@ -425,7 +425,7 @@ if conn:
 
         with reviews_tab:
             st.subheader("Browse Individual Reviews")
-            st.caption("Displaying 25 reviews at a time for optimal performance.")
+            st.caption("Displaying 10 reviews at a time for optimal performance.")
         
             # Initialize the page number in session state if it doesn't exist
             if 'all_reviews_page' not in st.session_state:
@@ -445,13 +445,11 @@ if conn:
                 return count
         
             total_reviews = get_total_review_count(conn, selected_asin)
-            total_pages = (total_reviews + 24) // 25
+            total_pages = (total_reviews + 9) // 10
         
-            # --- Step 2: Fetch and display ONLY the current page's data without pandas ---
-            st.markdown("---")
             
             # This is the key: we use a direct cursor and loop, which is extremely memory-efficient.
-            offset = (st.session_state.all_reviews_page - 1) * 25
+            offset = (st.session_state.all_reviews_page - 1) * 10
             cursor = conn.cursor()
             
             # Using a cached function for the main query will make pagination instant after the first load
@@ -459,7 +457,7 @@ if conn:
             def get_reviews_for_page_raw(_conn, asin, page_offset):
                 cursor = _conn.cursor()
                 cursor.execute(
-                    "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? ORDER BY date DESC LIMIT 25 OFFSET ?",
+                    "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? DESC LIMIT 25 OFFSET ?",
                     (asin, page_offset)
                 )
                 return cursor.fetchall()
