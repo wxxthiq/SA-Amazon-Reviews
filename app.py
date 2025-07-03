@@ -425,39 +425,77 @@ if conn:
 
         #
         with reviews_tab:
-            st.subheader("All Individual Reviews for this Product")
-            st.caption("This interactive table contains all reviews. Use the controls at the bottom to navigate pages and the column headers to sort.")
+            st.subheader("Browse Individual Reviews")
+            st.caption("Displaying 25 reviews at a time for optimal performance.")
         
-            # --- Step 1: Fetch ALL reviews for the product (once per visit) ---
-            # By removing the @st.cache_data decorator, we ensure this function runs
-            # every time the user enters this tab, and the data is NOT cached.
-            def get_all_reviews_for_product(_conn, asin):
-                # This spinner will now correctly show on each visit to the tab
-                with st.spinner("Loading all reviews..."):
-                    query = "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? ORDER BY date DESC"
-                    df = pd.read_sql(query, _conn, params=(asin,))
-                    return df
+            # We only need to keep track of the current page number
+            if 'all_reviews_page' not in st.session_state:
+                st.session_state.all_reviews_page = 1
+            
+            # Reset page to 1 if the selected product changes
+            if 'current_product_asin' not in st.session_state or st.session_state.current_product_asin != selected_asin:
+                st.session_state.current_product_asin = selected_asin
+                st.session_state.all_reviews_page = 1
         
-            all_reviews_df = get_all_reviews_for_product(conn, selected_asin)
+            # --- This function will now be cached, but only for the specific page requested ---
+            # This is the most efficient way to handle this.
+            @st.cache_data(show_spinner="Fetching reviews...")
+            def get_paginated_reviews(_conn, asin, page_num):
+                """
+                Fetches a single, specific page of reviews from the database.
+                This is highly memory-efficient.
+                """
+                offset = (page_num - 1) * 25
+                query = "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? ORDER BY date DESC LIMIT 25 OFFSET ?"
+                df = pd.read_sql(query, _conn, params=(asin, offset))
+                return df
+                
+            # --- We also need the total count for pagination controls ---
+            @st.cache_data(show_spinner=False)
+            def get_total_review_count(_conn, asin):
+                """
+                Gets the total number of reviews for a product.
+                This is cached for performance.
+                """
+                query = "SELECT COUNT(*) FROM reviews WHERE parent_asin = ?"
+                count = pd.read_sql(query, _conn, params=(asin,)).iloc[0, 0]
+                return count
         
-            if not all_reviews_df.empty:
-                # --- Step 2: Configure the AgGrid component ---
-                gb = GridOptionsBuilder.from_dataframe(all_reviews_df)
-                gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
-                gb.configure_default_column(resizable=True)
-                gridOptions = gb.build()
+            total_reviews = get_total_review_count(conn, selected_asin)
+            total_pages = (total_reviews + 24) // 25
         
-                # --- Step 3: Display the AgGrid table ---
-                AgGrid(
-                    all_reviews_df,
-                    gridOptions=gridOptions,
-                    allow_unsafe_jscode=True,
-                    enable_enterprise_modules=False,
-                    height=600,
-                    width='100%',
-                    # Keying the grid helps Streamlit differentiate it if needed
-                    key='product_reviews_grid'
+            # Fetch and display only the reviews for the current page
+            reviews_for_this_page_df = get_paginated_reviews(conn, selected_asin, st.session_state.all_reviews_page)
+            
+            # --- Display the DataFrame ---
+            if not reviews_for_this_page_df.empty:
+                st.dataframe(
+                    reviews_for_this_page_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=600
                 )
+        
+                st.markdown("---")
+        
+                # --- Pagination Controls ---
+                nav_cols = st.columns([1, 1, 1])
+        
+                with nav_cols[0]:
+                    if st.session_state.all_reviews_page > 1:
+                        if st.button("⬅️ Previous Reviews", use_container_width=True, key="prev_reviews"):
+                            st.session_state.all_reviews_page -= 1
+                            st.rerun()
+        
+                with nav_cols[1]:
+                    if total_pages > 0:
+                        st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
+        
+                with nav_cols[2]:
+                    if st.session_state.all_reviews_page < total_pages:
+                        if st.button("Next Reviews ➡️", use_container_width=True, key="next_reviews"):
+                            st.session_state.all_reviews_page += 1
+                            st.rerun()
             else:
                 st.warning("No reviews were found for this product.")
     
