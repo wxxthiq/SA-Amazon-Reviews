@@ -302,9 +302,28 @@ if conn:
             st.session_state.rating_filter = default_ratings
             st.session_state.sentiment_filter = default_sentiments
     
-        selected_date_range = st.sidebar.date_input("Filter by Date Range", key='date_filter', default=default_date_range)
-        selected_ratings = st.sidebar.multiselect("Filter by Star Rating", default_ratings, key='rating_filter', default=default_ratings)
-        selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", default_sentiments, key='sentiment_filter', default=default_sentiments)
+        # --- FIX: Changed 'default=' to 'value=' for st.date_input ---
+        selected_date_range = st.sidebar.date_input(
+            "Filter by Date Range", 
+            value=default_date_range,  # Use 'value' instead of 'default'
+            min_value=min_date, 
+            max_value=max_date,
+            key='date_filter'
+        )
+
+        selected_ratings = st.sidebar.multiselect(
+            "Filter by Star Rating", 
+            default_ratings, 
+            key='rating_filter', 
+            default=default_ratings
+        )
+        
+        selected_sentiments = st.sidebar.multiselect(
+            "Filter by Sentiment", 
+            default_sentiments, 
+            key='sentiment_filter', 
+            default=default_sentiments
+        )
         st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
 
         # --- RENDER TABS (Each tab is now self-contained) ---
