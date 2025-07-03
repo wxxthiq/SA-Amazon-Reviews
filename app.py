@@ -491,17 +491,18 @@ if conn:
                         st.info("Not enough data to display a trend.")
         
         with wordcloud_tab:
-            # This function is LOCAL to the word cloud tab.
+            
+            # This function is LOCAL to this tab and uses NO PANDAS for maximum efficiency.
             @st.cache_data
             def generate_word_frequency_for_filters(_conn, asin, rating_filter, sentiment_filter, date_range_tuple, target_sentiment):
                 """
-                Generates word frequencies based on filters, not a list of IDs.
-                This creates a stable cache key and prevents memory leaks.
+                Generates word frequencies by streaming data directly from the database
+                without using pandas, ensuring the lowest possible memory footprint.
                 """
-                # Build the query to get the review_ids based on the filters
-                query = f"SELECT review_id FROM reviews WHERE parent_asin = ? AND sentiment = ?"
+                # Build the query to get review text based on the filters
+                query = f"SELECT text FROM reviews WHERE parent_asin = ? AND sentiment = ?"
                 params = [asin, target_sentiment]
-            
+                
                 if rating_filter:
                     query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
                     params.extend(rating_filter)
@@ -509,71 +510,69 @@ if conn:
                     start_date, end_date = date_range_tuple
                     query += " AND date BETWEEN ? AND ?"
                     params.extend([start_date, end_date])
-            
-                id_df = pd.read_sql(query, _conn, params=params)
-                review_ids = id_df['review_id'].tolist()
-            
-                if not review_ids:
-                    return pd.DataFrame(columns=['word', 'freq'])
-            
+    
                 from spacy.lang.en.stop_words import STOP_WORDS
                 word_counts = Counter()
-            
-                # Process in batches to keep memory usage low
-                batch_size = 500
-                for i in range(0, len(review_ids), batch_size):
-                    batch_ids = review_ids[i:i + batch_size]
-                    placeholders = ','.join('?' for _ in batch_ids)
-                    text_query = f"SELECT text FROM reviews WHERE review_id IN ({placeholders})"
-                    text_df = pd.read_sql(text_query, _conn, params=tuple(batch_ids))
-            
-                    for text in text_df['text'].dropna():
-                        words = re.findall(r'\b\w+\b', text.lower())
-                        filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
-                        word_counts.update(filtered_words)
-            
+                
+                # Use a direct cursor to stream results row-by-row
+                cursor = _conn.cursor()
+                cursor.execute(query, tuple(params))
+    
+                while True:
+                    # Fetch a batch of rows to process
+                    rows = cursor.fetchmany(1000) # Process 1000 reviews at a time
+                    if not rows:
+                        break # Exit loop when all rows are fetched
+                    
+                    for row in rows:
+                        text = row[0]
+                        if text:
+                            words = re.findall(r'\b\w+\b', text.lower())
+                            filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
+                            word_counts.update(filtered_words)
+    
+                if not word_counts:
+                    return pd.DataFrame(columns=['word', 'freq'])
+    
+                # Only create a single, small DataFrame at the very end
                 freq_df = pd.DataFrame(word_counts.items(), columns=['word', 'freq']).sort_values(by='freq', ascending=False)
                 return freq_df.head(100)
     
             st.subheader("Interactive Word Clouds")
             st.caption("Hover over a word to see its frequency. Based on current filters.")
             
-            if chart_data.empty:
-                st.warning("No data matches the selected filters. Cannot generate word clouds.")
-            else:
-                col1, col2 = st.columns(2)
-        
-                # Create a stable, hashable tuple for the date range to use as a cache key
-                date_tuple = (selected_date_range[0].strftime('%Y-%m-%d'), selected_date_range[1].strftime('%Y-%m-%d'))
-        
-                with col1:
-                    st.markdown("#### Key Themes in Positive Reviews")
-                    # Call the new function with filter parameters, not the huge list of IDs
-                    positive_freq_df = generate_word_frequency_for_filters(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple, 'Positive')
-        
-                    if not positive_freq_df.empty:
-                        fig = px.treemap(positive_freq_df, path=[px.Constant("Positive Reviews"), 'word'], values='freq',
-                                       color='freq', hover_data={'freq': True}, color_continuous_scale='Greens')
-                        fig.update_traces(textinfo="label", textfont_size=20)
-                        fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("No positive reviews match the current filters.")
-        
-                with col2:
-                    st.markdown("#### Key Themes in Negative Reviews")
-                    # Call the new function for negative reviews
-                    negative_freq_df = generate_word_frequency_for_filters(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple, 'Negative')
-        
-                    if not negative_freq_df.empty:
-                        fig = px.treemap(negative_freq_df, path=[px.Constant("Negative Reviews"), 'word'], values='freq',
-                                       color='freq', hover_data={'freq': True}, color_continuous_scale='Reds')
-                        fig.update_traces(textinfo="label", textfont_size=20)
-                        fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("No negative reviews match the current filters.")
+            # Create a stable, hashable tuple for the date range to use as a cache key
+            date_tuple = (selected_date_range[0].strftime('%Y-%m-%d'), selected_date_range[1].strftime('%Y-%m-%d'))
     
+            col1, col2 = st.columns(2)
+    
+            with col1:
+                st.markdown("#### Key Themes in Positive Reviews")
+                # Call the new, efficient function
+                positive_freq_df = generate_word_frequency_for_filters(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple, 'Positive')
+    
+                if not positive_freq_df.empty:
+                    fig = px.treemap(positive_freq_df, path=[px.Constant("Positive Reviews"), 'word'], values='freq',
+                                   color='freq', hover_data={'freq': True}, color_continuous_scale='Greens')
+                    fig.update_traces(textinfo="label", textfont_size=20)
+                    fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No positive reviews match the current filters.")
+    
+            with col2:
+                st.markdown("#### Key Themes in Negative Reviews")
+                # Call the new, efficient function
+                negative_freq_df = generate_word_frequency_for_filters(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple, 'Negative')
+    
+                if not negative_freq_df.empty:
+                    fig = px.treemap(negative_freq_df, path=[px.Constant("Negative Reviews"), 'word'], values='freq',
+                                   color='freq', hover_data={'freq': True}, color_continuous_scale='Reds')
+                    fig.update_traces(textinfo="label", textfont_size=20)
+                    fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No negative reviews match the current filters.")
     # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
