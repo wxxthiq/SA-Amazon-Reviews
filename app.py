@@ -188,11 +188,16 @@ def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, 
 
     df = pd.read_sql(query, _conn, params=params)
 
-    # Calculate discrepancy and jitter on the filtered data
+    # Calculate discrepancy and STABLE jitter on the filtered data
     if not df.empty:
+        # --- STABLE JITTER CALCULATION ---
+        # We use a fixed seed for the random number generator. This ensures that
+        # the jitter is the same every time for the same dataset.
+        rng = np.random.default_rng(seed=42) # Using a fixed seed
+
         df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
-        df['rating_jittered'] = df['rating'] + np.random.uniform(-0.1, 0.1, size=len(df))
-        df['text_polarity_jittered'] = df['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(df))
+        df['rating_jittered'] = df['rating'] + rng.uniform(-0.1, 0.1, size=len(df))
+        df['text_polarity_jittered'] = df['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(df))
 
     return df
     
