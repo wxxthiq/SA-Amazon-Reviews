@@ -18,6 +18,7 @@ import plotly.express as px
 import logging
 import kaggle
 from datetime import datetime
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 # --- Configure logging ---
 logging.basicConfig(level=logging.INFO)
@@ -424,77 +425,46 @@ if conn:
 
         
         with reviews_tab:
-            st.subheader("Browse Individual Reviews")
-            st.caption("Displaying 25 reviews at a time for optimal performance.")
+            st.subheader("All Individual Reviews for this Product")
+            st.caption("This interactive table contains all reviews. Use the controls at the bottom to navigate pages and the column headers to sort.")
         
-            # We only need to keep track of the current page number
-            if 'all_reviews_page' not in st.session_state:
-                st.session_state.all_reviews_page = 1
+            # --- Step 1: Fetch ALL reviews for the product (once) ---
+            # We fetch everything into a DataFrame. This is efficient because it's a single,
+            # simple query. We are selecting only the columns we need to keep memory usage down.
+            @st.cache_data(show_spinner="Loading all reviews...")
+            def get_all_reviews_for_product(_conn, asin):
+                query = "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? ORDER BY date DESC"
+                df = pd.read_sql(query, _conn, params=(asin,))
+                return df
         
-            # --- Fetch ONLY the current page's data ---
-            # This is the key to performance: we never store more than one page of reviews in memory.
-            
-            # Base query
-            query = "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ?"
-            params = [selected_asin]
+            all_reviews_df = get_all_reviews_for_product(conn, selected_asin)
         
-            # Dynamically add filter conditions
-            if selected_ratings:
-                query += f" AND rating IN ({','.join('?' for _ in selected_ratings)})"
-                params.extend(selected_ratings)
-            if selected_sentiments:
-                query += f" AND sentiment IN ({','.join('?' for _ in selected_sentiments)})"
-                params.extend(selected_sentiments)
-            if selected_date_range and len(selected_date_range) == 2:
-                start_date = selected_date_range[0].strftime('%Y-%m-%d')
-                end_date = selected_date_range[1].strftime('%Y-%m-%d')
-                query += " AND date BETWEEN ? AND ?"
-                params.extend([start_date, end_date])
+            if not all_reviews_df.empty:
+                # --- Step 2: Configure the AgGrid component ---
+                gb = GridOptionsBuilder.from_dataframe(all_reviews_df)
         
-            # Get the total count of reviews that match the filters for pagination info
-            count_query = query.replace("rating, sentiment, date, text", "COUNT(*)")
-            total_reviews_count = pd.read_sql(count_query, conn, params=params).iloc[0, 0]
-            total_pages = (total_reviews_count + 24) // 25
+                # Configure pagination
+                gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=20)
         
-            # Add sorting and pagination to the main query
-            query += " ORDER BY date DESC LIMIT 25 OFFSET ?"
-            offset = (st.session_state.all_reviews_page - 1) * 25
-            params.append(offset)
-            
-            reviews_for_this_page_df = pd.read_sql(query, conn, params=params)
+                # Make columns resizable
+                gb.configure_default_column(resizable=True)
+                
+                # Build the grid options
+                gridOptions = gb.build()
         
-            # --- Display the DataFrame ---
-            if not reviews_for_this_page_df.empty:
-                st.dataframe(
-                    reviews_for_this_page_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=600
+                # --- Step 3: Display the AgGrid table ---
+                # The grid will not cause a Streamlit rerun for internal actions like sorting or pagination
+                AgGrid(
+                    all_reviews_df,
+                    gridOptions=gridOptions,
+                    allow_unsafe_jscode=True,  # Set to True to allow JsCode to be injected
+                    enable_enterprise_modules=False, # We don't need enterprise features
+                    height=600,
+                    width='100%',
+                    reload_data=False # We handle data loading with the cache
                 )
-        
-                st.markdown("---")
-        
-                # --- Pagination Controls ---
-                nav_cols = st.columns([1, 1, 1])
-        
-                with nav_cols[0]:
-                    if st.session_state.all_reviews_page > 1:
-                        if st.button("⬅️ Previous Reviews", use_container_width=True):
-                            st.session_state.all_reviews_page -= 1
-                            st.rerun()
-        
-                with nav_cols[1]:
-                    if total_pages > 0:
-                        st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
-        
-                with nav_cols[2]:
-                    if st.session_state.all_reviews_page < total_pages:
-                        if st.button("Next Reviews ➡️", use_container_width=True):
-                            st.session_state.all_reviews_page += 1
-                            st.rerun()
             else:
-                st.warning("No reviews match the current filter criteria. Please adjust your selections in the sidebar.")
-    
+                st.warning("No reviews were found for this product.")
             # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
