@@ -205,7 +205,6 @@ conn = connect_to_db(DATABASE_PATH)
 
 # Initialize session state for all filters and pages
 if 'page' not in st.session_state: st.session_state.page = 0
-if 'review_page' not in st.session_state: st.session_state.review_page = 1
 if 'selected_product' not in st.session_state: st.session_state.selected_product = None
 if 'category' not in st.session_state: st.session_state.category = "--- Select a Category ---"
 if 'search_term' not in st.session_state: st.session_state.search_term = ""
@@ -213,11 +212,6 @@ if 'sort_by' not in st.session_state: st.session_state.sort_by = "Popularity (Mo
 if 'image_index' not in st.session_state: st.session_state.image_index = 0
 if 'drilldown_rating' not in st.session_state: st.session_state.drilldown_rating = None
 if 'discrepancy_review_id' not in st.session_state: st.session_state.discrepancy_review_id = None
-# Add these two lines for the new reviews tab state
-if 'all_reviews_page' not in st.session_state: st.session_state.all_reviews_page = 0
-if 'all_reviews_sort' not in st.session_state: st.session_state.all_reviews_sort = "Newest First"
-if 'filtered_review_ids' not in st.session_state: st.session_state.filtered_review_ids = None
-if 'loaded_reviews_df' not in st.session_state: st.session_state.loaded_reviews_df = pd.DataFrame()
 
 if conn:
     # --- DETAILED PRODUCT VIEW ---
@@ -271,13 +265,9 @@ if conn:
         if st.button("⬅️ Back to Search"):
             # --- Clear ALL state related to the detail view ---
             st.session_state.selected_product = None
-            st.session_state.review_page = 1
             st.session_state.image_index = 0
             st.session_state.drilldown_rating = None
             st.session_state.drilldown_page = 1
-            # --- ADD THESE TWO LINES ---
-            st.session_state.all_reviews_page = 0
-            st.session_state.all_reviews_sort = "Newest First"
             # --- END OF ADDITION ---
             st.rerun()
 
@@ -326,7 +316,7 @@ if conn:
 
         st.markdown("---")
         # --- Visualization Tabs ---
-        vis_tab, reviews_tab = st.tabs(["📊 Sentiment Analysis", "💬 Individual Reviews"])
+        vis_tab, new_tab_1, new_tab_2 = st.tabs(["📊 Sentiment Analysis", "New Viz 1", "New Viz 2"])
 
         # Replace the entire 'with vis_tab:' block with this new code
         with vis_tab:
@@ -422,85 +412,9 @@ if conn:
             
             # This code goes at the end of the `with vis_tab:` block          
             st.markdown("---")
-
-        with reviews_tab:
-            st.subheader("Browse Individual Reviews")
-            st.caption("Displaying 10 reviews at a time for optimal performance.")
-        
-            # Initialize the page number in session state if it doesn't exist
-            if 'all_reviews_page' not in st.session_state:
-                st.session_state.all_reviews_page = 1
-            
-            # Reset page to 1 if the selected product changes to prevent state errors
-            if 'current_product_asin' not in st.session_state or st.session_state.current_product_asin != selected_asin:
-                st.session_state.current_product_asin = selected_asin
-                st.session_state.all_reviews_page = 1
-        
-            # --- Step 1: Get the total review count (this is fast and can be cached) ---
-            @st.cache_data(show_spinner=False)
-            def get_total_review_count(_conn, asin):
-                cursor = _conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM reviews WHERE parent_asin = ?", (asin,))
-                count = cursor.fetchone()[0]
-                return count
-        
-            total_reviews = get_total_review_count(conn, selected_asin)
-            total_pages = (total_reviews + 9) // 10
-        
-            
-            # This is the key: we use a direct cursor and loop, which is extremely memory-efficient.
-            offset = (st.session_state.all_reviews_page - 1) * 10
-            cursor = conn.cursor()
-            
-            # Using a cached function for the main query will make pagination instant after the first load
-            @st.cache_data(show_spinner="Fetching reviews...")
-            def get_reviews_for_page_raw(_conn, asin, page_offset):
-                cursor = _conn.cursor()
-                cursor.execute(
-                    "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? DESC LIMIT 25 OFFSET ?",
-                    (asin, page_offset)
-                )
-                return cursor.fetchall()
-        
-            reviews_on_page = get_reviews_for_page_raw(conn, selected_asin, offset)
-        
-            if reviews_on_page:
-                # Display each review in a clean, bordered container. No clicking required.
-                for row in reviews_on_page:
-                    rating, sentiment, date, text = row
-                    sentiment_color = "green" if sentiment == 'Positive' else "red" if sentiment == 'Negative' else "orange"
-                    
-                    with st.container(border=True):
-                        st.markdown(f"**Rating: :{sentiment_color}[{rating} ⭐]** | **Date:** {date}")
-                        # Use a blockquote for the review text for clear visual separation
-                        st.markdown(f"> {text}")
-            else:
-                 st.warning("No reviews were found for this product.")
-        
-            st.markdown("---")
-        
-            # --- Step 3: Pagination Controls ---
-            nav_cols = st.columns([1, 1, 1])
-        
-            with nav_cols[0]:
-                if st.session_state.all_reviews_page > 1:
-                    if st.button("⬅️ Previous", use_container_width=True, key="prev_reviews"):
-                        st.session_state.all_reviews_page -= 1
-                        st.rerun()
-        
-            with nav_cols[1]:
-                if total_pages > 0:
-                    st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
-        
-            with nav_cols[2]:
-                if st.session_state.all_reviews_page < total_pages:
-                    if st.button("Next ➡️", use_container_width=True, key="next_reviews"):
-                        st.session_state.all_reviews_page += 1
-                        st.rerun()
-                
+    
             # --- MAIN SEARCH PAGE ---
     else:
-        st.session_state.review_page = 1
         st.header("Search for Products")
         
         # --- Search and Filter Controls ---
