@@ -515,45 +515,57 @@ if conn:
                         st.info("Not enough data to display a trend.")
         #
         with wordcloud_tab:
-            st.subheader("Comparative Word Clouds")
-            st.caption("Keywords from positive and negative reviews, based on current filters.")    
-            
+            st.subheader("Interactive Word Clouds")
+            st.caption("Hover over a word to see its frequency. Based on current filters.")
+        
             if filtered_data.empty:
                 st.warning("No data matches the selected filters. Cannot generate word clouds.")
             else:
                 col1, col2 = st.columns(2)
-
+        
                 # --- Positive Word Cloud ---
                 with col1:
                     st.markdown("#### Key Themes in Positive Reviews")
                     positive_ids = filtered_data[filtered_data['sentiment'] == 'Positive']['review_id'].tolist()
                     positive_text = get_text_for_reviews(conn, positive_ids)
-                    
+        
                     if positive_text:
-                        positive_wc_fig = create_wordcloud_figure(positive_text, "Positive Keywords")
-                        # --- FIX: Check if the figure was created before displaying it ---
-                        if positive_wc_fig:
-                            st.pyplot(positive_wc_fig, use_container_width=True)
+                        # Generate frequency data
+                        positive_freq_df = generate_word_frequency(positive_text)
+                        if not positive_freq_df.empty:
+                            # Create interactive word cloud with Plotly
+                            fig = px.treemap(positive_freq_df, path=[px.Constant("Positive Reviews"), 'word'], values='freq',
+                                           color='freq', hover_data={'freq': True},
+                                           color_continuous_scale='Greens')
+                            fig.update_traces(textinfo="label", textfont_size=20)
+                            fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
+                            st.plotly_chart(fig, use_container_width=True)
                         else:
                             st.info("Not enough text to generate a positive word cloud.")
                     else:
                         st.info("No positive reviews match the current filters.")
-
+        
                 # --- Negative Word Cloud ---
                 with col2:
                     st.markdown("#### Key Themes in Negative Reviews")
                     negative_ids = filtered_data[filtered_data['sentiment'] == 'Negative']['review_id'].tolist()
                     negative_text = get_text_for_reviews(conn, negative_ids)
-
+        
                     if negative_text:
-                        negative_wc_fig = create_wordcloud_figure(negative_text, "Negative Keywords")
-                        # --- FIX: Check if the figure was created before displaying it ---
-                        if negative_wc_fig:
-                            st.pyplot(negative_wc_fig, use_container_width=True)
+                        # Generate frequency data
+                        negative_freq_df = generate_word_frequency(negative_text)
+                        if not negative_freq_df.empty:
+                            # Create interactive word cloud with Plotly
+                            fig = px.treemap(negative_freq_df, path=[px.Constant("Negative Reviews"), 'word'], values='freq',
+                                           color='freq', hover_data={'freq': True},
+                                           color_continuous_scale='Reds')
+                            fig.update_traces(textinfo="label", textfont_size=20)
+                            fig.update_layout(margin = dict(t=50, l=25, r=25, b=25))
+                            st.plotly_chart(fig, use_container_width=True)
                         else:
                             st.info("Not enough text to generate a negative word cloud.")
                     else:
-                        st.info("No negative reviews match the current filters.")                
+                        st.info("No negative reviews match the current filters.")     
             # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
