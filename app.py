@@ -382,16 +382,19 @@ if conn:
                                 st.session_state.discrepancy_review_id = None
                                 st.rerun()
         
-                        # This logic now reliably uses the stable 'pointIndex'
+                        # This logic now reliably uses the stable 'pointIndex' and validates it
                         if selected_point:
                             point_data = selected_point[0]
                             if 'pointIndex' in point_data:
                                 clicked_index = point_data['pointIndex']
-                                review_id = filtered_data.iloc[clicked_index]['review_id']
-                                # Set session state and rerun to display the review text
-                                if st.session_state.get('discrepancy_review_id') != review_id:
-                                    st.session_state.discrepancy_review_id = review_id
-                                    st.rerun()
+                                
+                                # --- FIX: Check if the index is valid before accessing the DataFrame ---
+                                if clicked_index < len(filtered_data):
+                                    review_id = filtered_data.iloc[clicked_index]['review_id']
+                                    # Set session state and rerun to display the review text
+                                    if st.session_state.get('discrepancy_review_id') != review_id:
+                                        st.session_state.discrepancy_review_id = review_id
+                                        st.rerun()
                     else:
                         st.warning("No reviews match the selected filters.")
         
