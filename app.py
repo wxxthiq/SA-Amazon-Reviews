@@ -490,58 +490,59 @@ if conn:
                 st.warning("No reviews match the current filter criteria.")
 
         with reviews_tab:
-            st.subheader("Browse All Individual Reviews for this Product")
+            st.subheader("Browse Individual Reviews")
+            st.caption("Displaying 25 reviews at a time for optimal performance.")
         
-            # This function is now more robust for pagination
-            def get_reviews_for_page(page_num):
-                return get_all_reviews_paginated(
-                    conn,
-                    selected_asin,
-                    page_size=25,
-                    page_num=page_num,
-                    sort_order="Newest First" # Default sort, user can change in the table
-                )
-        
-            # If it's the first time loading this tab, fetch the initial page
-            if 'loaded_reviews_df' not in st.session_state or st.session_state.loaded_reviews_df.empty:
-                initial_reviews, has_more = get_reviews_for_page(1)
-                st.session_state.loaded_reviews_df = initial_reviews
-                st.session_state.has_more_reviews = has_more
+            # We only need to keep track of the current page number
+            if 'all_reviews_page' not in st.session_state:
                 st.session_state.all_reviews_page = 1
         
-            # --- "Load More" Button ---
-            # This button now only appears if there are more reviews to fetch
-            if st.session_state.get('has_more_reviews', False):
-                if st.button("Load 25 More Reviews", use_container_width=True):
-                    st.session_state.all_reviews_page += 1
-                    new_reviews, has_more = get_reviews_for_page(st.session_state.all_reviews_page)
-                    
-                    # Efficiently append only the new reviews
-                    st.session_state.loaded_reviews_df = pd.concat(
-                        [st.session_state.loaded_reviews_df, new_reviews], 
-                        ignore_index=True
-                    )
-                    st.session_state.has_more_reviews = has_more
-                    st.rerun() # Rerun to update the view with the new data
+            # --- Fetch ONLY the current page's data ---
+            # This is the key to performance: we never store more than one page of reviews in memory.
+            reviews_for_this_page_df, has_more_reviews = get_all_reviews_paginated(
+                conn,
+                selected_asin,
+                page_size=25,
+                page_num=st.session_state.all_reviews_page,
+                sort_order="Newest First" # Default sort, user can change in table
+            )
         
             # --- Display the DataFrame ---
-            if not st.session_state.loaded_reviews_df.empty:
-                total_reviews_count = product_details.get('review_count', 0)
-                st.info(f"Displaying {len(st.session_state.loaded_reviews_df)} of {int(total_reviews_count)} reviews. Click any column header to sort.")
-                
+            if not reviews_for_this_page_df.empty:
+                total_reviews_count = int(product_details.get('review_count', 0))
+                total_pages = (total_reviews_count + 24) // 25
+        
                 st.dataframe(
-                    st.session_state.loaded_reviews_df[['rating', 'sentiment', 'date', 'text']],
+                    reviews_for_this_page_df[['rating', 'sentiment', 'date', 'text']],
                     use_container_width=True,
                     hide_index=True,
                     height=600
                 )
-                
-                # Display a message when all reviews are loaded
-                if not st.session_state.get('has_more_reviews', True):
-                    st.success("You've reached the end of the reviews for this product! 🎉")
-            else:
-                st.warning("No reviews were found for this product.")
-                
+        
+                st.markdown("---")
+        
+                # --- Pagination Controls ---
+                nav_cols = st.columns([1, 1, 1])
+        
+                with nav_cols[0]:
+                    if st.session_state.all_reviews_page > 1:
+                        if st.button("⬅️ Previous Reviews", use_container_width=True):
+                            st.session_state.all_reviews_page -= 1
+                            st.rerun()
+        
+                with nav_cols[1]:
+                    # Display current page and total pages
+                    st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
+        
+                with nav_cols[2]:
+                    # The `has_more_reviews` flag tells us if a "Next" button is needed
+                    if has_more_reviews:
+                        if st.button("Next Reviews ➡️", use_container_width=True):
+                            st.session_state.all_reviews_page += 1
+                            st.rerun()
+
+    else:
+        st.warning("No reviews were found for this product.")                
     # --- MAIN SEARCH PAGE ---
     else:
         st.session_state.review_page = 1
