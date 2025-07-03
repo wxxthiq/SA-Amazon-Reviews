@@ -432,76 +432,68 @@ if conn:
             if 'all_reviews_page' not in st.session_state:
                 st.session_state.all_reviews_page = 1
             
-            # If the user is viewing a new product, reset to the first page.
-            # This prevents viewing page 5 of a product with only 2 pages of reviews.
+            # Reset page to 1 if the selected product changes
             if 'current_product_asin' not in st.session_state or st.session_state.current_product_asin != selected_asin:
                 st.session_state.current_product_asin = selected_asin
                 st.session_state.all_reviews_page = 1
         
-            # --- This function will now be cached, but only for the specific page requested ---
-            # This is the most efficient way to handle this. Caching the specific page
-            # makes navigating back and forth between pages instantaneous.
-            @st.cache_data(show_spinner="Fetching reviews...")
-            def get_paginated_reviews(_conn, asin, page_num):
-                """
-                Fetches a single, specific page of reviews from the database.
-                This is highly memory-efficient.
-                """
-                offset = (page_num - 1) * 25
-                query = "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? ORDER BY date DESC LIMIT 25 OFFSET ?"
-                df = pd.read_sql(query, _conn, params=(asin, offset))
-                return df
-                
-            # --- We also need the total count for pagination controls ---
+            # --- Step 1: Get the total review count (this is fast and can be cached) ---
             @st.cache_data(show_spinner=False)
             def get_total_review_count(_conn, asin):
-                """
-                Gets the total number of reviews for a product.
-                This is cached for performance as it never changes for a product.
-                """
-                query = "SELECT COUNT(*) FROM reviews WHERE parent_asin = ?"
-                count = pd.read_sql(query, _conn, params=(asin,)).iloc[0, 0]
+                cursor = _conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM reviews WHERE parent_asin = ?", (asin,))
+                count = cursor.fetchone()[0]
                 return count
         
             total_reviews = get_total_review_count(conn, selected_asin)
             total_pages = (total_reviews + 24) // 25
         
-            # Fetch and display only the reviews for the current page
-            reviews_for_this_page_df = get_paginated_reviews(conn, selected_asin, st.session_state.all_reviews_page)
+            # --- Step 2: Fetch and display ONLY the current page's data without pandas ---
+            st.markdown("---")
             
-            # --- Display the DataFrame ---
-            if not reviews_for_this_page_df.empty:
-                st.dataframe(
-                    reviews_for_this_page_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=600
-                )
+            # This is the key: we use a direct cursor and loop, which is extremely memory-efficient.
+            offset = (st.session_state.all_reviews_page - 1) * 25
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ? ORDER BY date DESC LIMIT 25 OFFSET ?",
+                (selected_asin, offset)
+            )
+            
+            # Loop through the results and display them. No DataFrame is ever created.
+            reviews_on_page = cursor.fetchall()
         
-                st.markdown("---")
-        
-                # --- Pagination Controls ---
-                nav_cols = st.columns([1, 1, 1])
-        
-                with nav_cols[0]:
-                    if st.session_state.all_reviews_page > 1:
-                        # Add a unique key to each button
-                        if st.button("⬅️ Previous Reviews", use_container_width=True, key="prev_reviews"):
-                            st.session_state.all_reviews_page -= 1
-                            st.rerun()
-        
-                with nav_cols[1]:
-                    if total_pages > 0:
-                        st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
-        
-                with nav_cols[2]:
-                    if st.session_state.all_reviews_page < total_pages:
-                        # Add a unique key to each button
-                        if st.button("Next Reviews ➡️", use_container_width=True, key="next_reviews"):
-                            st.session_state.all_reviews_page += 1
-                            st.rerun()
+            if reviews_on_page:
+                for row in reviews_on_page:
+                    rating, sentiment, date, text = row
+                    sentiment_color = "green" if sentiment == 'Positive' else "red" if sentiment == 'Negative' else "orange"
+                    
+                    # Display each review in a visually separated container
+                    with st.container(border=True):
+                        st.markdown(f"**Rating: :{sentiment_color}[{rating} ⭐]** | **Date:** {date}")
+                        st.markdown(f"> {text}")
             else:
-                st.warning("No reviews were found for this product.")
+                 st.warning("No reviews were found for this product.")
+        
+            st.markdown("---")
+        
+            # --- Step 3: Pagination Controls ---
+            nav_cols = st.columns([1, 1, 1])
+        
+            with nav_cols[0]:
+                if st.session_state.all_reviews_page > 1:
+                    if st.button("⬅️ Previous", use_container_width=True, key="prev_reviews"):
+                        st.session_state.all_reviews_page -= 1
+                        st.rerun()
+        
+            with nav_cols[1]:
+                if total_pages > 0:
+                    st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
+        
+            with nav_cols[2]:
+                if st.session_state.all_reviews_page < total_pages:
+                    if st.button("Next ➡️", use_container_width=True, key="next_reviews"):
+                        st.session_state.all_reviews_page += 1
+                        st.rerun()
     
             # --- MAIN SEARCH PAGE ---
     else:
