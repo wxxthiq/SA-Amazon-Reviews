@@ -159,7 +159,7 @@ def get_single_review_text(conn, review_id):
     """Fetches the full text of a single review by its unique ID."""
     result = conn.execute("SELECT text FROM reviews WHERE review_id = ?", (review_id,)).fetchone()
     return result[0] if result else "Review text not found."
-
+    
 @st.cache_data
 def get_text_for_reviews(_conn, review_ids):
     """
@@ -174,49 +174,34 @@ def get_text_for_reviews(_conn, review_ids):
     text_df = pd.read_sql(query, _conn, params=tuple(review_ids))
     return " ".join(text_df['text'].dropna())
     
+# This new function replaces get_discrepancy_data and get_rating_distribution_data
 @st.cache_data
 def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, date_range):
     """
     Fetches all necessary data for the detail page, applying all filters directly in SQL.
     This is the core of the on-the-fly analysis.
-    NOW INCLUDES THE REVIEW TEXT FOR WORD CLOUDS.
     """
-    # --- FIX: The query now joins with the 'reviews' table to get the 'text' column ---
-    query = """
-    SELECT
-        r.review_id,
-        r.rating,
-        d.text_polarity,
-        r.sentiment,
-        r.date,
-        r.text
-    FROM
-        reviews r
-    JOIN
-        discrepancy_data d ON r.review_id = d.review_id
-    WHERE
-        r.parent_asin = ?
-    """
+    query = "SELECT review_id, rating, text_polarity, sentiment, date FROM discrepancy_data WHERE parent_asin = ?"
     params = [asin]
 
-    # Dynamically add conditions for each filter if it's being used
     if rating_filter:
-        query += f" AND r.rating IN ({','.join('?' for _ in rating_filter)})"
+        query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
         params.extend(rating_filter)
 
     if sentiment_filter:
-        query += f" AND r.sentiment IN ({','.join('?' for _ in sentiment_filter)})"
+        query += f" AND sentiment IN ({','.join('?' for _ in sentiment_filter)})"
         params.extend(sentiment_filter)
 
     if date_range and len(date_range) == 2:
         start_date = date_range[0].strftime('%Y-%m-%d')
         end_date = date_range[1].strftime('%Y-%m-%d')
-        query += " AND r.date BETWEEN ? AND ?"
+        query += " AND date BETWEEN ? AND ?"
         params.extend([start_date, end_date])
 
     df = pd.read_sql(query, _conn, params=params)
 
     if not df.empty:
+        # --- STABLE JITTER CALCULATION ---
         # We use a fixed seed for the random number generator. This ensures that
         # the jitter is the same every time for the same filtered dataset.
         rng = np.random.default_rng(seed=42) # Using a fixed seed
@@ -556,7 +541,6 @@ if conn:
                         st.pyplot(negative_wc_fig, use_container_width=True)
                     else:
                         st.info("No negative reviews match the current filters.")
-                        
             # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
