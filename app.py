@@ -325,98 +325,117 @@ if conn:
 
         # Replace the entire 'with vis_tab:' block with this new code
         with vis_tab:
-            st.subheader("Live Analysis on Filtered Data")
-        
-            # This is the single source of truth for our visualizations
-            st.write(f"Displaying analysis for **{len(filtered_data)}** reviews matching your criteria.")
-        
-            if filtered_data.empty:
-                st.warning("No reviews match the selected filters. Please adjust your selections in the sidebar.")
-            else:
-                col1, col2 = st.columns(2)
-        
-                # NEW, DYNAMIC CHART LOGIC
-                with col1:
-                    st.markdown("#### Rating Distribution (Live)")
-                
-                    # Dynamically calculate rating counts from the filtered data
-                    rating_counts_df = filtered_data['rating'].value_counts().sort_index().reset_index()
-                    rating_counts_df.columns = ['Rating', 'Count']
-                
-                    chart = alt.Chart(rating_counts_df).mark_bar().encode(
-                        x=alt.X('Rating:O', title="Stars"),
-                        y=alt.Y('Count:Q', title="Number of Reviews"),
-                        tooltip=['Rating', 'Count']
-                    ).properties(
-                        title="Filtered Rating Distribution"
-                    )
-                    st.altair_chart(chart, use_container_width=True)
-        
-                with col2:
-                    st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
-                    
-                    # This DataFrame already contains rating, sentiment, polarity, and review_id.
-                    discrepancy_df = get_filtered_data_for_product(
-                        conn, selected_asin, selected_ratings, selected_sentiments, selected_date_range
-                    )
-                
-                    if not discrepancy_df.empty:
-                        # 2. Calculate the 'discrepancy' column on the filtered data.
-                        discrepancy_df['discrepancy'] = (discrepancy_df['text_polarity'] - ((discrepancy_df['rating'] - 3.0) / 2.0)).abs()
-                
-                        # 3. Add jitter for better visualization.
-                        discrepancy_df['rating_jittered'] = discrepancy_df['rating'] + np.random.uniform(-0.1, 0.1, size=len(discrepancy_df))
-                        discrepancy_df['text_polarity_jittered'] = discrepancy_df['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(discrepancy_df))
-                
-                        # 4. Now, create the plot with the fully prepared DataFrame.
-                        plot = px.scatter(
-                            discrepancy_df, # Use the prepared DataFrame
-                            x="rating_jittered",
-                            y="text_polarity_jittered",
-                            color="discrepancy", # This column now exists
-                            color_continuous_scale=px.colors.sequential.Viridis,
-                            custom_data=['review_id'],
-                            hover_name='review_id',
-                            hover_data={
-                                'rating': True, 
-                                'text_polarity': ':.2f',
-                                'discrepancy': ':.2f',
-                                'rating_jittered': False,
-                                'text_polarity_jittered': False
-                            }
-                        )
-                        plot.update_xaxes(title_text='Rating')
-                        plot.update_yaxes(title_text='Text Sentiment Polarity')
-                
-                        selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
+    st.subheader("Live Analysis on Filtered Data")
 
-                        # --- Display for Discrepancy Plot Drill-Down ---
-                        if st.session_state.discrepancy_review_id:
-                            st.markdown("---")
-                            st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
-                        
-                            review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
-                        
-                            with st.container(border=True):
-                                st.markdown(f"> {review_text}")
-                        
-                            # Add a button to clear the selection and hide the review
-                            if st.button("Close Review Snippet"):
-                                st.session_state.discrepancy_review_id = None
-                                st.rerun()
-                                
-                        # NEW, STABLE LOGIC
-                        if selected_point:
-                            point_data = selected_point[0]
-                            if 'pointIndex' in point_data:
-                                clicked_index = point_data['pointIndex']
-                                # Set our session state variable with the ID of the clicked review
-                                st.session_state.discrepancy_review_id = discrepancy_df.iloc[clicked_index]['review_id']
-                    else:
-                        st.warning("No reviews match the selected filters.")
+    # This is the single source of truth for our visualizations
+    st.write(f"Displaying analysis for **{len(filtered_data)}** reviews matching your criteria.")
+
+    if filtered_data.empty:
+        st.warning("No reviews match the selected filters. Please adjust your selections in the sidebar.")
+    else:
+        # --- Top Row: Existing Charts ---
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### Rating Distribution (Live)")
+            rating_counts_df = filtered_data['rating'].value_counts().sort_index().reset_index()
+            rating_counts_df.columns = ['Rating', 'Count']
             
-            # This code goes at the end of the `with vis_tab:` block          
-            st.markdown("---")
+            chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                x=alt.X('Rating:O', title="Stars"),
+                y=alt.Y('Count:Q', title="Number of Reviews"),
+                tooltip=['Rating', 'Count']
+            ).properties(
+                title="Filtered Rating Distribution"
+            )
+            st.altair_chart(chart, use_container_width=True)
+
+        with col2:
+            st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
+            
+            # The 'filtered_data' DataFrame is already prepared with jitter
+            plot = px.scatter(
+                filtered_data,
+                x="rating_jittered",
+                y="text_polarity_jittered",
+                color="discrepancy",
+                color_continuous_scale=px.colors.sequential.Viridis,
+                custom_data=['review_id'],
+                hover_name='review_id',
+                hover_data={
+                    'rating': True, 
+                    'text_polarity': ':.2f',
+                    'discrepancy': ':.2f',
+                    'rating_jittered': False,
+                    'text_polarity_jittered': False
+                }
+            )
+            plot.update_xaxes(title_text='Rating')
+            plot.update_yaxes(title_text='Text Sentiment Polarity')
+
+            selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
+
+            # Logic for displaying the selected review text
+            if selected_point:
+                point_data = selected_point[0]
+                if 'pointIndex' in point_data:
+                    clicked_index = point_data['pointIndex']
+                    st.session_state.discrepancy_review_id = filtered_data.iloc[clicked_index]['review_id']
+            
+            if st.session_state.discrepancy_review_id:
+                st.markdown("---")
+                st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
+                review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
+                with st.container(border=True):
+                    st.markdown(f"> {review_text}")
+                if st.button("Close Review Snippet"):
+                    st.session_state.discrepancy_review_id = None
+                    st.rerun()
+
+        st.markdown("---") # Visual separator
+
+        # --- Bottom Row: NEW Time-Series Charts ---
+        
+        # Prepare data for time-series charts
+        # Ensure 'date' column is in datetime format
+        time_df = filtered_data.copy()
+        time_df['date'] = pd.to_datetime(time_df['date'])
+        
+        # Resample data by month to get a smoother trend line
+        monthly_data = time_df.set_index('date').resample('M').agg({
+            'rating': 'mean',
+            'text_polarity': 'mean'
+        }).reset_index()
+
+        col3, col4 = st.columns(2)
+
+        with col3:
+            st.markdown("#### Average Rating Over Time")
+            if not monthly_data.empty:
+                rating_chart = alt.Chart(monthly_data).mark_line(point=True).encode(
+                    x=alt.X('date:T', title='Month'),
+                    y=alt.Y('rating:Q', title='Average Star Rating', scale=alt.Scale(domain=[1, 5])),
+                    tooltip=[alt.Tooltip('date:T', title='Month'), alt.Tooltip('rating:Q', title='Avg. Rating', format='.2f')]
+                ).properties(
+                    title="Monthly Average Rating"
+                )
+                st.altair_chart(rating_chart, use_container_width=True)
+            else:
+                st.info("Not enough data to display a trend.")
+
+        with col4:
+            st.markdown("#### Average Sentiment Over Time")
+            if not monthly_data.empty:
+                sentiment_chart = alt.Chart(monthly_data).mark_line(point=True, color='orange').encode(
+                    x=alt.X('date:T', title='Month'),
+                    y=alt.Y('text_polarity:Q', title='Average Sentiment Polarity', scale=alt.Scale(domain=[-1, 1])),
+                    tooltip=[alt.Tooltip('date:T', title='Month'), alt.Tooltip('text_polarity:Q', title='Avg. Polarity', format='.2f')]
+                ).properties(
+                    title="Monthly Average Sentiment Polarity"
+                )
+                st.altair_chart(sentiment_chart, use_container_width=True)
+            else:
+                st.info("Not enough data to display a trend.")
     
             # --- MAIN SEARCH PAGE ---
     else:
