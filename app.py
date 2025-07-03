@@ -170,7 +170,6 @@ def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, 
     query = "SELECT review_id, rating, text_polarity, sentiment, date FROM discrepancy_data WHERE parent_asin = ?"
     params = [asin]
 
-    # Dynamically add conditions for each filter if it's being used
     if rating_filter:
         query += f" AND rating IN ({','.join('?' for _ in rating_filter)})"
         params.extend(rating_filter)
@@ -180,7 +179,6 @@ def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, 
         params.extend(sentiment_filter)
 
     if date_range and len(date_range) == 2:
-        # Ensure the date format matches what's in the database ('YYYY-MM-DD')
         start_date = date_range[0].strftime('%Y-%m-%d')
         end_date = date_range[1].strftime('%Y-%m-%d')
         query += " AND date BETWEEN ? AND ?"
@@ -188,11 +186,10 @@ def get_filtered_data_for_product(_conn, asin, rating_filter, sentiment_filter, 
 
     df = pd.read_sql(query, _conn, params=params)
 
-    # Calculate discrepancy and STABLE jitter on the filtered data
     if not df.empty:
         # --- STABLE JITTER CALCULATION ---
         # We use a fixed seed for the random number generator. This ensures that
-        # the jitter is the same every time for the same dataset.
+        # the jitter is the same every time for the same filtered dataset.
         rng = np.random.default_rng(seed=42) # Using a fixed seed
 
         df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
