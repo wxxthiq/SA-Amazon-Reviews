@@ -422,48 +422,76 @@ if conn:
             # This code goes at the end of the `with vis_tab:` block          
             st.markdown("---")
 
-        #he
+        
         with reviews_tab:
-            st.subheader("Filtered Individual Reviews")
-            st.caption("This table shows all reviews that match the filters selected in the sidebar.")
+            st.subheader("Browse Individual Reviews")
+            st.caption("Displaying 25 reviews at a time for optimal performance.")
         
-            # --- Directly fetch all reviews that match the sidebar filters ---
-            # This query runs every time the tab is viewed, ensuring the data is always fresh
-            # and avoiding storing large dataframes in session state.
+            # We only need to keep track of the current page number
+            if 'all_reviews_page' not in st.session_state:
+                st.session_state.all_reviews_page = 1
         
+            # --- Fetch ONLY the current page's data ---
+            # This is the key to performance: we never store more than one page of reviews in memory.
+            
+            # Base query
             query = "SELECT rating, sentiment, date, text FROM reviews WHERE parent_asin = ?"
             params = [selected_asin]
         
-            # Dynamically add conditions for each filter if it's being used
+            # Dynamically add filter conditions
             if selected_ratings:
                 query += f" AND rating IN ({','.join('?' for _ in selected_ratings)})"
                 params.extend(selected_ratings)
-        
             if selected_sentiments:
                 query += f" AND sentiment IN ({','.join('?' for _ in selected_sentiments)})"
                 params.extend(selected_sentiments)
-        
             if selected_date_range and len(selected_date_range) == 2:
                 start_date = selected_date_range[0].strftime('%Y-%m-%d')
                 end_date = selected_date_range[1].strftime('%Y-%m-%d')
                 query += " AND date BETWEEN ? AND ?"
                 params.extend([start_date, end_date])
         
-            # Add a default sort order
-            #query += " ORDER BY date DESC"
+            # Get the total count of reviews that match the filters for pagination info
+            count_query = query.replace("rating, sentiment, date, text", "COUNT(*)")
+            total_reviews_count = pd.read_sql(count_query, conn, params=params).iloc[0, 0]
+            total_pages = (total_reviews_count + 24) // 25
         
-            # Execute the query and fetch the data
-            filtered_reviews_df = pd.read_sql(query, conn, params=params)
+            # Add sorting and pagination to the main query
+            query += " ORDER BY date DESC LIMIT 25 OFFSET ?"
+            offset = (st.session_state.all_reviews_page - 1) * 25
+            params.append(offset)
+            
+            reviews_for_this_page_df = pd.read_sql(query, conn, params=params)
         
             # --- Display the DataFrame ---
-            if not filtered_reviews_df.empty:
-                st.info(f"Displaying **{len(filtered_reviews_df)}** reviews. Click any column header to sort the table.")
+            if not reviews_for_this_page_df.empty:
                 st.dataframe(
-                    filtered_reviews_df,
+                    reviews_for_this_page_df,
                     use_container_width=True,
                     hide_index=True,
-                    height=600 # Use a fixed height for a scrollable table
+                    height=600
                 )
+        
+                st.markdown("---")
+        
+                # --- Pagination Controls ---
+                nav_cols = st.columns([1, 1, 1])
+        
+                with nav_cols[0]:
+                    if st.session_state.all_reviews_page > 1:
+                        if st.button("⬅️ Previous Reviews", use_container_width=True):
+                            st.session_state.all_reviews_page -= 1
+                            st.rerun()
+        
+                with nav_cols[1]:
+                    if total_pages > 0:
+                        st.write(f"Page **{st.session_state.all_reviews_page}** of **{total_pages}**")
+        
+                with nav_cols[2]:
+                    if st.session_state.all_reviews_page < total_pages:
+                        if st.button("Next Reviews ➡️", use_container_width=True):
+                            st.session_state.all_reviews_page += 1
+                            st.rerun()
             else:
                 st.warning("No reviews match the current filter criteria. Please adjust your selections in the sidebar.")
     
