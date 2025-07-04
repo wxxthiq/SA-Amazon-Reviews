@@ -427,33 +427,28 @@ if conn:
                         )
                         st.plotly_chart(sentiment_stream_chart, use_container_width=True)
     
-        # ======================== DATA EXPLORER TAB ========================
+        # ======================== DATA EXPLORER TAB (Snapshot Method) ========================
         with explorer_tab:
             
             st.subheader("Interactive Data Explorer")
             st.caption("This is a data snapshot based on the filters active when you first visited this tab. It does not update live.")
     
-            # --- FIX: Use session_state for a 'sticky' one-time data load ---
-    
-            # 1. Check if the explorer data has already been loaded into the session state.
+            # Check if the explorer data is already in the session state
             if 'explorer_data' not in st.session_state:
-                # 2. If not, load it ONCE using the current filters and store it.
-                # We can reuse the efficient, cached function from the other tab.
+                # If not, load it ONCE using the current chart_data and store it.
                 with st.spinner("Generating data snapshot for explorer..."):
-                    date_tuple = (selected_date_range[0].strftime('%Y-%m-%d'), selected_date_range[1].strftime('%Y-%m-%d'))
-                    st.session_state.explorer_data = get_data_for_sentiment_charts(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple)
+                    # We reuse the data already loaded for the other tab if available
+                    st.session_state.explorer_data = chart_data
     
-            # 3. Use the data from the session state. This will not change even if sidebar filters are updated.
+            # Use the data from the session state
             explorer_df = st.session_state.explorer_data
             
             if not explorer_df.empty:
                 st.write(f"Exploring a snapshot of **{len(explorer_df)}** reviews.")
-                # Generate the HTML for the Pygwalker interface
                 pyg_html = pyg.to_html(explorer_df)
-                # Embed the HTML into the Streamlit app
                 components.html(pyg_html, height=1000, scrolling=True)
             else:
-                st.warning("No data available to explore. Adjust filters on the 'Sentiment Analysis' tab and revisit.")
+                st.warning("No data available to explore. A snapshot will be generated when data is available on the 'Sentiment Analysis' tab.")
     
         # ======================== WORD CLOUDS TAB ========================
         # with wordcloud_tab:
