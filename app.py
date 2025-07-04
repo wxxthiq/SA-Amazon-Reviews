@@ -346,44 +346,56 @@ if conn:
                     ).properties(title="Filtered Rating Distribution")
                     st.altair_chart(chart, use_container_width=True)
     
+                #
                 with col2:
                     st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
-                    plot = px.scatter(chart_data, x="rating_jittered", y="text_polarity_jittered", color="discrepancy",
-                                      color_continuous_scale=px.colors.sequential.Viridis, custom_data=['review_id'])
+                    
+                    # We use the 'chart_data' DataFrame which is already filtered and prepared
+                    plot = px.scatter(
+                        chart_data,
+                        x="rating_jittered",
+                        y="text_polarity_jittered",
+                        color="discrepancy",
+                        color_continuous_scale=px.colors.sequential.Viridis,
+                        custom_data=['review_id'],
+                        hover_name='review_id',
+                        hover_data={
+                            'rating': True, 'text_polarity': ':.2f', 'discrepancy': ':.2f',
+                            'rating_jittered': False, 'text_polarity_jittered': False
+                        }
+                    )
+                    plot.update_xaxes(title_text='Rating')
+                    plot.update_yaxes(title_text='Text Sentiment Polarity')
                     selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
+                    
                     # --- DEFINITIVE FIX FOR CLICK AND CLOSE LOGIC ---
     
-                    # 1. Initialize a flag to check if the close button was pressed.
-                    close_button_pressed = False
-    
-                    # 2. Display the review snippet if an ID is in the session state.
+                    # 1. Handle the "Close" button click first and exit immediately.
+                    # This is the highest priority action.
                     if st.session_state.get('discrepancy_review_id'):
                         st.markdown("---")
                         st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
                         review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
+                        
                         with st.container(border=True):
                             st.markdown(f"> {review_text}")
                         
-                        # 3. If the close button is clicked, update the state and set the flag.
+                        # If the close button is clicked, clear the state and force an immediate rerun.
                         if st.button("Close Review Snippet", key="close_snippet"):
                             st.session_state.discrepancy_review_id = None
-                            close_button_pressed = True
+                            st.rerun() # This is crucial to prevent the stale click event from being processed.
     
-                    # 4. Only process a *new* plot click if the close button was NOT just pressed.
-                    if selected_point and not close_button_pressed:
+                    # 2. If the close button was NOT pressed, then process any new plot clicks.
+                    if selected_point:
                         point_data = selected_point[0]
                         if 'pointIndex' in point_data:
                             clicked_index = point_data['pointIndex']
                             if clicked_index < len(chart_data):
                                 review_id = chart_data.iloc[clicked_index]['review_id']
-                                # Only update and rerun if it's a new review selection
+                                # Only rerun if it's a new review selection.
                                 if st.session_state.get('discrepancy_review_id') != review_id:
                                     st.session_state.discrepancy_review_id = review_id
                                     st.rerun()
-    
-                    # 5. If the close button was pressed, force one final rerun to clear the view.
-                    if close_button_pressed:
-                        st.rerun()
     
                 st.markdown("---")
                 time_df = chart_data.copy()
