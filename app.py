@@ -322,7 +322,7 @@ if conn:
                     df['text_polarity_jittered'] = df['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(df))
                 return df
     
-            st.subheader("Live Analysis on Filtered Data")
+            st.subheader("Analysis on Filtered Data")
             date_tuple = (selected_date_range[0].strftime('%Y-%m-%d'), selected_date_range[1].strftime('%Y-%m-%d'))
             chart_data = get_data_for_sentiment_charts(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple)
             
@@ -333,7 +333,7 @@ if conn:
             else:
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.markdown("#### Rating Distribution (Live)")
+                    st.markdown("#### Rating Distribution")
                     rating_counts_df = chart_data['rating'].value_counts().sort_index().reset_index()
                     rating_counts_df.columns = ['Rating', 'Count']
                     chart = alt.Chart(rating_counts_df).mark_bar().encode(
@@ -343,7 +343,7 @@ if conn:
                     ).properties(title="Filtered Rating Distribution")
                     st.altair_chart(chart, use_container_width=True)
                                     # --- Sentiment Distribution Chart (NEW) ---
-                    st.markdown("#### Sentiment Distribution (Live)")
+                    st.markdown("#### Sentiment Distribution")
                     sentiment_counts_df = chart_data['sentiment'].value_counts().reset_index()
                     sentiment_counts_df.columns = ['Sentiment', 'Count']
                     
@@ -361,7 +361,7 @@ if conn:
                     st.altair_chart(sentiment_chart, use_container_width=True)
                 #
                 with col2:
-                    st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
+                    st.markdown("#### Rating vs. Text Discrepancy")
                     
                     # We use the 'chart_data' DataFrame which is already filtered and prepared
                     plot = px.scatter(
