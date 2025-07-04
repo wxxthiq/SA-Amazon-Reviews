@@ -250,6 +250,23 @@ if conn:
             image_urls_str = product_details.get('image_urls')
             image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) else []
             st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, use_container_width=True)
+            # --- RESTORED IMAGE GALLERY POPOVER ---
+            if image_urls:
+                with st.popover("View Image Gallery"):
+                    if 'image_index' not in st.session_state or st.session_state.image_index >= len(image_urls):
+                        st.session_state.image_index = 0
+                    
+                    def next_image():
+                        st.session_state.image_index = (st.session_state.image_index + 1) % len(image_urls)
+                    def prev_image():
+                        st.session_state.image_index = (st.session_state.image_index - 1 + len(image_urls)) % len(image_urls)
+    
+                    st.image(image_urls[st.session_state.image_index], use_container_width=True)
+                    if len(image_urls) > 1:
+                        g_col1, g_col2, g_col3 = st.columns([1, 8, 1])
+                        g_col1.button("⬅️", on_click=prev_image, use_container_width=True, key="gallery_prev")
+                        g_col2.caption(f"Image {st.session_state.image_index + 1} of {len(image_urls)}")
+                        g_col3.button("➡️", on_click=next_image, use_container_width=True, key="gallery_next")
         with right_col:
             st.header(product_details['product_title'])
             st.caption(f"Category: {product_details['category']}")
@@ -335,8 +352,19 @@ if conn:
                                       color_continuous_scale=px.colors.sequential.Viridis, custom_data=['review_id'])
                     selected_point = plotly_events(plot, click_event=True, key="discrepancy_click")
                     if selected_point:
-                        # Your logic for handling clicks on the discrepancy plot
-                        pass
+                        clicked_index = selected_point[0]['pointIndex']
+                        if clicked_index < len(chart_data):
+                            st.session_state.discrepancy_review_id = chart_data.iloc[clicked_index]['review_id']
+                    
+                    if st.session_state.get('discrepancy_review_id'):
+                        st.markdown("---")
+                        st.subheader(f"Selected Review: {st.session_state.discrepancy_review_id}")
+                        review_text = get_single_review_text(conn, st.session_state.discrepancy_review_id)
+                        with st.container(border=True):
+                            st.markdown(f"> {review_text}")
+                        if st.button("Close Review Snippet", key="close_snippet"):
+                            del st.session_state.discrepancy_review_id
+                            st.rerun()
     
                 st.markdown("---")
                 time_df = chart_data.copy()
