@@ -295,7 +295,7 @@ if conn:
         st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
     
         # --- RENDER TABS ---
-        vis_tab, wordcloud_tab, keyword_tab  = st.tabs(["📊 Sentiment Analysis","☁️ Word Clouds", "🔑 Keyword Analysis"])
+        vis_tab, wordcloud_tab, breakdown_tab  = st.tabs(["📊 Sentiment Analysis","☁️ Word Clouds", "Breakdown"])
     
         # ======================== SENTIMENT ANALYSIS TAB ========================
         with vis_tab:
