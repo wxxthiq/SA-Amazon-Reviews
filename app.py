@@ -3,8 +3,7 @@ import pandas as pd
 import numpy as np
 import sqlite3
 from wordcloud import WordCloud
-import matplotlib.pyplot as plt
-import altair as alt
+wimport altair as alt
 from streamlit_plotly_events import plotly_events
 import re
 from collections import Counter
@@ -19,8 +18,6 @@ import logging
 import kaggle
 from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder
-import pygwalker as pyg
-import streamlit.components.v1 as components
 
 # --- Configure logging ---
 logging.basicConfig(level=logging.INFO)
@@ -427,29 +424,55 @@ if conn:
                         )
                         st.plotly_chart(sentiment_stream_chart, use_container_width=True)
     
-        # ======================== DATA EXPLORER TAB (Snapshot Method) ========================
-        with explorer_tab:
+        # ======================== KEYWORD ANALYSIS TAB ========================
+        with keyword_tab:
             
-            st.subheader("Interactive Data Explorer")
-            st.caption("This is a data snapshot based on the filters active when you first visited this tab. It does not update live.")
+            st.subheader("On-the-Fly Keyword Sentiment Analysis")
+            st.caption("Enter a keyword to see the sentiment breakdown for all reviews that mention it. This analysis is independent of the sidebar filters.")
     
-            # Check if the explorer data is already in the session state
-            if 'explorer_data' not in st.session_state:
-                # If not, load it ONCE using the current chart_data and store it.
-                with st.spinner("Generating data snapshot for explorer..."):
-                    # We reuse the data already loaded for the other tab if available
-                    st.session_state.explorer_data = chart_data
+            keyword = st.text_input("Enter a keyword or phrase (e.g., battery, screen, fit)", key="keyword_input")
     
-            # Use the data from the session state
-            explorer_df = st.session_state.explorer_data
-            
-            if not explorer_df.empty:
-                st.write(f"Exploring a snapshot of **{len(explorer_df)}** reviews.")
-                pyg_html = pyg.to_html(explorer_df)
-                components.html(pyg_html, height=1000, scrolling=True)
-            else:
-                st.warning("No data available to explore. A snapshot will be generated when data is available on the 'Sentiment Analysis' tab.")
+            if keyword:
+                @st.cache_data(show_spinner="Analyzing keyword sentiment...")
+                def get_sentiment_for_keyword(_conn, asin, search_keyword):
+                    """
+                    Fetches all reviews containing a specific keyword and returns their
+                    sentiment distribution. This query is fast and efficient.
+                    """
+                    # The '%' wildcards allow matching the keyword anywhere in the text
+                    search_term = f"%{search_keyword}%"
+                    query = """
+                    SELECT sentiment, COUNT(*) as count
+                    FROM reviews
+                    WHERE parent_asin = ? AND text LIKE ?
+                    GROUP BY sentiment
+                    """
+                    df = pd.read_sql(query, _conn, params=(asin, search_term))
+                    return df
     
+                keyword_sentiment_df = get_sentiment_for_keyword(conn, selected_asin, keyword)
+    
+                if not keyword_sentiment_df.empty:
+                    st.markdown(f"### Sentiment for reviews mentioning '{keyword}'")
+                    
+                    # Display metrics
+                    total_mentions = int(keyword_sentiment_df['count'].sum())
+                    st.metric("Total Mentions", f"{total_mentions:,}")
+    
+                    # Create a bar chart for the sentiment distribution
+                    fig = px.bar(
+                        keyword_sentiment_df,
+                        x='sentiment',
+                        y='count',
+                        color='sentiment',
+                        title=f"Sentiment Distribution for '{keyword}'",
+                        labels={'sentiment': 'Sentiment', 'count': 'Number of Reviews'},
+                        color_discrete_map={'Positive': '#1a9850', 'Negative': '#d73027', 'Neutral': '#cccccc'}
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+    
+                else:
+                    st.warning(f"No reviews found mentioning the keyword '{keyword}'. Please try another term.")
         # ======================== WORD CLOUDS TAB ========================
         # with wordcloud_tab:
             
