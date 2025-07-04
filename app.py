@@ -425,54 +425,69 @@ if conn:
                         st.plotly_chart(sentiment_stream_chart, use_container_width=True)
     
         # ======================== KEYWORD ANALYSIS TAB ========================
-        with keyword_tab:
+        # =================== RATING BREAKDOWN TAB ========================
+        with breakdown_tab:
             
-            st.subheader("On-the-Fly Keyword Sentiment Analysis")
-            st.caption("Enter a keyword to see the sentiment breakdown for all reviews that mention it. This analysis is independent of the sidebar filters.")
+            # This function is LOCAL and runs ONLY ONCE per product. It is extremely fast.
+            @st.cache_data(show_spinner="Fetching rating breakdown...")
+            def get_rating_distribution_data(_conn, asin):
+                """
+                Fetches pre-computed rating distribution data for a product.
+                This query is instant and returns a single row.
+                """
+                return pd.read_sql("SELECT * FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
     
-            keyword = st.text_input("Enter a keyword or phrase (e.g., battery, screen, fit)", key="keyword_input")
+            st.subheader("Overall Rating Breakdown")
+            st.caption("This shows the exact count and proportion of all star ratings for this product.")
+            
+            distribution_df = get_rating_distribution_data(conn, selected_asin)
+            
+            if not distribution_df.empty:
+                # Extract the first (and only) row of data
+                dist_data = distribution_df.iloc[0]
+                
+                # Prepare data for the donut chart
+                rating_values = {
+                    "5 Stars": dist_data.get('5_star', 0),
+                    "4 Stars": dist_data.get('4_star', 0),
+                    "3 Stars": dist_data.get('3_star', 0),
+                    "2 Stars": dist_data.get('2_star', 0),
+                    "1 Star": dist_data.get('1_star', 0)
+                }
+                # Create a DataFrame from the dictionary
+                donut_df = pd.DataFrame(list(rating_values.items()), columns=['Rating', 'Count'])
     
-            if keyword:
-                @st.cache_data(show_spinner="Analyzing keyword sentiment...")
-                def get_sentiment_for_keyword(_conn, asin, search_keyword):
-                    """
-                    Fetches all reviews containing a specific keyword and returns their
-                    sentiment distribution. This query is fast and efficient.
-                    """
-                    # The '%' wildcards allow matching the keyword anywhere in the text
-                    search_term = f"%{search_keyword}%"
-                    query = """
-                    SELECT sentiment, COUNT(*) as count
-                    FROM reviews
-                    WHERE parent_asin = ? AND text LIKE ?
-                    GROUP BY sentiment
-                    """
-                    df = pd.read_sql(query, _conn, params=(asin, search_term))
-                    return df
+                col1, col2 = st.columns([1, 2])
     
-                keyword_sentiment_df = get_sentiment_for_keyword(conn, selected_asin, keyword)
-    
-                if not keyword_sentiment_df.empty:
-                    st.markdown(f"### Sentiment for reviews mentioning '{keyword}'")
-                    
-                    # Display metrics
-                    total_mentions = int(keyword_sentiment_df['count'].sum())
-                    st.metric("Total Mentions", f"{total_mentions:,}")
-    
-                    # Create a bar chart for the sentiment distribution
-                    fig = px.bar(
-                        keyword_sentiment_df,
-                        x='sentiment',
-                        y='count',
-                        color='sentiment',
-                        title=f"Sentiment Distribution for '{keyword}'",
-                        labels={'sentiment': 'Sentiment', 'count': 'Number of Reviews'},
-                        color_discrete_map={'Positive': '#1a9850', 'Negative': '#d73027', 'Neutral': '#cccccc'}
+                with col1:
+                    st.markdown("#### Review Counts")
+                    # Display exact counts using metrics for a clean look
+                    st.metric("5 ⭐", f"{rating_values['5 Stars']:,} reviews")
+                    st.metric("4 ⭐", f"{rating_values['4 Stars']:,} reviews")
+                    st.metric("3 ⭐", f"{rating_values['3 Stars']:,} reviews")
+                    st.metric("2 ⭐", f"{rating_values['2 Stars']:,} reviews")
+                    st.metric("1 ⭐", f"{rating_values['1 Star']:,} reviews")
+                
+                with col2:
+                    st.markdown("#### Rating Proportions")
+                    # Create a donut chart with Plotly
+                    fig = px.pie(
+                        donut_df, 
+                        values='Count', 
+                        names='Rating', 
+                        title='Proportion of Each Star Rating',
+                        hole=0.4,
+                        color_discrete_map={
+                            '5 Stars': '#1a9850',
+                            '4 Stars': '#91cf60',
+                            '3 Stars': '#d9ef8b',
+                            '2 Stars': '#fee08b',
+                            '1 Star': '#d73027'
+                        },
+                        category_orders={'Rating': ["5 Stars", "4 Stars", "3 Stars", "2 Stars", "1 Star"]}
                     )
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
                     st.plotly_chart(fig, use_container_width=True)
-    
-                else:
-                    st.warning(f"No reviews found mentioning the keyword '{keyword}'. Please try another term.")
         # ======================== WORD CLOUDS TAB ========================
         # with wordcloud_tab:
             
