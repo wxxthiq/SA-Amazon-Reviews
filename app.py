@@ -19,6 +19,7 @@ import logging
 import kaggle
 from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder
+import pygwalker as pyg
 import streamlit.components.v1 as components
 
 # --- Configure logging ---
@@ -442,60 +443,60 @@ if conn:
                 st.warning("No data available to explore. Please adjust filters or check the main analysis tab.")
                 
         # ======================== WORD CLOUDS TAB ========================
-        with wordcloud_tab:
+        # with wordcloud_tab:
             
-            # This function is now LOCAL and runs ONLY ONCE per product, ignoring filters.
-            @st.cache_data(show_spinner="Generating word clouds...")
-            def generate_overall_word_frequency(_conn, asin, target_sentiment):
-                """
-                Generates word frequencies for ALL reviews of a product for a given sentiment.
-                This is cached and runs only once, ensuring maximum performance.
-                """
-                query = f"SELECT text FROM reviews WHERE parent_asin = ? AND sentiment = ?"
+        #     # This function is now LOCAL and runs ONLY ONCE per product, ignoring filters.
+        #     @st.cache_data(show_spinner="Generating word clouds...")
+        #     def generate_overall_word_frequency(_conn, asin, target_sentiment):
+        #         """
+        #         Generates word frequencies for ALL reviews of a product for a given sentiment.
+        #         This is cached and runs only once, ensuring maximum performance.
+        #         """
+        #         query = f"SELECT text FROM reviews WHERE parent_asin = ? AND sentiment = ?"
                 
-                from spacy.lang.en.stop_words import STOP_WORDS
-                word_counts = Counter()
+        #         from spacy.lang.en.stop_words import STOP_WORDS
+        #         word_counts = Counter()
                 
-                cursor = _conn.cursor()
-                cursor.execute(query, (asin, target_sentiment))
+        #         cursor = _conn.cursor()
+        #         cursor.execute(query, (asin, target_sentiment))
     
-                while True:
-                    rows = cursor.fetchmany(1000)
-                    if not rows:
-                        break
-                    for row in rows:
-                        text = row[0]
-                        if text:
-                            words = re.findall(r'\b\w+\b', text.lower())
-                            filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
-                            word_counts.update(filtered_words)
+        #         while True:
+        #             rows = cursor.fetchmany(1000)
+        #             if not rows:
+        #                 break
+        #             for row in rows:
+        #                 text = row[0]
+        #                 if text:
+        #                     words = re.findall(r'\b\w+\b', text.lower())
+        #                     filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
+        #                     word_counts.update(filtered_words)
     
-                if not word_counts:
-                    return pd.DataFrame(columns=['word', 'freq'])
+        #         if not word_counts:
+        #             return pd.DataFrame(columns=['word', 'freq'])
     
-                freq_df = pd.DataFrame(word_counts.items(), columns=['word', 'freq']).sort_values(by='freq', ascending=False)
-                return freq_df.head(100)
+        #         freq_df = pd.DataFrame(word_counts.items(), columns=['word', 'freq']).sort_values(by='freq', ascending=False)
+        #         return freq_df.head(100)
     
-            st.subheader("Overall Word Clouds")
-            st.caption("Showing the most common keywords from ALL positive and negative reviews for this product. These clouds do not react to sidebar filters.")
+        #     st.subheader("Overall Word Clouds")
+        #     st.caption("Showing the most common keywords from ALL positive and negative reviews for this product. These clouds do not react to sidebar filters.")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### Key Themes in Positive Reviews")
-                positive_freq_df = generate_overall_word_frequency(conn, selected_asin, 'Positive')
-                if not positive_freq_df.empty:
-                    fig = px.treemap(positive_freq_df, path=[px.Constant("Positive"), 'word'], values='freq', color_continuous_scale='Greens', color='freq')
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("No positive reviews found for this product.")
-            with col2:
-                st.markdown("#### Key Themes in Negative Reviews")
-                negative_freq_df = generate_overall_word_frequency(conn, selected_asin, 'Negative')
-                if not negative_freq_df.empty:
-                    fig = px.treemap(negative_freq_df, path=[px.Constant("Negative"), 'word'], values='freq', color_continuous_scale='Reds', color='freq')
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("No negative reviews found for this product.")
+        #     col1, col2 = st.columns(2)
+        #     with col1:
+        #         st.markdown("#### Key Themes in Positive Reviews")
+        #         positive_freq_df = generate_overall_word_frequency(conn, selected_asin, 'Positive')
+        #         if not positive_freq_df.empty:
+        #             fig = px.treemap(positive_freq_df, path=[px.Constant("Positive"), 'word'], values='freq', color_continuous_scale='Greens', color='freq')
+        #             st.plotly_chart(fig, use_container_width=True)
+        #         else:
+        #             st.info("No positive reviews found for this product.")
+        #     with col2:
+        #         st.markdown("#### Key Themes in Negative Reviews")
+        #         negative_freq_df = generate_overall_word_frequency(conn, selected_asin, 'Negative')
+        #         if not negative_freq_df.empty:
+        #             fig = px.treemap(negative_freq_df, path=[px.Constant("Negative"), 'word'], values='freq', color_continuous_scale='Reds', color='freq')
+        #             st.plotly_chart(fig, use_container_width=True)
+        #         else:
+        #             st.info("No negative reviews found for this product.")
     # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
