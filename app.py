@@ -284,8 +284,8 @@ if conn:
         st.sidebar.multiselect("Filter by Star Rating", options=[1, 2, 3, 4, 5], key='rating_filter', default=[1, 2, 3, 4, 5])
         st.sidebar.multiselect("Filter by Sentiment", options=['Positive', 'Negative', 'Neutral'], key='sentiment_filter', default=['Positive', 'Negative', 'Neutral'])
     
-    # --- ADD THE RUN ANALYSIS BUTTON ---
-    run_analysis = st.sidebar.button("Run Analysis", use_container_width=True, type="primary")
+        # --- ADD THE RUN ANALYSIS BUTTON ---
+        run_analysis = st.sidebar.button("Run Analysis", use_container_width=True, type="primary")
         def reset_all_filters():
             st.session_state.date_filter = default_date_range
             st.session_state.rating_filter = default_ratings
