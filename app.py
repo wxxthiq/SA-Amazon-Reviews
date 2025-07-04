@@ -279,19 +279,17 @@ if conn:
         min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
         min_date = datetime.strptime(min_date_db, '%Y-%m-%d').date() if min_date_db else datetime(2000, 1, 1).date()
         max_date = datetime.strptime(max_date_db, '%Y-%m-%d').date() if max_date_db else datetime.now().date()
-        
-        default_date_range = (min_date, max_date)
-        default_ratings = [1, 2, 3, 4, 5]
-        default_sentiments = ['Positive', 'Negative', 'Neutral']
+
+        st.sidebar.date_input("Filter by Date Range", value=(min_date, max_date), min_value=min_date, max_value=max_date, key='date_filter')
+        st.sidebar.multiselect("Filter by Star Rating", options=[1, 2, 3, 4, 5], key='rating_filter', default=[1, 2, 3, 4, 5])
+        st.sidebar.multiselect("Filter by Sentiment", options=['Positive', 'Negative', 'Neutral'], key='sentiment_filter', default=['Positive', 'Negative', 'Neutral'])
     
+    # --- ADD THE RUN ANALYSIS BUTTON ---
+    run_analysis = st.sidebar.button("Run Analysis", use_container_width=True, type="primary")
         def reset_all_filters():
             st.session_state.date_filter = default_date_range
             st.session_state.rating_filter = default_ratings
             st.session_state.sentiment_filter = default_sentiments
-    
-        selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date, max_value=max_date, key='date_filter')
-        selected_ratings = st.sidebar.multiselect("Filter by Star Rating", default_ratings, default=default_ratings, key='rating_filter')
-        selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", default_sentiments, default=default_sentiments, key='sentiment_filter')
         st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
     
         # --- RENDER TABS ---
