@@ -430,52 +430,30 @@ if conn:
         # ======================== DATA EXPLORER TAB ========================
         with explorer_tab:
             
-            # This function is LOCAL to this tab and IGNORES the sidebar filters.
-            # It runs only ONCE per product and is cached.
-            @st.cache_data(show_spinner="Loading all product data for explorer...")
-            def get_all_data_for_explorer(_conn, asin):
-                """
-                Fetches a combined, comprehensive dataset for a given product,
-                perfect for ad-hoc exploration with Pygwalker.
-                """
-                # --- FIX: Removed 'd.discrepancy' from the query ---
-                query = """
-                SELECT
-                    r.review_id,
-                    r.rating,
-                    r.sentiment,
-                    r.date,
-                    d.text_polarity
-                FROM
-                    reviews r
-                LEFT JOIN
-                    discrepancy_data d ON r.review_id = d.review_id
-                WHERE
-                    r.parent_asin = ?
-                """
-                df = pd.read_sql(query, _conn, params=(asin,))
-    
-                # --- FIX: Calculate the 'discrepancy' column here instead ---
-                if not df.empty:
-                    df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
-                
-                return df
-    
             st.subheader("Interactive Data Explorer")
-            st.caption("Explore the complete, unfiltered dataset for this product. Drag and drop fields to create your own visualizations.")
-            
-            # Load the full dataset for the explorer
-            explorer_df = get_all_data_for_explorer(conn, selected_asin)
+            st.caption("This is a data snapshot based on the filters active when you first visited this tab. It does not update live.")
+    
+            # --- FIX: Use session_state for a 'sticky' one-time data load ---
+    
+            # 1. Check if the explorer data has already been loaded into the session state.
+            if 'explorer_data' not in st.session_state:
+                # 2. If not, load it ONCE using the current filters and store it.
+                # We can reuse the efficient, cached function from the other tab.
+                with st.spinner("Generating data snapshot for explorer..."):
+                    date_tuple = (selected_date_range[0].strftime('%Y-%m-%d'), selected_date_range[1].strftime('%Y-%m-%d'))
+                    st.session_state.explorer_data = get_data_for_sentiment_charts(conn, selected_asin, tuple(selected_ratings), tuple(selected_sentiments), date_tuple)
+    
+            # 3. Use the data from the session state. This will not change even if sidebar filters are updated.
+            explorer_df = st.session_state.explorer_data
             
             if not explorer_df.empty:
+                st.write(f"Exploring a snapshot of **{len(explorer_df)}** reviews.")
                 # Generate the HTML for the Pygwalker interface
-                import pygwalker as pyg
                 pyg_html = pyg.to_html(explorer_df)
                 # Embed the HTML into the Streamlit app
-                import streamlit.components.v1 as components
                 components.html(pyg_html, height=1000, scrolling=True)
             else:
-                st.warning("No review data is available for this product to explore.")
+                st.warning("No data available to explore. Adjust filters on the 'Sentiment Analysis' tab and revisit.")
     
         # ======================== WORD CLOUDS TAB ========================
         # with wordcloud_tab:
