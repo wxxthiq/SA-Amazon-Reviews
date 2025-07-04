@@ -510,7 +510,10 @@ if conn:
                     start_date, end_date = date_range_tuple
                     query += " AND date BETWEEN ? AND ?"
                     params.extend([start_date, end_date])
-    
+
+                # Add the crucial sampling limit to the query
+                query += " ORDER BY RANDOM() LIMIT 500"
+                
                 from spacy.lang.en.stop_words import STOP_WORDS
                 word_counts = Counter()
                 
