@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import sqlite3
 from wordcloud import WordCloud
-wimport altair as alt
+import altair as alt
 from streamlit_plotly_events import plotly_events
 import re
 from collections import Counter
