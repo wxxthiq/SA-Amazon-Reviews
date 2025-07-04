@@ -342,7 +342,23 @@ if conn:
                         tooltip=['Rating', 'Count']
                     ).properties(title="Filtered Rating Distribution")
                     st.altair_chart(chart, use_container_width=True)
-    
+                                    # --- Sentiment Distribution Chart (NEW) ---
+                st.markdown("#### Sentiment Distribution (Live)")
+                sentiment_counts_df = chart_data['sentiment'].value_counts().reset_index()
+                sentiment_counts_df.columns = ['Sentiment', 'Count']
+                
+                sentiment_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
+                    x=alt.X('Sentiment:N', title="Sentiment", sort='-y'),
+                    y=alt.Y('Count:Q', title="Number of Reviews"),
+                    color=alt.Color('Sentiment:N',
+                                    scale=alt.Scale(
+                                        domain=['Positive', 'Neutral', 'Negative'],
+                                        range=['#1a9850', '#cccccc', '#d73027']
+                                    ),
+                                    legend=None),
+                    tooltip=['Sentiment', 'Count']
+                ).properties(title="Filtered Sentiment Distribution")
+                st.altair_chart(sentiment_chart, use_container_width=True)
                 #
                 with col2:
                     st.markdown("#### Rating vs. Text Discrepancy (Live & Interactive)")
