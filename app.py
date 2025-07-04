@@ -19,6 +19,7 @@ import logging
 import kaggle
 from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder
+import streamlit.components.v1 as components
 
 # --- Configure logging ---
 logging.basicConfig(level=logging.INFO)
@@ -296,7 +297,7 @@ if conn:
         st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
     
         # --- RENDER TABS ---
-        vis_tab, wordcloud_tab, new_tab_2 = st.tabs(["📊 Sentiment Analysis", "☁️ Word Clouds", "New Viz 2"])
+        vis_tab, explorer_tab, wordcloud_tab  = st.tabs(["📊 Sentiment Analysis","🔍 Data Explorer", "☁️ Word Clouds"])
     
         # ======================== SENTIMENT ANALYSIS TAB ========================
         with vis_tab:
@@ -425,6 +426,21 @@ if conn:
                         )
                         st.plotly_chart(sentiment_stream_chart, use_container_width=True)
     
+        # ======================== DATA EXPLORER TAB (using Pygwalker) ========================
+        with explorer_tab:
+            st.subheader("Interactive Data Explorer")
+            st.caption("Drag and drop fields to create your own visualizations. This uses the same filtered data as the Sentiment Analysis tab.")
+            
+            # This tab will use the 'chart_data' DataFrame that is already loaded for the vis_tab.
+            # This is efficient because the data is already in memory and cached.
+            if 'chart_data' in locals() and not chart_data.empty:
+                # Generate the HTML for the Pygwalker interface
+                pyg_html = pyg.to_html(chart_data)
+                # Embed the HTML into the Streamlit app
+                components.html(pyg_html, height=1000, scrolling=True)
+            else:
+                st.warning("No data available to explore. Please adjust filters or check the main analysis tab.")
+                
         # ======================== WORD CLOUDS TAB ========================
         with wordcloud_tab:
             
