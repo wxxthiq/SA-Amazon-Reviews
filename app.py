@@ -293,7 +293,7 @@ if conn:
         st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
     
         # --- RENDER TABS ---
-        vis_tab, wordcloud_tab, breakdown_tab  = st.tabs(["📊 Sentiment Analysis","☁️ Word Clouds", "Rating Breakdown"])
+        vis_tab, wordcloud_tab, breakdown_tab, review_tab  = st.tabs(["📊 Sentiment Analysis","☁️ Word Clouds", "⭐ Rating Breakdown", "Reviews"])
     
         # ======================== SENTIMENT ANALYSIS TAB ========================
         with vis_tab:
@@ -557,6 +557,7 @@ if conn:
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No negative reviews found for this product.")
+            
     # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
