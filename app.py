@@ -427,48 +427,56 @@ if conn:
                         )
                         st.plotly_chart(sentiment_stream_chart, use_container_width=True)
     
-        # ======================== DATA EXPLORER TAB (using Pygwalker) ========================
+        # ======================== DATA EXPLORER TAB ========================
         with explorer_tab:
+            
+            # This function is LOCAL to this tab and IGNORES the sidebar filters.
+            # It runs only ONCE per product and is cached.
+            @st.cache_data(show_spinner="Loading all product data for explorer...")
+            def get_all_data_for_explorer(_conn, asin):
+                """
+                Fetches a combined, comprehensive dataset for a given product,
+                perfect for ad-hoc exploration with Pygwalker.
+                """
+                # --- FIX: Removed 'd.discrepancy' from the query ---
+                query = """
+                SELECT
+                    r.review_id,
+                    r.rating,
+                    r.sentiment,
+                    r.date,
+                    d.text_polarity
+                FROM
+                    reviews r
+                LEFT JOIN
+                    discrepancy_data d ON r.review_id = d.review_id
+                WHERE
+                    r.parent_asin = ?
+                """
+                df = pd.read_sql(query, _conn, params=(asin,))
+    
+                # --- FIX: Calculate the 'discrepancy' column here instead ---
+                if not df.empty:
+                    df['discrepancy'] = (df['text_polarity'] - ((df['rating'] - 3.0) / 2.0)).abs()
                 
-                # This function is LOCAL to this tab and IGNORES the sidebar filters.
-                # It runs only ONCE per product and is cached.
-                @st.cache_data(show_spinner="Loading all product data for explorer...")
-                def get_all_data_for_explorer(_conn, asin):
-                    """
-                    Fetches a combined, comprehensive dataset for a given product,
-                    perfect for ad-hoc exploration with Pygwalker.
-                    """
-                    query = """
-                    SELECT
-                        r.review_id,
-                        r.rating,
-                        r.sentiment,
-                        r.date,
-                        d.text_polarity,
-                        d.discrepancy
-                    FROM
-                        reviews r
-                    LEFT JOIN
-                        discrepancy_data d ON r.review_id = d.review_id
-                    WHERE
-                        r.parent_asin = ?
-                    """
-                    return pd.read_sql(query, _conn, params=(asin,))
-        
-                st.subheader("Interactive Data Explorer")
-                st.caption("Explore the complete, unfiltered dataset for this product. Drag and drop fields to create your own visualizations.")
-                
-                # Load the full dataset for the explorer
-                explorer_df = get_all_data_for_explorer(conn, selected_asin)
-                
-                if not explorer_df.empty:
-                    # Generate the HTML for the Pygwalker interface
-                    pyg_html = pyg.to_html(explorer_df)
-                    # Embed the HTML into the Streamlit app
-                    components.html(pyg_html, height=1000, scrolling=True)
-                else:
-                    st.warning("No review data is available for this product to explore.")
-                
+                return df
+    
+            st.subheader("Interactive Data Explorer")
+            st.caption("Explore the complete, unfiltered dataset for this product. Drag and drop fields to create your own visualizations.")
+            
+            # Load the full dataset for the explorer
+            explorer_df = get_all_data_for_explorer(conn, selected_asin)
+            
+            if not explorer_df.empty:
+                # Generate the HTML for the Pygwalker interface
+                import pygwalker as pyg
+                pyg_html = pyg.to_html(explorer_df)
+                # Embed the HTML into the Streamlit app
+                import streamlit.components.v1 as components
+                components.html(pyg_html, height=1000, scrolling=True)
+            else:
+                st.warning("No review data is available for this product to explore.")
+    
         # ======================== WORD CLOUDS TAB ========================
         # with wordcloud_tab:
             
