@@ -293,7 +293,7 @@ if conn:
         st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
     
         # --- RENDER TABS ---
-        vis_tab, wordcloud_tab, breakdown_tab, review_tab  = st.tabs(["📊 Sentiment Analysis","☁️ Word Clouds", "⭐ Rating Breakdown", "Reviews"])
+        vis_tab, wordcloud_tab,   = st.tabs(["📊 Sentiment Analysis","☁️ Word Clouds"])
     
         # ======================== SENTIMENT ANALYSIS TAB ========================
         with vis_tab:
@@ -438,126 +438,7 @@ if conn:
                         )
                         st.plotly_chart(sentiment_stream_chart, use_container_width=True)
     
-        # ======================== KEYWORD ANALYSIS TAB ========================
-        # =================== RATING BREAKDOWN TAB ========================
-        with breakdown_tab:
-            
-            # This function is LOCAL and runs ONLY ONCE per product. It is extremely fast.
-            @st.cache_data(show_spinner="Fetching rating breakdown...")
-            def get_rating_distribution_data(_conn, asin):
-                """
-                Fetches pre-computed rating distribution data for a product.
-                This query is instant and returns a single row.
-                """
-                return pd.read_sql("SELECT * FROM rating_distribution WHERE parent_asin = ?", _conn, params=(asin,))
-    
-            st.subheader("Overall Rating Breakdown")
-            st.caption("This shows the exact count and proportion of all star ratings for this product.")
-            
-            distribution_df = get_rating_distribution_data(conn, selected_asin)
-            
-            if not distribution_df.empty:
-                # Extract the first (and only) row of data
-                dist_data = distribution_df.iloc[0]
-                
-                # Prepare data for the donut chart
-                rating_values = {
-                    "5 Stars": dist_data.get('5_star', 0),
-                    "4 Stars": dist_data.get('4_star', 0),
-                    "3 Stars": dist_data.get('3_star', 0),
-                    "2 Stars": dist_data.get('2_star', 0),
-                    "1 Star": dist_data.get('1_star', 0)
-                }
-                # Create a DataFrame from the dictionary
-                donut_df = pd.DataFrame(list(rating_values.items()), columns=['Rating', 'Count'])
-    
-                col1, col2 = st.columns([1, 2])
-    
-                with col1:
-                    st.markdown("#### Review Counts")
-                    # Display exact counts using metrics for a clean look
-                    st.metric("5 ⭐", f"{rating_values['5 Stars']:,} reviews")
-                    st.metric("4 ⭐", f"{rating_values['4 Stars']:,} reviews")
-                    st.metric("3 ⭐", f"{rating_values['3 Stars']:,} reviews")
-                    st.metric("2 ⭐", f"{rating_values['2 Stars']:,} reviews")
-                    st.metric("1 ⭐", f"{rating_values['1 Star']:,} reviews")
-                
-                with col2:
-                    st.markdown("#### Rating Proportions")
-                    # Create a donut chart with Plotly
-                    fig = px.pie(
-                        donut_df, 
-                        values='Count', 
-                        names='Rating', 
-                        title='Proportion of Each Star Rating',
-                        hole=0.4,
-                        color_discrete_map={
-                            '5 Stars': '#1a9850',
-                            '4 Stars': '#91cf60',
-                            '3 Stars': '#d9ef8b',
-                            '2 Stars': '#fee08b',
-                            '1 Star': '#d73027'
-                        },
-                        category_orders={'Rating': ["5 Stars", "4 Stars", "3 Stars", "2 Stars", "1 Star"]}
-                    )
-                    fig.update_traces(textposition='inside', textinfo='percent+label')
-                    st.plotly_chart(fig, use_container_width=True)
-        # ======================== WORD CLOUDS TAB ========================
-        with wordcloud_tab:
-            
-            # This function is now LOCAL and runs ONLY ONCE per product, ignoring filters.
-            @st.cache_data(show_spinner="Generating word clouds...")
-            def generate_overall_word_frequency(_conn, asin, target_sentiment):
-                """
-                Generates word frequencies for ALL reviews of a product for a given sentiment.
-                This is cached and runs only once, ensuring maximum performance.
-                """
-                query = f"SELECT text FROM reviews WHERE parent_asin = ? AND sentiment = ?"
-                
-                from spacy.lang.en.stop_words import STOP_WORDS
-                word_counts = Counter()
-                
-                cursor = _conn.cursor()
-                cursor.execute(query, (asin, target_sentiment))
-    
-                while True:
-                    rows = cursor.fetchmany(1000)
-                    if not rows:
-                        break
-                    for row in rows:
-                        text = row[0]
-                        if text:
-                            words = re.findall(r'\b\w+\b', text.lower())
-                            filtered_words = [word for word in words if word not in STOP_WORDS and len(word) > 2]
-                            word_counts.update(filtered_words)
-    
-                if not word_counts:
-                    return pd.DataFrame(columns=['word', 'freq'])
-    
-                freq_df = pd.DataFrame(word_counts.items(), columns=['word', 'freq']).sort_values(by='freq', ascending=False)
-                return freq_df.head(100)
-    
-            st.subheader("Overall Word Clouds")
-            st.caption("Showing the most common keywords from ALL positive and negative reviews for this product. These clouds do not react to sidebar filters.")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### Key Themes in Positive Reviews")
-                positive_freq_df = generate_overall_word_frequency(conn, selected_asin, 'Positive')
-                if not positive_freq_df.empty:
-                    fig = px.treemap(positive_freq_df, path=[px.Constant("Positive"), 'word'], values='freq', color_continuous_scale='Greens', color='freq')
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("No positive reviews found for this product.")
-            with col2:
-                st.markdown("#### Key Themes in Negative Reviews")
-                negative_freq_df = generate_overall_word_frequency(conn, selected_asin, 'Negative')
-                if not negative_freq_df.empty:
-                    fig = px.treemap(negative_freq_df, path=[px.Constant("Negative"), 'word'], values='freq', color_continuous_scale='Reds', color='freq')
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("No negative reviews found for this product.")
-            
+       
     # --- MAIN SEARCH PAGE ---
     else:
         st.header("Search for Products")
