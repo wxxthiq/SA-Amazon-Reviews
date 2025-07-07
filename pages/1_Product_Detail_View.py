@@ -2,10 +2,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
+import plotly.express as px # Keep for other charts
 import altair as alt
 from datetime import datetime
-from streamlit_plotly_events import plotly_events
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
@@ -17,9 +16,9 @@ from utils.database_utils import (
 # --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
 
-# This is a crucial step for state management.
-if 'discrepancy_review_id' not in st.session_state:
-    st.session_state.discrepancy_review_id = None
+# Use a more specific key for the selection state
+if 'altair_selected_review' not in st.session_state:
+    st.session_state.altair_selected_review = None
 
 # --- Main App Logic ---
 def main():
@@ -36,7 +35,6 @@ def main():
         if st.button("⬅️ Back to Search"):
             st.switch_page("app.py")
         st.stop()
-
     selected_asin = st.session_state.selected_product
 
     # --- Load Product Data ---
@@ -51,7 +49,7 @@ def main():
     # --- Header Section ---
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
-        st.session_state.discrepancy_review_id = None
+        st.session_state.altair_selected_review = None # Clear state on exit
         st.switch_page("app.py")
 
     left_col, right_col = st.columns([1, 2])
@@ -92,7 +90,7 @@ def main():
 
     # --- Section 1: Distribution Charts ---
     st.markdown("### Key Distributions")
-    # (Code for distribution charts is unchanged and omitted for brevity)
+    # ... (unchanged)
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("#### Rating Distribution")
@@ -111,18 +109,46 @@ def main():
         st.altair_chart(helpful_chart, use_container_width=True)
 
 
-    # --- Section 2: Discrepancy Analysis (DEFINITIVE STATE FIX) ---
+    # --- Section 2: Discrepancy Analysis (NEW ALTAIR IMPLEMENTATION) ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
     st.caption("Click a point on the chart to see the full review details on the right.")
 
-    # Always handle the display logic first, based on the current state.
-    # This part of the code runs on every script execution.
-    if st.session_state.discrepancy_review_id:
-        plot_col, review_col = st.columns([2, 1])
-        with review_col:
+    plot_col, review_col = st.columns([2, 1])
+
+    with plot_col:
+        # Prepare data
+        chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
+        
+        # Define the selection parameter
+        selection = alt.selection_point(fields=['review_id'], empty=False)
+
+        # Create the Altair chart
+        scatter_plot = alt.Chart(chart_data).mark_circle(size=60).encode(
+            x=alt.X('rating:Q', title='Star Rating', scale=alt.Scale(zero=False)),
+            y=alt.Y('text_polarity:Q', title='Text Sentiment Polarity'),
+            color=alt.condition(selection, alt.value('orange'), 'discrepancy:Q', scale=alt.Scale(scheme='viridis'), legend=None),
+            tooltip=['review_title', 'rating', 'text_polarity']
+        ).add_params(
+            selection
+        ).properties(
+            height=400
+        )
+        
+        # Use a key for the chart component to store its selection state
+        event = st.altair_chart(scatter_plot, use_container_width=True, on_select="rerun", key="discrepancy_selector")
+        
+        # The selection state is stored in the key we provided
+        if event.selection and event.selection['review_id']:
+            st.session_state.altair_selected_review = event.selection['review_id'][0]
+
+    with review_col:
+        # Display logic now reads from the selection state populated by the chart
+        if st.session_state.altair_selected_review:
             st.markdown("#### Selected Review Details")
-            review_details = get_single_review_details(conn, st.session_state.discrepancy_review_id)
+            review_id = st.session_state.altair_selected_review
+            review_details = get_single_review_details(conn, review_id)
+            
             if review_details is not None:
                 st.subheader(review_details['review_title'])
                 st.caption(f"Reviewed on: {review_details['date']}")
@@ -130,44 +156,14 @@ def main():
             else:
                 st.warning("Could not retrieve review details.")
 
-            if st.button("Close Review", key="close_review_button"):
-                st.session_state.discrepancy_review_id = None
+            if st.button("Close Review", key="close_review_button_altair"):
+                st.session_state.altair_selected_review = None
                 st.rerun()
-    else:
-        # If no review is selected, the plot takes the full width.
-        plot_col = st.container()
-
-    # Now, draw the plot in its designated column.
-    with plot_col:
-        chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
-        rng = np.random.default_rng(seed=42)
-        chart_data['rating_jittered'] = chart_data['rating'] + rng.uniform(-0.1, 0.1, size=len(chart_data))
-        chart_data['text_polarity_jittered'] = chart_data['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(chart_data))
-
-        discrepancy_plot = px.scatter(
-            chart_data,
-            x="rating_jittered", y="text_polarity_jittered",
-            color="discrepancy", color_continuous_scale=px.colors.sequential.Viridis,
-            custom_data=['review_id'], hover_name='review_title',
-            hover_data={'rating': True, 'text_polarity': ':.2f', 'discrepancy': ':.2f', 'rating_jittered': False, 'text_polarity_jittered': False}
-        )
-        discrepancy_plot.update_traces(marker=dict(size=8, opacity=0.7))
-        discrepancy_plot.update_xaxes(title_text='Star Rating')
-        discrepancy_plot.update_yaxes(title_text='Text Sentiment Polarity')
-        
-        # This component's only job is to return the clicked point's data.
-        selected_point = plotly_events(discrepancy_plot, click_event=True, key="discrepancy_click")
-
-        # After the plot is drawn and a click is registered, handle the event.
-        if selected_point and 'customdata' in selected_point[0]:
-            clicked_review_id = selected_point[0]['customdata'][0]
-            # If a new point is clicked, update the state and force a rerun.
-            if st.session_state.discrepancy_review_id != clicked_review_id:
-                st.session_state.discrepancy_review_id = clicked_review_id
-                st.rerun()
+        else:
+            st.info("Click a point on the plot to view details here.")
 
     # --- Section 3: Trend Analysis ---
-    # (Code for trend charts is unchanged and omitted for brevity)
+    # ... (unchanged)
     st.markdown("---")
     st.markdown("### Trends Over Time")
     time_df = chart_data.copy()
