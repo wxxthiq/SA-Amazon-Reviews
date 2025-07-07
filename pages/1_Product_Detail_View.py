@@ -5,6 +5,9 @@ import numpy as np
 import plotly.express as px
 import altair as alt
 from datetime import datetime
+# This is the library we will now make work correctly.
+from streamlit_plotly_events import plotly_events
+
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
@@ -13,8 +16,12 @@ from utils.database_utils import (
     get_single_review_details
 )
 
-# --- Page Configuration ---
+# --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
+
+# This is the definitive way to manage state for this feature.
+if 'selected_review_id' not in st.session_state:
+    st.session_state.selected_review_id = None
 
 # --- Main App Logic ---
 def main():
@@ -25,7 +32,7 @@ def main():
     PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
     conn = connect_to_db(DB_PATH)
 
-    # --- Check for Selected Product ---
+    # --- Product and Data Loading ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
         st.warning("Please select a product from the main search page first.")
         if st.button("⬅️ Back to Search"):
@@ -33,7 +40,6 @@ def main():
         st.stop()
     selected_asin = st.session_state.selected_product
 
-    # --- Load Product Data ---
     product_details_df = get_product_details(conn, selected_asin)
     if product_details_df.empty:
         st.error("Could not find details for the selected product.")
@@ -42,11 +48,10 @@ def main():
         st.stop()
     product_details = product_details_df.iloc[0]
 
-    # --- Header Section ---
+    # --- Header and Sidebar (Unchanged) ---
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
-        # Navigate back to the main app, clearing any query params
-        st.query_params.clear()
+        st.session_state.selected_review_id = None
         st.switch_page("app.py")
 
     left_col, right_col = st.columns([1, 2])
@@ -64,7 +69,6 @@ def main():
         m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
         m_col2.metric("Total Reviews in DB", f"{int(product_details.get('review_count', 0)):,}")
 
-    # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     default_date_range = (min_date_db, max_date_db)
@@ -84,8 +88,8 @@ def main():
         st.stop()
 
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
-
-    # --- Section 1: Distribution Charts ---
+    
+    # --- Distribution Charts (Unchanged) ---
     st.markdown("### Key Distributions")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -104,42 +108,46 @@ def main():
         helpful_chart = alt.Chart(helpful_df).mark_bar(color='skyblue').encode(x=alt.X('rating:O', title='Star Rating'), y=alt.Y('helpful_vote:Q', title='Average Helpful Votes'), tooltip=['rating', 'helpful_vote']).properties(height=300)
         st.altair_chart(helpful_chart, use_container_width=True)
 
-    # --- Section 2: Discrepancy Analysis (URL-BASED SOLUTION) ---
+    # --- Section 2: Discrepancy Analysis (DEFINITIVE PLOTLY FIX) ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
     st.caption("Click a point on the chart to see the full review details on the right.")
 
-    # Check the URL for a review_id
-    selected_review_id = st.query_params.get("review_id")
-
-    # Define layout based on whether a review is selected
-    if selected_review_id:
-        plot_col, review_col = st.columns([2, 1])
-    else:
-        plot_col = st.container()
+    plot_col, review_col = st.columns([2, 1])
 
     with plot_col:
-        # Prepare data for the chart
         chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
-        # ** KEY CHANGE: Create a URL for each point on the chart **
-        chart_data['url'] = '?review_id=' + chart_data['review_id']
-
-        scatter_plot = alt.Chart(chart_data).mark_circle(size=60).encode(
-            x=alt.X('rating:Q', title='Star Rating', scale=alt.Scale(zero=False)),
-            y=alt.Y('text_polarity:Q', title='Text Sentiment Polarity'),
-            color=alt.Color('discrepancy:Q', scale=alt.Scale(scheme='viridis'), legend=None),
-            href='url:N',  # ** This makes each point a clickable link **
-            tooltip=['review_title', 'rating', 'text_polarity']
-        ).properties(
-            height=400
+        chart_data['rating_jittered'] = chart_data['rating'] + np.random.uniform(-0.1, 0.1, size=len(chart_data))
+        chart_data['text_polarity_jittered'] = chart_data['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(chart_data))
+        
+        fig = px.scatter(
+            chart_data,
+            x="rating_jittered", y="text_polarity_jittered",
+            color="discrepancy", color_continuous_scale=px.colors.sequential.Viridis,
+            custom_data=['review_id'], hover_name='review_title'
         )
-        st.altair_chart(scatter_plot, use_container_width=True)
+        fig.update_layout(clickmode='event+select')
+        fig.update_traces(marker_size=10)
 
-    # If a review was selected via the URL, display its details in the right column
-    if selected_review_id:
-        with review_col:
+        # The component's only job is to return the data of the clicked point.
+        selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
+
+        # This block handles the click event robustly.
+        if selected_points:
+            # Get the review ID from the custom_data of the clicked point.
+            clicked_id = selected_points[0]['customdata'][0]
+            # Update the session state ONLY if a NEW point is clicked.
+            if st.session_state.selected_review_id != clicked_id:
+                st.session_state.selected_review_id = clicked_id
+                # Force an immediate rerun to update the right column.
+                st.rerun()
+
+    with review_col:
+        # This display logic is now clean and only depends on the session state.
+        if st.session_state.selected_review_id:
             st.markdown("#### Selected Review Details")
-            review_details = get_single_review_details(conn, selected_review_id)
+            review_details = get_single_review_details(conn, st.session_state.selected_review_id)
+            
             if review_details is not None:
                 st.subheader(review_details['review_title'])
                 st.caption(f"Reviewed on: {review_details['date']}")
@@ -147,12 +155,13 @@ def main():
             else:
                 st.warning("Could not retrieve review details.")
 
-            # The "Close" button now just removes the query parameter
             if st.button("Close Review", key="close_review_button"):
-                st.query_params.clear()
+                st.session_state.selected_review_id = None
                 st.rerun()
-
-    # --- Section 3: Trend Analysis ---
+        else:
+            st.info("Click a point on the plot to view details here.")
+            
+    # --- Trend Analysis Section (Unchanged) ---
     st.markdown("---")
     st.markdown("### Trends Over Time")
     time_df = chart_data.copy()
