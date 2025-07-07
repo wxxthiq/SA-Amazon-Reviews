@@ -1,189 +1,99 @@
-# pages/1_Sentiment_Overview.py
+# app.py (Main Search Page)
 import streamlit as st
 import pandas as pd
-import numpy as np
-import plotly.express as px
-import altair as alt
-from datetime import datetime
-# Import the new, reliable library
-from streamlit_agraph import agraph, Node, Edge, Config
+from utils.database_utils import connect_to_db, get_all_categories, get_filtered_products, a_download_data_with_versioning
 
-from utils.database_utils import (
-    connect_to_db,
-    get_product_details,
-    get_reviews_for_product,
-    get_product_date_range,
-    get_single_review_details
-)
+# --- App Configuration ---
+DB_PATH = "amazon_reviews_top100.duckdb"
+DB_VERSION = 1
+PRODUCTS_PER_PAGE = 16
+PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
+KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-reviews-duckdb-top100" # NOTE: Update if you use a different slug
 
-# --- Page Configuration and State Initialization ---
-st.set_page_config(layout="wide", page_title="Sentiment Overview")
+# --- Page Setup ---
+st.set_page_config(layout="wide", page_title="Amazon Review Search")
+st.title("🔎 Amazon Product Search")
+st.info("This app showcases analysis on the Top 100 most-reviewed products across selected Amazon categories.")
 
-if 'selected_review_id' not in st.session_state:
-    st.session_state.selected_review_id = None
+# --- Data Loading ---
+# This will download the pre-built DuckDB file from Kaggle
+a_download_data_with_versioning(KAGGLE_DATASET_SLUG, DB_PATH, DB_VERSION)
+conn = connect_to_db(DB_PATH)
 
-# --- Main App Logic ---
-def main():
-    st.title("📊 Sentiment Overview")
+# --- Session State Initialization ---
+if 'page' not in st.session_state: st.session_state.page = 0
+if 'selected_product' not in st.session_state: st.session_state.selected_product = None
+if 'category' not in st.session_state: st.session_state.category = "--- Select a Category ---"
+if 'search_term' not in st.session_state: st.session_state.search_term = ""
+if 'sort_by' not in st.session_state: st.session_state.sort_by = "Popularity (Most Reviews)"
 
-    # --- Constants & DB Connection ---
-    DB_PATH = "amazon_reviews_top100.duckdb"
-    PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
-    conn = connect_to_db(DB_PATH)
+# --- Search and Filter UI ---
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.session_state.search_term = st.text_input("Search by product title:", value=st.session_state.search_term)
+with col2:
+    available_categories = get_all_categories(conn)
+    # Reset page to 0 if category changes
+    def on_category_change():
+        st.session_state.page = 0
+    st.session_state.category = st.selectbox("Filter by Category", available_categories, index=available_categories.index(st.session_state.category), on_change=on_category_change)
+with col3:
+    st.session_state.sort_by = st.selectbox("Sort By", ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"], index=["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"].index(st.session_state.sort_by))
 
-    # --- Product and Data Loading ---
-    if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
-        st.warning("Please select a product from the main search page first.")
-        if st.button("⬅️ Back to Search"):
-            st.switch_page("app.py")
-        st.stop()
-    selected_asin = st.session_state.selected_product
-
-    product_details_df = get_product_details(conn, selected_asin)
-    if product_details_df.empty:
-        st.error("Could not find details for the selected product.")
-        if st.button("⬅️ Back to Search"):
-            st.switch_page("app.py")
-        st.stop()
-    product_details = product_details_df.iloc[0]
-
-    # --- Header and Sidebar (unchanged) ---
-    if st.button("⬅️ Back to Search"):
-        st.session_state.selected_product = None
-        st.session_state.selected_review_id = None
-        st.switch_page("app.py")
-
-    left_col, right_col = st.columns([1, 2])
-    with left_col:
-        image_urls_str = product_details.get('image_urls')
-        image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
-        st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, use_container_width=True)
-        if image_urls:
-            with st.popover("🖼️ View Image Gallery"):
-                st.image(image_urls, use_container_width=True)
-    with right_col:
-        st.header(product_details['product_title'])
-        st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
-        m_col1, m_col2 = st.columns(2)
-        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-        m_col2.metric("Total Reviews in DB", f"{int(product_details.get('review_count', 0)):,}")
-
-    st.sidebar.header("📊 Interactive Filters")
-    min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
-    default_date_range = (min_date_db, max_date_db)
-    default_ratings = [1, 2, 3, 4, 5]
-    default_sentiments = ['Positive', 'Negative', 'Neutral']
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db)
-    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings)
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments)
-
-    # --- Load Filtered Data ---
-    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
+# --- Product Display Logic ---
+if st.session_state.category == "--- Select a Category ---":
+    st.warning("Please select a category to view products.")
+else:
+    # Fetch paginated results from the new utility function
+    paginated_results, total_results = get_filtered_products(
+        conn,
+        st.session_state.category,
+        st.session_state.search_term,
+        st.session_state.sort_by, # This argument was missing
+        limit=PRODUCTS_PER_PAGE,
+        offset=st.session_state.page * PRODUCTS_PER_PAGE
+    )
 
     st.markdown("---")
+    st.header(f"Found {total_results} Products in '{st.session_state.category}'")
 
-    if chart_data.empty:
-        st.warning("No reviews match the selected filters.")
-        st.stop()
+    if paginated_results.empty:
+        st.warning("No products match your search criteria on this page.")
+    else:
+        # Display products in a grid
+        for i in range(0, len(paginated_results), 4):
+            cols = st.columns(4)
+            for j, col in enumerate(cols):
+                if i + j < len(paginated_results):
+                    row = paginated_results.iloc[i+j]
+                    with col.container(border=True):
+                        image_urls_str = row.get('image_urls')
+                        thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
+                        st.image(thumbnail_url, use_container_width=True)
+                        st.markdown(f"**{row['product_title']}**")
+                        avg_rating = row.get('average_rating', 0)
+                        review_count = row.get('review_count', 0)
+                        st.caption(f"Avg. Rating: {avg_rating:.2f} ⭐ ({int(review_count)} reviews)")
+                        
+                        # When clicked, this sets the session state and Streamlit's multi-page feature will take over
+                        if st.button("View Details", key=row['parent_asin']):
+                            st.session_state.selected_product = row['parent_asin']
+                            st.switch_page("pages/1_Product_Detail_View.py")
 
-    st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
-    
-    # Distribution charts (unchanged, omitted for brevity)
-    st.markdown("### Key Distributions")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("#### Rating Distribution")
-        rating_counts_df = chart_data['rating'].value_counts().sort_index().reset_index()
-        bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(x=alt.X('rating:O', title="Stars"), y=alt.Y('count:Q', title="Number of Reviews"), tooltip=['rating', 'count']).properties(height=300)
-        st.altair_chart(bar_chart, use_container_width=True)
-    with col2:
-        st.markdown("#### Sentiment Distribution")
-        sentiment_counts_df = chart_data['sentiment'].value_counts().reset_index()
-        sentiment_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(x=alt.X('sentiment:N', title="Sentiment", sort='-y'), y=alt.Y('count:Q', title="Number of Reviews"), color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=None), tooltip=['sentiment', 'count']).properties(height=300)
-        st.altair_chart(sentiment_chart, use_container_width=True)
-    with col3:
-        st.markdown("#### Avg. Helpful Votes")
-        helpful_df = chart_data.groupby('rating')['helpful_vote'].mean().reset_index()
-        helpful_chart = alt.Chart(helpful_df).mark_bar(color='skyblue').encode(x=alt.X('rating:O', title='Star Rating'), y=alt.Y('helpful_vote:Q', title='Average Helpful Votes'), tooltip=['rating', 'helpful_vote']).properties(height=300)
-        st.altair_chart(helpful_chart, use_container_width=True)
-
-
-    # --- Section 2: Discrepancy Analysis (DEFINITIVE PLOTLY FIX) ---
+    # --- Pagination Buttons ---
     st.markdown("---")
-    st.markdown("### Rating vs. Text Discrepancy")
-    st.caption("Click a point on the chart to see the full review details on the right.")
-
-    plot_col, review_col = st.columns([2, 1])
-
-    with plot_col:
-        # Prepare data for plot
-        chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
-        chart_data['rating_jittered'] = chart_data['rating'] + np.random.uniform(-0.1, 0.1, size=len(chart_data))
-        chart_data['text_polarity_jittered'] = chart_data['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(chart_data))
-
-        # Create the Plotly figure
-        fig = px.scatter(
-            chart_data,
-            x="rating_jittered",
-            y="text_polarity_jittered",
-            color="discrepancy",
-            color_continuous_scale=px.colors.sequential.Viridis,
-            custom_data=['review_id'],
-            hover_name='review_title'
-        )
-        fig.update_layout(clickmode='event+select')
-        fig.update_traces(marker_size=10)
-
-        # Use st.plotly_chart and check for the selection event
-        selection = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
-        
-        # Check the selection data returned by the component
-        if selection and selection.selection.points:
-            # The new library returns the point index; get the corresponding review_id
-            point_index = selection.selection.points[0].point_index
-            clicked_review_id = chart_data.iloc[point_index]['review_id']
-            # Update the session state
-            st.session_state.selected_review_id = clicked_review_id
-
-    with review_col:
-        # This display logic reads from our session state
-        if st.session_state.selected_review_id:
-            st.markdown("#### Selected Review Details")
-            review_details = get_single_review_details(conn, st.session_state.selected_review_id)
-            if review_details is not None:
-                st.subheader(review_details['review_title'])
-                st.caption(f"Reviewed on: {review_details['date']}")
-                st.markdown(f"> {review_details['text']}")
-            else:
-                st.warning("Could not retrieve review details.")
-
-            if st.button("Close Review"):
-                st.session_state.selected_review_id = None
-                st.rerun()
-        else:
-            st.info("Click a point on the plot to view details here.")
-    
-    # Trend Analysis Section (unchanged)
-    st.markdown("---")
-    st.markdown("### Trends Over Time")
-    # ... (code omitted for brevity)
-    time_df = chart_data.copy()
-    time_df['date'] = pd.to_datetime(time_df['date'])
-    time_df['month'] = time_df['date'].dt.to_period('M').dt.start_time
-    t_col1, t_col2 = st.columns(2)
-    with t_col1:
-        st.markdown("#### Volume of Reviews")
-        review_counts_over_time = time_df.groupby('month').size().reset_index(name='count')
-        if not review_counts_over_time.empty:
-            review_stream_chart = px.area(review_counts_over_time, x='month', y='count', title="Total Reviews Published Per Month")
-            st.plotly_chart(review_stream_chart, use_container_width=True)
-    with t_col2:
-        st.markdown("#### Volume of Sentiments")
-        sentiment_counts_over_time = time_df.groupby(['month', 'sentiment']).size().reset_index(name='count')
-        if not sentiment_counts_over_time.empty:
-            sentiment_stream_chart = px.area(sentiment_counts_over_time, x='month', y='count', color='sentiment', title="Sentiment Breakdown Per Month", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
-            st.plotly_chart(sentiment_stream_chart, use_container_width=True)
-
-
-if __name__ == "__main__":
-    main()
+    total_pages = (total_results + PRODUCTS_PER_PAGE - 1) // PRODUCTS_PER_PAGE
+    if total_pages > 1:
+        nav_cols = st.columns([1, 1, 1])
+        with nav_cols[0]:
+            if st.session_state.page > 0:
+                if st.button("⬅️ Previous Page"):
+                    st.session_state.page -= 1
+                    st.rerun()
+        with nav_cols[1]:
+            st.write(f"Page {st.session_state.page + 1} of {total_pages}")
+        with nav_cols[2]:
+            if (st.session_state.page + 1) < total_pages:
+                if st.button("Next Page ➡️"):
+                    st.session_state.page += 1
+                    st.rerun()
