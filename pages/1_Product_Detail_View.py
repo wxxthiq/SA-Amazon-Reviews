@@ -6,7 +6,8 @@ import plotly.express as px
 import altair as alt
 from datetime import datetime
 from streamlit_plotly_events import plotly_events
-
+from wordcloud import WordCloud, STOPWORDS
+import matplotlib.pyplot as plt
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
@@ -93,6 +94,53 @@ def main():
         st.warning("No reviews match the selected filters.")
         st.stop()
 
+     # --- NEW SECTION: WORD CLOUD ANALYSIS ---
+    st.markdown("---")
+    st.markdown("### ☁️ Word Cloud Analysis")
+    st.caption("The most common words found in positive and negative reviews. This helps explain the 'why' behind the sentiment.")
+
+    wc_col1, wc_col2 = st.columns(2)
+
+    # Positive Word Cloud
+    with wc_col1:
+        st.markdown("#### Positive Reviews")
+        pos_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Positive"]["text"])
+        if pos_text:
+            wordcloud_pos = WordCloud(
+                stopwords=STOPWORDS,
+                background_color="white",
+                width=800,
+                height=400,
+                colormap='Greens'
+            ).generate(pos_text)
+            
+            fig, ax = plt.subplots()
+            ax.imshow(wordcloud_pos, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
+        else:
+            st.info("No positive reviews match the current filters.")
+
+    # Negative Word Cloud
+    with wc_col2:
+        st.markdown("#### Negative Reviews")
+        neg_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Negative"]["text"])
+        if neg_text:
+            wordcloud_neg = WordCloud(
+                stopwords=STOPWORDS,
+                background_color="white",
+                width=800,
+                height=400,
+                colormap='Reds'
+            ).generate(neg_text)
+
+            fig, ax = plt.subplots()
+            ax.imshow(wordcloud_neg, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
+        else:
+            st.info("No negative reviews match the current filters.")
+            
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
     
     # --- Distribution Charts (Unchanged) ---
