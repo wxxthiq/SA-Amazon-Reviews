@@ -17,11 +17,11 @@ from utils.database_utils import (
 # --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
 
-# This is crucial: Initialize the state key if it doesn't exist.
+# This is a crucial step for state management.
 if 'discrepancy_review_id' not in st.session_state:
     st.session_state.discrepancy_review_id = None
 
-# --- Main App ---
+# --- Main App Logic ---
 def main():
     st.title("📊 Sentiment Overview")
 
@@ -92,6 +92,7 @@ def main():
 
     # --- Section 1: Distribution Charts ---
     st.markdown("### Key Distributions")
+    # (Code for distribution charts is unchanged and omitted for brevity)
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("#### Rating Distribution")
@@ -109,13 +110,34 @@ def main():
         helpful_chart = alt.Chart(helpful_df).mark_bar(color='skyblue').encode(x=alt.X('rating:O', title='Star Rating'), y=alt.Y('helpful_vote:Q', title='Average Helpful Votes'), tooltip=['rating', 'helpful_vote']).properties(height=300)
         st.altair_chart(helpful_chart, use_container_width=True)
 
-    # --- Section 2: Discrepancy Analysis ---
+
+    # --- Section 2: Discrepancy Analysis (DEFINITIVE STATE FIX) ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
     st.caption("Click a point on the chart to see the full review details on the right.")
 
-    plot_col, review_col = st.columns([2, 1])
+    # Always handle the display logic first, based on the current state.
+    # This part of the code runs on every script execution.
+    if st.session_state.discrepancy_review_id:
+        plot_col, review_col = st.columns([2, 1])
+        with review_col:
+            st.markdown("#### Selected Review Details")
+            review_details = get_single_review_details(conn, st.session_state.discrepancy_review_id)
+            if review_details is not None:
+                st.subheader(review_details['review_title'])
+                st.caption(f"Reviewed on: {review_details['date']}")
+                st.markdown(f"> {review_details['text']}")
+            else:
+                st.warning("Could not retrieve review details.")
 
+            if st.button("Close Review", key="close_review_button"):
+                st.session_state.discrepancy_review_id = None
+                st.rerun()
+    else:
+        # If no review is selected, the plot takes the full width.
+        plot_col = st.container()
+
+    # Now, draw the plot in its designated column.
     with plot_col:
         chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
         rng = np.random.default_rng(seed=42)
@@ -132,34 +154,20 @@ def main():
         discrepancy_plot.update_traces(marker=dict(size=8, opacity=0.7))
         discrepancy_plot.update_xaxes(title_text='Star Rating')
         discrepancy_plot.update_yaxes(title_text='Text Sentiment Polarity')
-
-        selected_point = plotly_events(discrepancy_plot, click_event=True, key="discrepancy_click")
         
-        # This is the event handling logic.
+        # This component's only job is to return the clicked point's data.
+        selected_point = plotly_events(discrepancy_plot, click_event=True, key="discrepancy_click")
+
+        # After the plot is drawn and a click is registered, handle the event.
         if selected_point and 'customdata' in selected_point[0]:
             clicked_review_id = selected_point[0]['customdata'][0]
-            # Set the state and rerun the app immediately.
-            st.session_state.discrepancy_review_id = clicked_review_id
-            st.rerun()
-
-    with review_col:
-        # This is the display logic. It runs on every script rerun.
-        if st.session_state.discrepancy_review_id:
-            st.markdown("#### Selected Review Details")
-            review_details = get_single_review_details(conn, st.session_state.discrepancy_review_id)
-            if review_details is not None:
-                st.subheader(review_details['review_title'])
-                st.caption(f"Reviewed on: {review_details['date']}")
-                st.markdown(f"> {review_details['text']}")
-            else:
-                st.warning("Could not retrieve review details.")
-            if st.button("Close Review"):
-                st.session_state.discrepancy_review_id = None
+            # If a new point is clicked, update the state and force a rerun.
+            if st.session_state.discrepancy_review_id != clicked_review_id:
+                st.session_state.discrepancy_review_id = clicked_review_id
                 st.rerun()
-        else:
-            st.info("Click a point on the plot to view details here.")
 
     # --- Section 3: Trend Analysis ---
+    # (Code for trend charts is unchanged and omitted for brevity)
     st.markdown("---")
     st.markdown("### Trends Over Time")
     time_df = chart_data.copy()
@@ -178,6 +186,7 @@ def main():
         if not sentiment_counts_over_time.empty:
             sentiment_stream_chart = px.area(sentiment_counts_over_time, x='month', y='count', color='sentiment', title="Sentiment Breakdown Per Month", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
             st.plotly_chart(sentiment_stream_chart, use_container_width=True)
+
 
 if __name__ == "__main__":
     main()
