@@ -40,6 +40,8 @@ def a_download_data_with_versioning(dataset_slug, db_path, expected_version):
     if os.path.exists(VERSION_FILE_PATH): os.remove(VERSION_FILE_PATH)
 
     try:
+        import kaggle
+        import json
         kaggle_dir = os.path.expanduser("~/.kaggle")
         os.makedirs(kaggle_dir, exist_ok=True)
         kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
