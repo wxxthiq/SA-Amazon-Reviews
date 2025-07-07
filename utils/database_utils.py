@@ -46,7 +46,15 @@ def a_download_data_with_versioning(dataset_slug, db_path, expected_version):
         os.makedirs(kaggle_dir, exist_ok=True)
         kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
         
-        credentials = {"username": st.secrets["kaggle"]["username"], "key": st.secrets["kaggle"]["key"]}
+        # --- THIS IS THE CORRECTED PART ---
+        # It now reads the top-level keys directly from your secrets file.
+        if "username" not in st.secrets or "key" not in st.secrets:
+            st.error("FATAL: Kaggle secrets 'username' and 'key' not found in .streamlit/secrets.toml.")
+            st.stop()
+            
+        credentials = {"username": st.secrets["username"], "key": st.secrets["key"]}
+        # --- END OF CORRECTION ---
+
         with open(kaggle_json_path, "w") as f:
             json.dump(credentials, f)
         os.chmod(kaggle_json_path, 0o600)
