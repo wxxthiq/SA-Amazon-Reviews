@@ -47,6 +47,29 @@ def main():
         st.stop()
     product_details = product_details_df.iloc[0]
 
+     # --- Sidebar Filters (WITH STATE RESET) ---
+    st.sidebar.header("📊 Interactive Filters")
+    
+    def reset_selection():
+        st.session_state.selected_review_id = None
+
+    min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
+    default_date_range = (min_date_db, max_date_db)
+    default_ratings = [1, 2, 3, 4, 5]
+    default_sentiments = ['Positive', 'Negative', 'Neutral']
+
+    # ** KEY CHANGE: Add the on_change callback to all filter widgets **
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db, on_change=reset_selection)
+    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, on_change=reset_selection)
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, on_change=reset_selection)
+    
+    # --- Load Filtered Data (Now includes stable jitter) ---
+    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
+
+    if chart_data.empty:
+        st.warning("No reviews match the selected filters.")
+        st.stop()
+        
     # --- Header Section (Unchanged) ---
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
@@ -100,32 +123,6 @@ def main():
                     percentage = (count / total_sentiments * 100) if total_sentiments > 0 else 0
                     st.text(f"{sentiment}: {percentage:.1f}% ({count})")
                     st.progress(int(percentage))
-
-    # --- Sidebar Filters (WITH STATE RESET) ---
-    st.sidebar.header("📊 Interactive Filters")
-    
-    # ** KEY CHANGE: Define a callback function to reset the selection **
-    def reset_selection():
-        st.session_state.selected_review_id = None
-
-    min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
-    default_date_range = (min_date_db, max_date_db)
-    default_ratings = [1, 2, 3, 4, 5]
-    default_sentiments = ['Positive', 'Negative', 'Neutral']
-
-    # ** KEY CHANGE: Add the on_change callback to all filter widgets **
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db, on_change=reset_selection)
-    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, on_change=reset_selection)
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, on_change=reset_selection)
-
-    # --- Load Filtered Data (Now includes stable jitter) ---
-    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
-
-    st.markdown("---")
-
-    if chart_data.empty:
-        st.warning("No reviews match the selected filters.")
-        st.stop()
 
      # --- NEW SECTION: WORD CLOUD ANALYSIS ---
     st.markdown("---")
