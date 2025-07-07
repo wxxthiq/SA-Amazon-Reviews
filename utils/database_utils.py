@@ -149,3 +149,20 @@ def get_single_review_text(_conn, review_id):
         return result[0] if result else "Review text not found."
     except Exception:
         return "Could not retrieve review text."
+
+# utils/database_utils.py
+
+# Add this new function to the end of the file
+@st.cache_data
+def get_single_review_details(_conn, review_id):
+    """Fetches all details for a single review by its ID."""
+    try:
+        # Fetch title, text, and date for the selected review
+        query = "SELECT review_title, text, date FROM reviews WHERE review_id = ?"
+        details_df = _conn.execute(query, [review_id]).fetchdf()
+        if not details_df.empty:
+            return details_df.iloc[0]
+        else:
+            return None
+    except Exception:
+        return None
