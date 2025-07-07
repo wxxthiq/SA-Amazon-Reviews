@@ -16,7 +16,6 @@ VERSION_FILE_PATH = ".db_version"
 def connect_to_db(path):
     """Connects to the DuckDB database."""
     try:
-        # Connect in read-only mode as the app shouldn't modify the DB
         return duckdb.connect(database=path, read_only=True)
     except Exception as e:
         st.error(f"FATAL: Could not connect to database at '{path}'. Error: {e}")
@@ -41,19 +40,15 @@ def a_download_data_with_versioning(dataset_slug, db_path, expected_version):
     if os.path.exists(VERSION_FILE_PATH): os.remove(VERSION_FILE_PATH)
 
     try:
-        # Using Streamlit secrets for Kaggle credentials
         kaggle_dir = os.path.expanduser("~/.kaggle")
         os.makedirs(kaggle_dir, exist_ok=True)
         kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
         
-        # --- THIS IS THE CORRECTED PART ---
-        # It now reads the secrets from the [kaggle] section in your file.
         if "kaggle" not in st.secrets or "username" not in st.secrets["kaggle"] or "key" not in st.secrets["kaggle"]:
             st.error('FATAL: Make sure your .streamlit/secrets.toml contains a [kaggle] section with "username" and "key".')
             st.stop()
             
         credentials = {"username": st.secrets["kaggle"]["username"], "key": st.secrets["kaggle"]["key"]}
-        # --- END OF CORRECTION ---
 
         with open(kaggle_json_path, "w") as f:
             json.dump(credentials, f)
@@ -62,7 +57,6 @@ def a_download_data_with_versioning(dataset_slug, db_path, expected_version):
         with st.spinner(f"Downloading dataset '{dataset_slug}' from Kaggle..."):
             kaggle.api.dataset_download_files(dataset=dataset_slug, path='.', unzip=True)
         
-        # After download, write the new version number
         with open(VERSION_FILE_PATH, "w") as f:
             f.write(str(expected_version))
         st.success("Database download complete! Rerunning app...")
@@ -82,19 +76,17 @@ def get_all_categories(_conn):
     return categories
 
 def get_filtered_products(_conn, category, search_term, sort_by, limit, offset):
-    """Fetches a paginated and filtered list of products."""
-    params = {'category': category}
+    """Fetches a paginated and filtered list of products using positional placeholders."""
+    params = [category]
     
-    where_clauses = ["category = :category"]
+    where_clauses = ["category = ?"]
     if search_term:
-        where_clauses.append("product_title ILIKE :search_term")
-        params['search_term'] = f"%{search_term}%"
+        where_clauses.append("product_title ILIKE ?")
+        params.append(f"%{search_term}%")
 
     where_sql = " WHERE " + " AND ".join(where_clauses)
     
-    base_query = f"FROM products {where_sql}"
-    
-    count_query = f"SELECT COUNT(*) {base_query}"
+    count_query = f"SELECT COUNT(*) FROM products {where_sql}"
     total_count = _conn.execute(count_query, params).fetchone()[0]
 
     order_by_sql = {
@@ -104,12 +96,11 @@ def get_filtered_products(_conn, category, search_term, sort_by, limit, offset):
     }.get(sort_by, "review_count DESC")
 
     query = f"""
-        SELECT * {base_query}
+        SELECT * FROM products {where_sql}
         ORDER BY {order_by_sql}
-        LIMIT :limit OFFSET :offset
+        LIMIT ? OFFSET ?
     """
-    params['limit'] = limit
-    params['offset'] = offset
+    params.extend([limit, offset])
     
     df = _conn.execute(query, params).fetchdf()
     return df, total_count
@@ -121,25 +112,25 @@ def get_product_details(_conn, asin):
 
 @st.cache_data
 def get_reviews_for_product(_conn, asin, date_range, rating_filter, sentiment_filter):
-    """Fetches and filters all reviews for a single product for analysis."""
-    query = "SELECT * FROM reviews WHERE parent_asin = :asin"
-    params = {'asin': asin}
+    """Fetches and filters all reviews for a single product using positional placeholders."""
+    query = "SELECT * FROM reviews WHERE parent_asin = ?"
+    params = [asin]
 
     if date_range and len(date_range) == 2:
-        start_date = date_range[0]
-        end_date = date_range[1]
-        query += " AND date BETWEEN :start_date AND :end_date"
-        params['start_date'] = start_date
-        params['end_date'] = end_date
+        start_date, end_date = date_range
+        query += " AND date BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
     
     if rating_filter:
-        # DuckDB requires a tuple for the IN clause
-        query += " AND rating IN :rating_filter"
-        params['rating_filter'] = tuple(rating_filter)
+        # Create a string of placeholders (?, ?, ?)
+        placeholders = ', '.join(['?'] * len(rating_filter))
+        query += f" AND rating IN ({placeholders})"
+        params.extend(rating_filter)
         
     if sentiment_filter:
-        query += " AND sentiment IN :sentiment_filter"
-        params['sentiment_filter'] = tuple(sentiment_filter)
+        placeholders = ', '.join(['?'] * len(sentiment_filter))
+        query += f" AND sentiment IN ({placeholders})"
+        params.extend(sentiment_filter)
 
     return _conn.execute(query, params).fetchdf()
 
