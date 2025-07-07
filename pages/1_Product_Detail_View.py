@@ -62,11 +62,44 @@ def main():
             with st.popover("🖼️ View Image Gallery"):
                 st.image(image_urls, use_container_width=True)
     with right_col:
-        st.header(product_details['product_title'])
-        st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
-        m_col1, m_col2 = st.columns(2)
-        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-        m_col2.metric("Total Reviews in DB", f"{int(product_details.get('review_count', 0)):,}")
+            st.header(product_details['product_title'])
+            st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
+            
+            # Display key metrics first
+            m_col1, m_col2 = st.columns(2)
+            m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
+            m_col2.metric("Filtered Reviews", f"{len(chart_data):,}")
+            st.markdown("---")
+    
+            # ** NEW DISTRIBUTION SECTION **
+            dist_col1, dist_col2 = st.columns(2)
+    
+            # Rating Distribution
+            with dist_col1:
+                st.markdown("**Rating Distribution**")
+                # Calculate frequencies and percentages
+                rating_counts = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0)
+                total_ratings = len(chart_data)
+                
+                for rating in range(5, 0, -1):
+                    count = rating_counts.get(rating, 0)
+                    percentage = (count / total_ratings * 100) if total_ratings > 0 else 0
+                    label = f"{rating} star{'s' if rating > 1 else ''}"
+                    st.text(f"{label}: {percentage:.1f}% ({count})")
+                    st.progress(int(percentage))
+    
+            # Sentiment Distribution
+            with dist_col2:
+                st.markdown("**Sentiment Distribution**")
+                # Calculate frequencies and percentages
+                sentiment_counts = chart_data['sentiment'].value_counts()
+                total_sentiments = len(chart_data)
+    
+                for sentiment in ['Positive', 'Neutral', 'Negative']:
+                    count = sentiment_counts.get(sentiment, 0)
+                    percentage = (count / total_sentiments * 100) if total_sentiments > 0 else 0
+                    st.text(f"{sentiment}: {percentage:.1f}% ({count})")
+                    st.progress(int(percentage))
 
     # --- Sidebar Filters (WITH STATE RESET) ---
     st.sidebar.header("📊 Interactive Filters")
