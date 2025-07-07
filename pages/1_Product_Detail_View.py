@@ -5,7 +5,7 @@ import numpy as np
 import plotly.express as px
 import altair as alt
 from datetime import datetime
-# This is the library we will now make work correctly.
+# We will use this library and make it work correctly.
 from streamlit_plotly_events import plotly_events
 
 from utils.database_utils import (
@@ -19,7 +19,7 @@ from utils.database_utils import (
 # --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
 
-# This is the definitive way to manage state for this feature.
+# Initialize state key for the selected review
 if 'selected_review_id' not in st.session_state:
     st.session_state.selected_review_id = None
 
@@ -108,7 +108,7 @@ def main():
         helpful_chart = alt.Chart(helpful_df).mark_bar(color='skyblue').encode(x=alt.X('rating:O', title='Star Rating'), y=alt.Y('helpful_vote:Q', title='Average Helpful Votes'), tooltip=['rating', 'helpful_vote']).properties(height=300)
         st.altair_chart(helpful_chart, use_container_width=True)
 
-    # --- Section 2: Discrepancy Analysis (DEFINITIVE PLOTLY FIX) ---
+    # --- Section 2: Discrepancy Analysis (DEFINITIVE FIX USING pointIndex) ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
     st.caption("Click a point on the chart to see the full review details on the right.")
@@ -124,26 +124,27 @@ def main():
             chart_data,
             x="rating_jittered", y="text_polarity_jittered",
             color="discrepancy", color_continuous_scale=px.colors.sequential.Viridis,
-            custom_data=['review_id'], hover_name='review_title'
+            hover_name='review_title'
         )
         fig.update_layout(clickmode='event+select')
         fig.update_traces(marker_size=10)
 
-        # The component's only job is to return the data of the clicked point.
         selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
 
-        # This block handles the click event robustly.
-        if selected_points:
-            # Get the review ID from the custom_data of the clicked point.
-            clicked_id = selected_points[0]['customdata'][0]
-            # Update the session state ONLY if a NEW point is clicked.
+        # ** THE ROBUST FIX: Use pointIndex **
+        if selected_points and 'pointIndex' in selected_points[0]:
+            # Get the index of the clicked point. This is highly reliable.
+            point_index = selected_points[0]['pointIndex']
+            # Use the index to look up the review_id in our DataFrame.
+            clicked_id = chart_data.iloc[point_index]['review_id']
+            
+            # Update state only if a new point is selected.
             if st.session_state.selected_review_id != clicked_id:
                 st.session_state.selected_review_id = clicked_id
-                # Force an immediate rerun to update the right column.
                 st.rerun()
 
     with review_col:
-        # This display logic is now clean and only depends on the session state.
+        # This display logic is clean and depends only on our reliable state variable.
         if st.session_state.selected_review_id:
             st.markdown("#### Selected Review Details")
             review_details = get_single_review_details(conn, st.session_state.selected_review_id)
@@ -180,7 +181,6 @@ def main():
         if not sentiment_counts_over_time.empty:
             sentiment_stream_chart = px.area(sentiment_counts_over_time, x='month', y='count', color='sentiment', title="Sentiment Breakdown Per Month", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
             st.plotly_chart(sentiment_stream_chart, use_container_width=True)
-
 
 if __name__ == "__main__":
     main()
