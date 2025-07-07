@@ -180,3 +180,56 @@ def get_single_review_details(_conn, review_id):
             return None
     except Exception:
         return None
+
+# In utils/database_utils.py
+
+# Add this new function to the end of the file
+def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filter, sort_by, limit, offset):
+    """
+    Fetches a paginated, filtered, and sorted list of reviews for a product.
+    """
+    # Base query
+    query = "FROM reviews WHERE parent_asin = ?"
+    params = [asin]
+
+    # Apply filters
+    if date_range and len(date_range) == 2:
+        start_date, end_date = date_range
+        query += " AND date BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
+    
+    if rating_filter:
+        placeholders = ', '.join(['?'] * len(rating_filter))
+        query += f" AND rating IN ({placeholders})"
+        params.extend(rating_filter)
+        
+    if sentiment_filter:
+        placeholders = ', '.join(['?'] * len(sentiment_filter))
+        query += f" AND sentiment IN ({placeholders})"
+        params.extend(sentiment_filter)
+
+    # Get total count of matching reviews for pagination info
+    count_query = f"SELECT COUNT(*) {query}"
+    total_reviews = _conn.execute(count_query, params).fetchone()[0]
+
+    # Define sorting logic
+    sort_logic = {
+        "Newest First": "date DESC",
+        "Oldest First": "date ASC",
+        "Highest Rating": "rating DESC, helpful_vote DESC",
+        "Lowest Rating": "rating ASC, helpful_vote DESC",
+        "Most Helpful": "helpful_vote DESC, rating DESC"
+    }
+    order_by_sql = sort_logic.get(sort_by, "date DESC")
+
+    # Final query with sorting and pagination
+    final_query = f"""
+        SELECT * {query}
+        ORDER BY {order_by_sql}
+        LIMIT ? OFFSET ?
+    """
+    params.extend([limit, offset])
+
+    reviews_df = _conn.execute(final_query, params).fetchdf()
+
+    return reviews_df, total_reviews
