@@ -3,9 +3,10 @@ import streamlit as st
 import duckdb
 import pandas as pd
 import os
-# We will import kaggle and json inside the function that needs them
 import logging
 from datetime import datetime
+
+# We will import kaggle and json inside the function that needs them
 
 # --- Configure logging ---
 logging.basicConfig(level=logging.INFO)
@@ -13,10 +14,15 @@ VERSION_FILE_PATH = ".db_version"
 
 @st.cache_resource
 def connect_to_db(path):
-    """Connects to the DuckDB database."""
+    """
+    Connects to the DuckDB database.
+    Creates the file if it doesn't exist.
+    """
     try:
-        # Connect in read-only mode as the app shouldn't modify the DB
-        return duckdb.connect(database=path, read_only=True)
+        # --- THIS IS THE FIX ---
+        # Removed read_only=True. DuckDB will now create the DB file if it's missing,
+        # preventing the IOError on the first run. The download function will populate it.
+        return duckdb.connect(database=path, read_only=False)
     except Exception as e:
         st.error(f"FATAL: Could not connect to database at '{path}'. Error: {e}")
         st.stop()
@@ -31,20 +37,20 @@ def a_download_data_with_versioning(dataset_slug, db_path, expected_version):
             except (ValueError, TypeError):
                 current_version = 0
 
+    # Also check if the db file actually exists, even if version matches
     if current_version == expected_version and os.path.exists(db_path):
         logging.info("Database is up to date.")
         return
 
-    st.info(f"Database v{current_version} is outdated (expected v{expected_version}). Downloading fresh data...")
+    st.info(f"Database v{current_version} is outdated or missing. Downloading fresh data...")
     if os.path.exists(db_path): os.remove(db_path)
     if os.path.exists(VERSION_FILE_PATH): os.remove(VERSION_FILE_PATH)
 
     try:
-        # --- LAZY IMPORT ---
-        # Import kaggle and json here so it only happens when this function is called.
+        # Lazy import kaggle and json
         import kaggle
         import json
-        
+
         kaggle_dir = os.path.expanduser("~/.kaggle")
         os.makedirs(kaggle_dir, exist_ok=True)
         kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
