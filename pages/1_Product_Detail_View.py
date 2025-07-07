@@ -158,4 +158,34 @@ def main():
                 st.caption(f"Reviewed on: {review_details['date']}")
                 st.markdown(f"> {review_details['text']}")
             else:
-                st.
+                st.warning("Could not retrieve review details.")
+
+            if st.button("Close Review", key="close_review_button"):
+                st.session_state.altair_selected_review_id = None
+                st.rerun()
+        else:
+            st.info("Click a point on the plot to view details here.")
+    
+    # --- Section 3: Trend Analysis (Omitted for brevity) ---
+    st.markdown("---")
+    st.markdown("### Trends Over Time")
+    time_df = chart_data.copy()
+    time_df['date'] = pd.to_datetime(time_df['date'])
+    time_df['month'] = time_df['date'].dt.to_period('M').dt.start_time
+    t_col1, t_col2 = st.columns(2)
+    with t_col1:
+        st.markdown("#### Volume of Reviews")
+        review_counts_over_time = time_df.groupby('month').size().reset_index(name='count')
+        if not review_counts_over_time.empty:
+            review_stream_chart = px.area(review_counts_over_time, x='month', y='count', title="Total Reviews Published Per Month")
+            st.plotly_chart(review_stream_chart, use_container_width=True)
+    with t_col2:
+        st.markdown("#### Volume of Sentiments")
+        sentiment_counts_over_time = time_df.groupby(['month', 'sentiment']).size().reset_index(name='count')
+        if not sentiment_counts_over_time.empty:
+            sentiment_stream_chart = px.area(sentiment_counts_over_time, x='month', y='count', color='sentiment', title="Sentiment Breakdown Per Month", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
+            st.plotly_chart(sentiment_stream_chart, use_container_width=True)
+
+
+if __name__ == "__main__":
+    main()
