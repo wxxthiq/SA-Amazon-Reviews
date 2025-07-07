@@ -46,7 +46,10 @@ if st.session_state.category == "--- Select a Category ---":
 else:
     # Fetch paginated results from the new utility function
     paginated_results, total_results = get_filtered_products(
-        conn, st.session_state.category, st.session_state.search_term, st.session_state.sort_by,
+        conn,
+        st.session_state.category,
+        st.session_state.search_term,
+        st.session_state.sort_by, # This argument was missing
         limit=PRODUCTS_PER_PAGE,
         offset=st.session_state.page * PRODUCTS_PER_PAGE
     )
