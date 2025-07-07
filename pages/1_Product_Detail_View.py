@@ -11,7 +11,7 @@ from utils.database_utils import (
     get_product_details,
     get_reviews_for_product,
     get_product_date_range,
-    get_single_review_text # Import the new function
+    get_single_review_details # Import the new function
 )
 
 # --- Page Configuration ---
