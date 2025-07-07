@@ -5,7 +5,6 @@ import numpy as np
 import plotly.express as px
 import altair as alt
 from datetime import datetime
-# We will use this library and make it work correctly.
 from streamlit_plotly_events import plotly_events
 
 from utils.database_utils import (
@@ -19,7 +18,6 @@ from utils.database_utils import (
 # --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
 
-# Initialize state key for the selected review
 if 'selected_review_id' not in st.session_state:
     st.session_state.selected_review_id = None
 
@@ -48,7 +46,7 @@ def main():
         st.stop()
     product_details = product_details_df.iloc[0]
 
-    # --- Header and Sidebar (Unchanged) ---
+    # --- Header Section (Unchanged) ---
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
         st.session_state.selected_review_id = None
@@ -69,16 +67,24 @@ def main():
         m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
         m_col2.metric("Total Reviews in DB", f"{int(product_details.get('review_count', 0)):,}")
 
+    # --- Sidebar Filters (WITH STATE RESET) ---
     st.sidebar.header("📊 Interactive Filters")
+    
+    # ** KEY CHANGE: Define a callback function to reset the selection **
+    def reset_selection():
+        st.session_state.selected_review_id = None
+
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
     default_sentiments = ['Positive', 'Negative', 'Neutral']
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db)
-    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings)
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments)
 
-    # --- Load Filtered Data ---
+    # ** KEY CHANGE: Add the on_change callback to all filter widgets **
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db, on_change=reset_selection)
+    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, on_change=reset_selection)
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, on_change=reset_selection)
+
+    # --- Load Filtered Data (Now includes stable jitter) ---
     chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
 
     st.markdown("---")
@@ -91,6 +97,7 @@ def main():
     
     # --- Distribution Charts (Unchanged) ---
     st.markdown("### Key Distributions")
+    # ... (Code omitted for brevity)
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("#### Rating Distribution")
@@ -108,7 +115,7 @@ def main():
         helpful_chart = alt.Chart(helpful_df).mark_bar(color='skyblue').encode(x=alt.X('rating:O', title='Star Rating'), y=alt.Y('helpful_vote:Q', title='Average Helpful Votes'), tooltip=['rating', 'helpful_vote']).properties(height=300)
         st.altair_chart(helpful_chart, use_container_width=True)
 
-    # --- Section 2: Discrepancy Analysis (DEFINITIVE FIX USING pointIndex) ---
+    # --- Section 2: Discrepancy Analysis (Now with stable plot) ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
     st.caption("Click a point on the chart to see the full review details on the right.")
@@ -116,9 +123,8 @@ def main():
     plot_col, review_col = st.columns([2, 1])
 
     with plot_col:
+        # ** KEY CHANGE: Jitter is now pre-calculated, so we just calculate discrepancy **
         chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
-        chart_data['rating_jittered'] = chart_data['rating'] + np.random.uniform(-0.1, 0.1, size=len(chart_data))
-        chart_data['text_polarity_jittered'] = chart_data['text_polarity'] + np.random.uniform(-0.02, 0.02, size=len(chart_data))
         
         fig = px.scatter(
             chart_data,
@@ -131,39 +137,41 @@ def main():
 
         selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
 
-        # ** THE ROBUST FIX: Use pointIndex **
         if selected_points and 'pointIndex' in selected_points[0]:
-            # Get the index of the clicked point. This is highly reliable.
             point_index = selected_points[0]['pointIndex']
-            # Use the index to look up the review_id in our DataFrame.
-            clicked_id = chart_data.iloc[point_index]['review_id']
-            
-            # Update state only if a new point is selected.
-            if st.session_state.selected_review_id != clicked_id:
-                st.session_state.selected_review_id = clicked_id
-                st.rerun()
+            # Safely check if the index is still valid for the current chart_data
+            if point_index < len(chart_data):
+                clicked_id = chart_data.iloc[point_index]['review_id']
+                if st.session_state.selected_review_id != clicked_id:
+                    st.session_state.selected_review_id = clicked_id
+                    st.rerun()
 
     with review_col:
-        # This display logic is clean and depends only on our reliable state variable.
         if st.session_state.selected_review_id:
-            st.markdown("#### Selected Review Details")
-            review_details = get_single_review_details(conn, st.session_state.selected_review_id)
-            
-            if review_details is not None:
-                st.subheader(review_details['review_title'])
-                st.caption(f"Reviewed on: {review_details['date']}")
-                st.markdown(f"> {review_details['text']}")
-            else:
-                st.warning("Could not retrieve review details.")
+            # ** KEY CHANGE: Add a check to ensure the selected ID is still in the filtered data **
+            if st.session_state.selected_review_id in chart_data['review_id'].values:
+                st.markdown("#### Selected Review Details")
+                review_details = get_single_review_details(conn, st.session_state.selected_review_id)
+                
+                if review_details is not None:
+                    st.subheader(review_details['review_title'])
+                    st.caption(f"Reviewed on: {review_details['date']}")
+                    st.markdown(f"> {review_details['text']}")
+                else:
+                    st.warning("Could not retrieve review details.")
 
-            if st.button("Close Review", key="close_review_button"):
-                st.session_state.selected_review_id = None
-                st.rerun()
+                if st.button("Close Review", key="close_review_button"):
+                    st.session_state.selected_review_id = None
+                    st.rerun()
+            else:
+                # If the selected review is no longer in the filtered data, show a message.
+                st.info("The previously selected review is not visible with the current filters. Please select a new point.")
         else:
             st.info("Click a point on the plot to view details here.")
             
     # --- Trend Analysis Section (Unchanged) ---
     st.markdown("---")
+    # ... (Code omitted for brevity)
     st.markdown("### Trends Over Time")
     time_df = chart_data.copy()
     time_df['date'] = pd.to_datetime(time_df['date'])
