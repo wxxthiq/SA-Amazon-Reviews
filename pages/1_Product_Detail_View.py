@@ -190,5 +190,13 @@ def main():
             sentiment_stream_chart = px.area(sentiment_counts_over_time, x='month', y='count', color='sentiment', title="Sentiment Breakdown Per Month", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
             st.plotly_chart(sentiment_stream_chart, use_container_width=True)
 
+    # --- Section 4: Navigation to Review Explorer ---
+    st.markdown("---")
+    st.subheader("📝 Browse Individual Reviews")
+    st.markdown("Click the button below to browse, sort, and filter all reviews for this product.")
+
+    if st.button("Explore All Reviews"):
+        st.switch_page("pages/2_Review_Explorer.py")
+        
 if __name__ == "__main__":
     main()
