@@ -141,3 +141,13 @@ def get_product_date_range(_conn, asin):
     min_date = res[0] if res[0] else datetime.now().date()
     max_date = res[1] if res[1] else datetime.now().date()
     return min_date, max_date
+
+@st.cache_data
+def get_single_review_text(_conn, review_id):
+    """Fetches the full text of a single review by its unique ID."""
+    try:
+        result = _conn.execute("SELECT text FROM reviews WHERE review_id = ?", [review_id]).fetchone()
+        return result[0] if result else "Review text not found."
+    except Exception:
+        return "Could not retrieve review text."
+        
