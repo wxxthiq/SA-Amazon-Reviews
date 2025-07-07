@@ -110,9 +110,14 @@ def get_product_details(_conn, asin):
     """Fetches all details for a single product."""
     return _conn.execute("SELECT * FROM products WHERE parent_asin = ?", [asin]).fetchdf()
 
+# In utils/database_utils.py
+
+# Replace the existing function with this one
 @st.cache_data
 def get_reviews_for_product(_conn, asin, date_range, rating_filter, sentiment_filter):
-    """Fetches and filters all reviews for a single product using positional placeholders."""
+    """
+    Fetches and filters all reviews, and adds STABLE jitter for plotting.
+    """
     query = "SELECT * FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
@@ -120,19 +125,27 @@ def get_reviews_for_product(_conn, asin, date_range, rating_filter, sentiment_fi
         start_date, end_date = date_range
         query += " AND date BETWEEN ? AND ?"
         params.extend([start_date, end_date])
-
+    
     if rating_filter:
         placeholders = ', '.join(['?'] * len(rating_filter))
         query += f" AND rating IN ({placeholders})"
         params.extend(rating_filter)
-
+        
     if sentiment_filter:
         placeholders = ', '.join(['?'] * len(sentiment_filter))
         query += f" AND sentiment IN ({placeholders})"
         params.extend(sentiment_filter)
 
-    return _conn.execute(query, params).fetchdf()
+    df = _conn.execute(query, params).fetchdf()
 
+    # ** KEY CHANGE: Calculate jitter here, inside the cached function **
+    if not df.empty:
+        # Use a fixed seed for the random number generator for stable results
+        rng = np.random.default_rng(seed=42)
+        df['rating_jittered'] = df['rating'] + rng.uniform(-0.1, 0.1, size=len(df))
+        df['text_polarity_jittered'] = df['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(df))
+
+    return df
 @st.cache_data
 def get_product_date_range(_conn, asin):
     """Gets the min and max review dates for a product."""
