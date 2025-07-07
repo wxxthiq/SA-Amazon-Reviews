@@ -14,79 +14,80 @@ from utils.database_utils import (
     get_single_review_details
 )
 
-# --- Page Configuration ---
+# --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
-st.title("📊 Sentiment Overview")
 
-# --- Initialize Session State for review selection ---
-# This ensures the variable exists across reruns
+# This is crucial: Initialize the state key if it doesn't exist.
 if 'discrepancy_review_id' not in st.session_state:
     st.session_state.discrepancy_review_id = None
 
-# --- Constants & DB Connection ---
-DB_PATH = "amazon_reviews_top100.duckdb"
-PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
-conn = connect_to_db(DB_PATH)
+# --- Main App ---
+def main():
+    st.title("📊 Sentiment Overview")
 
-# --- Check for Selected Product ---
-if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
-    st.warning("Please select a product from the main search page first.")
+    # --- Constants & DB Connection ---
+    DB_PATH = "amazon_reviews_top100.duckdb"
+    PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
+    conn = connect_to_db(DB_PATH)
+
+    # --- Check for Selected Product ---
+    if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
+        st.warning("Please select a product from the main search page first.")
+        if st.button("⬅️ Back to Search"):
+            st.switch_page("app.py")
+        st.stop()
+
+    selected_asin = st.session_state.selected_product
+
+    # --- Load Product Data ---
+    product_details_df = get_product_details(conn, selected_asin)
+    if product_details_df.empty:
+        st.error("Could not find details for the selected product.")
+        if st.button("⬅️ Back to Search"):
+            st.switch_page("app.py")
+        st.stop()
+    product_details = product_details_df.iloc[0]
+
+    # --- Header Section ---
     if st.button("⬅️ Back to Search"):
+        st.session_state.selected_product = None
+        st.session_state.discrepancy_review_id = None
         st.switch_page("app.py")
-    st.stop()
 
-selected_asin = st.session_state.selected_product
+    left_col, right_col = st.columns([1, 2])
+    with left_col:
+        image_urls_str = product_details.get('image_urls')
+        image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
+        st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, use_container_width=True)
+        if image_urls:
+            with st.popover("🖼️ View Image Gallery"):
+                st.image(image_urls, use_container_width=True)
+    with right_col:
+        st.header(product_details['product_title'])
+        st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
+        m_col1, m_col2 = st.columns(2)
+        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
+        m_col2.metric("Total Reviews in DB", f"{int(product_details.get('review_count', 0)):,}")
 
-# --- Load Product Data ---
-product_details_df = get_product_details(conn, selected_asin)
-if product_details_df.empty:
-    st.error("Could not find details for the selected product.")
-    if st.button("⬅️ Back to Search"):
-        st.switch_page("app.py")
-    st.stop()
-product_details = product_details_df.iloc[0]
+    # --- Sidebar Filters ---
+    st.sidebar.header("📊 Interactive Filters")
+    min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
+    default_date_range = (min_date_db, max_date_db)
+    default_ratings = [1, 2, 3, 4, 5]
+    default_sentiments = ['Positive', 'Negative', 'Neutral']
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db)
+    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings)
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments)
 
-# --- RENDER PAGE ---
+    # --- Load Filtered Data ---
+    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
 
-# --- Header Section ---
-if st.button("⬅️ Back to Search"):
-    st.session_state.selected_product = None
-    st.session_state.discrepancy_review_id = None # Clear review on exit
-    st.switch_page("app.py")
+    st.markdown("---")
 
-left_col, right_col = st.columns([1, 2])
-with left_col:
-    image_urls_str = product_details.get('image_urls')
-    image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
-    st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, use_container_width=True)
-    if image_urls:
-        with st.popover("🖼️ View Image Gallery"):
-            st.image(image_urls, use_container_width=True)
-with right_col:
-    st.header(product_details['product_title'])
-    st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
-    m_col1, m_col2 = st.columns(2)
-    m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-    m_col2.metric("Total Reviews in DB", f"{int(product_details.get('review_count', 0)):,}")
+    if chart_data.empty:
+        st.warning("No reviews match the selected filters.")
+        st.stop()
 
-# --- Sidebar Filters ---
-st.sidebar.header("📊 Interactive Filters")
-min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
-default_date_range = (min_date_db, max_date_db)
-default_ratings = [1, 2, 3, 4, 5]
-default_sentiments = ['Positive', 'Negative', 'Neutral']
-selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db)
-selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings)
-selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments)
-
-# --- Load Filtered Data ---
-chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
-
-st.markdown("---")
-
-if chart_data.empty:
-    st.warning("No reviews match the selected filters.")
-else:
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
     # --- Section 1: Distribution Charts ---
@@ -108,7 +109,7 @@ else:
         helpful_chart = alt.Chart(helpful_df).mark_bar(color='skyblue').encode(x=alt.X('rating:O', title='Star Rating'), y=alt.Y('helpful_vote:Q', title='Average Helpful Votes'), tooltip=['rating', 'helpful_vote']).properties(height=300)
         st.altair_chart(helpful_chart, use_container_width=True)
 
-    # --- Section 2: Discrepancy Analysis (ROBUST STATE HANDLING) ---
+    # --- Section 2: Discrepancy Analysis ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
     st.caption("Click a point on the chart to see the full review details on the right.")
@@ -116,7 +117,6 @@ else:
     plot_col, review_col = st.columns([2, 1])
 
     with plot_col:
-        # Prepare data for plot
         chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
         rng = np.random.default_rng(seed=42)
         chart_data['rating_jittered'] = chart_data['rating'] + rng.uniform(-0.1, 0.1, size=len(chart_data))
@@ -133,33 +133,26 @@ else:
         discrepancy_plot.update_xaxes(title_text='Star Rating')
         discrepancy_plot.update_yaxes(title_text='Text Sentiment Polarity')
 
-        # This captures the click event
         selected_point = plotly_events(discrepancy_plot, click_event=True, key="discrepancy_click")
         
-        # **FIX: Explicitly update state and force a rerun**
+        # This is the event handling logic.
         if selected_point and 'customdata' in selected_point[0]:
-            # Get the ID of the review that was clicked
             clicked_review_id = selected_point[0]['customdata'][0]
-            
-            # Only rerun if it's a *new* review being selected
-            if st.session_state.discrepancy_review_id != clicked_review_id:
-                st.session_state.discrepancy_review_id = clicked_review_id
-                st.rerun() # This is the crucial step
+            # Set the state and rerun the app immediately.
+            st.session_state.discrepancy_review_id = clicked_review_id
+            st.rerun()
 
     with review_col:
-        # This section now reliably reads from the session state after the rerun
+        # This is the display logic. It runs on every script rerun.
         if st.session_state.discrepancy_review_id:
             st.markdown("#### Selected Review Details")
-            
             review_details = get_single_review_details(conn, st.session_state.discrepancy_review_id)
-            
             if review_details is not None:
                 st.subheader(review_details['review_title'])
                 st.caption(f"Reviewed on: {review_details['date']}")
                 st.markdown(f"> {review_details['text']}")
             else:
                 st.warning("Could not retrieve review details.")
-
             if st.button("Close Review"):
                 st.session_state.discrepancy_review_id = None
                 st.rerun()
@@ -185,3 +178,6 @@ else:
         if not sentiment_counts_over_time.empty:
             sentiment_stream_chart = px.area(sentiment_counts_over_time, x='month', y='count', color='sentiment', title="Sentiment Breakdown Per Month", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
             st.plotly_chart(sentiment_stream_chart, use_container_width=True)
+
+if __name__ == "__main__":
+    main()
