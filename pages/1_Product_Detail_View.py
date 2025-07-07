@@ -135,42 +135,56 @@ else:
         ).properties(height=300)
         st.altair_chart(helpful_chart, use_container_width=True)
         
-    # --- Section 2: Discrepancy Analysis ---
+    # --- Section 2: Discrepancy Analysis (CORRECTED & ENHANCED) ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
-    st.caption("Click a point on the chart to read the corresponding review.")
-    
-    # **FIX 1: Calculate discrepancy score for coloring**
-    chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
-    
-    # Add jitter for better visualization
-    rng = np.random.default_rng(seed=42)
-    chart_data['rating_jittered'] = chart_data['rating'] + rng.uniform(-0.1, 0.1, size=len(chart_data))
-    chart_data['text_polarity_jittered'] = chart_data['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(chart_data))
+    st.caption("Click a point on the chart to see the full review details on the right.")
 
-    discrepancy_plot = px.scatter(
-        chart_data,
-        x="rating_jittered",
-        y="text_polarity_jittered",
-        color="discrepancy",  # **FIX 2: Use discrepancy score for color**
-        color_continuous_scale=px.colors.sequential.Viridis,
-        custom_data=['review_id'],
-        hover_name='review_title',
-        hover_data={'rating': True, 'text_polarity': ':.2f', 'discrepancy': ':.2f', 'rating_jittered': False, 'text_polarity_jittered': False}
-    )
-    discrepancy_plot.update_traces(marker=dict(size=8, opacity=0.7))
-    discrepancy_plot.update_xaxes(title_text='Star Rating')
-    discrepancy_plot.update_yaxes(title_text='Text Sentiment Polarity')
-    
-    selected_point = plotly_events(discrepancy_plot, click_event=True, key="discrepancy_click")
-    
-    # **FIX 3: Safely check for the click event and the expected key**
-    if selected_point and 'customdata' in selected_point[0]:
-        review_id = selected_point[0]['customdata'][0]
-        review_text = get_single_review_text(conn, review_id)
-        with st.container(border=True):
-            st.markdown(f"**Selected Review Text:**")
-            st.markdown(f"> {review_text}")
+    # Create a two-column layout for the plot and the review details
+    plot_col, review_col = st.columns([2, 1])
+
+    with plot_col:
+        chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
+        rng = np.random.default_rng(seed=42)
+        chart_data['rating_jittered'] = chart_data['rating'] + rng.uniform(-0.1, 0.1, size=len(chart_data))
+        chart_data['text_polarity_jittered'] = chart_data['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(chart_data))
+
+        discrepancy_plot = px.scatter(
+            chart_data,
+            x="rating_jittered", y="text_polarity_jittered",
+            color="discrepancy", color_continuous_scale=px.colors.sequential.Viridis,
+            custom_data=['review_id'], hover_name='review_title',
+            hover_data={'rating': True, 'text_polarity': ':.2f', 'discrepancy': ':.2f', 'rating_jittered': False, 'text_polarity_jittered': False}
+        )
+        discrepancy_plot.update_traces(marker=dict(size=8, opacity=0.7))
+        discrepancy_plot.update_xaxes(title_text='Star Rating')
+        discrepancy_plot.update_yaxes(title_text='Text Sentiment Polarity')
+        
+        # Capture click events and update session state
+        selected_point = plotly_events(discrepancy_plot, click_event=True, key="discrepancy_click")
+        if selected_point and 'customdata' in selected_point[0]:
+            st.session_state.discrepancy_review_id = selected_point[0]['customdata'][0]
+
+    with review_col:
+        # This section now reads from session_state to display the review
+        if st.session_state.discrepancy_review_id:
+            st.markdown("#### Selected Review Details")
+            
+            review_details = get_single_review_details(conn, st.session_state.discrepancy_review_id)
+            
+            if review_details is not None:
+                st.subheader(review_details['review_title'])
+                st.caption(f"Reviewed on: {review_details['date']}")
+                st.markdown(f"> {review_details['text']}")
+            else:
+                st.warning("Could not retrieve review details.")
+
+            # Add a button to clear the selection
+            if st.button("Close Review"):
+                st.session_state.discrepancy_review_id = None
+                st.rerun() # Rerun to hide the review immediately
+        else:
+            st.info("Click a point on the plot to view details here.")
 
     # --- Section 3: Trend Analysis ---
     st.markdown("---")
