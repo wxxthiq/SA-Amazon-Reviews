@@ -3,7 +3,6 @@ import streamlit as st
 import duckdb
 import pandas as pd
 import os
-# We will import kaggle and json inside the function that needs them
 import logging
 from datetime import datetime
 
@@ -40,26 +39,21 @@ def a_download_data_with_versioning(dataset_slug, db_path, expected_version):
     if os.path.exists(VERSION_FILE_PATH): os.remove(VERSION_FILE_PATH)
 
     try:
-        # --- LAZY IMPORT ---
-        # Import kaggle and json here so it only happens when this function is called.
-        import kaggle
-        import json
-        
-        kaggle_dir = os.path.expanduser("~/.kaggle")
-        os.makedirs(kaggle_dir, exist_ok=True)
-        kaggle_json_path = os.path.join(kaggle_dir, "kaggle.json")
-
+        # --- ROBUST AUTHENTICATION FIX ---
+        # Set credentials as environment variables. Kaggle's library will automatically find them.
+        # This avoids all issues with creating the kaggle.json file in a cloud environment.
         if "kaggle" not in st.secrets or "username" not in st.secrets["kaggle"] or "key" not in st.secrets["kaggle"]:
             st.error('FATAL: Make sure your .streamlit/secrets.toml contains a [kaggle] section with "username" and "key".')
             st.stop()
 
-        credentials = {"username": st.secrets["kaggle"]["username"], "key": st.secrets["kaggle"]["key"]}
+        os.environ['KAGGLE_USERNAME'] = st.secrets["kaggle"]["username"]
+        os.environ['KAGGLE_KEY'] = st.secrets["kaggle"]["key"]
 
-        with open(kaggle_json_path, "w") as f:
-            json.dump(credentials, f)
-        os.chmod(kaggle_json_path, 0o600)
+        # Now that environment variables are set, we can safely import kaggle.
+        import kaggle
 
         with st.spinner(f"Downloading dataset '{dataset_slug}' from Kaggle..."):
+            # The Kaggle API will now use the environment variables for authentication.
             kaggle.api.dataset_download_files(dataset=dataset_slug, path='.', unzip=True)
 
         with open(VERSION_FILE_PATH, "w") as f:
