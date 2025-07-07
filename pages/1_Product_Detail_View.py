@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px # Keep for other charts
+import plotly.express as px
 import altair as alt
 from datetime import datetime
 from utils.database_utils import (
@@ -16,9 +16,11 @@ from utils.database_utils import (
 # --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
 
-# Use a more specific key for the selection state
-if 'altair_selected_review' not in st.session_state:
-    st.session_state.altair_selected_review = None
+# Initialize state keys if they don't exist
+if 'selected_product' not in st.session_state:
+    st.session_state.selected_product = None
+if 'altair_selected_review_id' not in st.session_state:
+    st.session_state.altair_selected_review_id = None
 
 # --- Main App Logic ---
 def main():
@@ -30,7 +32,7 @@ def main():
     conn = connect_to_db(DB_PATH)
 
     # --- Check for Selected Product ---
-    if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
+    if st.session_state.selected_product is None:
         st.warning("Please select a product from the main search page first.")
         if st.button("⬅️ Back to Search"):
             st.switch_page("app.py")
@@ -49,7 +51,7 @@ def main():
     # --- Header Section ---
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
-        st.session_state.altair_selected_review = None # Clear state on exit
+        st.session_state.altair_selected_review_id = None
         st.switch_page("app.py")
 
     left_col, right_col = st.columns([1, 2])
@@ -89,8 +91,8 @@ def main():
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
     # --- Section 1: Distribution Charts ---
+    # (Omitted for brevity, no changes here)
     st.markdown("### Key Distributions")
-    # ... (unchanged)
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("#### Rating Distribution")
@@ -108,8 +110,7 @@ def main():
         helpful_chart = alt.Chart(helpful_df).mark_bar(color='skyblue').encode(x=alt.X('rating:O', title='Star Rating'), y=alt.Y('helpful_vote:Q', title='Average Helpful Votes'), tooltip=['rating', 'helpful_vote']).properties(height=300)
         st.altair_chart(helpful_chart, use_container_width=True)
 
-
-    # --- Section 2: Discrepancy Analysis (NEW ALTAIR IMPLEMENTATION) ---
+    # --- Section 2: Discrepancy Analysis (ROBUST ALTAIR IMPLEMENTATION) ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
     st.caption("Click a point on the chart to see the full review details on the right.")
@@ -117,13 +118,11 @@ def main():
     plot_col, review_col = st.columns([2, 1])
 
     with plot_col:
-        # Prepare data
         chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
         
-        # Define the selection parameter
-        selection = alt.selection_point(fields=['review_id'], empty=False)
+        # Define a point selection
+        selection = alt.selection_point(fields=['review_id'], name='review_selector', empty=True)
 
-        # Create the Altair chart
         scatter_plot = alt.Chart(chart_data).mark_circle(size=60).encode(
             x=alt.X('rating:Q', title='Star Rating', scale=alt.Scale(zero=False)),
             y=alt.Y('text_polarity:Q', title='Text Sentiment Polarity'),
@@ -135,54 +134,28 @@ def main():
             height=400
         )
         
-        # Use a key for the chart component to store its selection state
-        event = st.altair_chart(scatter_plot, use_container_width=True, on_select="rerun", key="discrepancy_selector")
+        # Render the chart. on_select="rerun" will store the state in session_state
+        st.altair_chart(scatter_plot, use_container_width=True, on_select="rerun", key="discrepancy_chart_selector")
+
+        # After the chart is rendered, check the session state for the selection
+        # This is the state object that Streamlit creates for the component
+        selection_state = st.session_state.get("discrepancy_chart_selector")
         
-        # The selection state is stored in the key we provided
-        if event.selection and event.selection['review_id']:
-            st.session_state.altair_selected_review = event.selection['review_id'][0]
+        if selection_state and selection_state.get('review_id'):
+            # The selection is a list, so we take the first item
+            selected_id = selection_state['review_id'][0]
+            # Update our custom state variable
+            st.session_state.altair_selected_review_id = selected_id
 
     with review_col:
-        # Display logic now reads from the selection state populated by the chart
-        if st.session_state.altair_selected_review:
+        # This display logic now only depends on our custom state variable
+        if st.session_state.altair_selected_review_id:
             st.markdown("#### Selected Review Details")
-            review_id = st.session_state.altair_selected_review
-            review_details = get_single_review_details(conn, review_id)
+            review_details = get_single_review_details(conn, st.session_state.altair_selected_review_id)
             
             if review_details is not None:
                 st.subheader(review_details['review_title'])
                 st.caption(f"Reviewed on: {review_details['date']}")
                 st.markdown(f"> {review_details['text']}")
             else:
-                st.warning("Could not retrieve review details.")
-
-            if st.button("Close Review", key="close_review_button_altair"):
-                st.session_state.altair_selected_review = None
-                st.rerun()
-        else:
-            st.info("Click a point on the plot to view details here.")
-
-    # --- Section 3: Trend Analysis ---
-    # ... (unchanged)
-    st.markdown("---")
-    st.markdown("### Trends Over Time")
-    time_df = chart_data.copy()
-    time_df['date'] = pd.to_datetime(time_df['date'])
-    time_df['month'] = time_df['date'].dt.to_period('M').dt.start_time
-    t_col1, t_col2 = st.columns(2)
-    with t_col1:
-        st.markdown("#### Volume of Reviews")
-        review_counts_over_time = time_df.groupby('month').size().reset_index(name='count')
-        if not review_counts_over_time.empty:
-            review_stream_chart = px.area(review_counts_over_time, x='month', y='count', title="Total Reviews Published Per Month")
-            st.plotly_chart(review_stream_chart, use_container_width=True)
-    with t_col2:
-        st.markdown("#### Volume of Sentiments")
-        sentiment_counts_over_time = time_df.groupby(['month', 'sentiment']).size().reset_index(name='count')
-        if not sentiment_counts_over_time.empty:
-            sentiment_stream_chart = px.area(sentiment_counts_over_time, x='month', y='count', color='sentiment', title="Sentiment Breakdown Per Month", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
-            st.plotly_chart(sentiment_stream_chart, use_container_width=True)
-
-
-if __name__ == "__main__":
-    main()
+                st.
