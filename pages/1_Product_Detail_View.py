@@ -11,7 +11,7 @@ from utils.database_utils import (
     get_product_details,
     get_reviews_for_product,
     get_product_date_range,
-    get_single_review_details # Import the new function
+    get_single_review_details
 )
 
 # --- Page Configuration ---
@@ -19,6 +19,7 @@ st.set_page_config(layout="wide", page_title="Sentiment Overview")
 st.title("📊 Sentiment Overview")
 
 # --- Initialize Session State for review selection ---
+# This ensures the variable exists across reruns
 if 'discrepancy_review_id' not in st.session_state:
     st.session_state.discrepancy_review_id = None
 
@@ -53,7 +54,6 @@ if st.button("⬅️ Back to Search"):
     st.session_state.discrepancy_review_id = None # Clear review on exit
     st.switch_page("app.py")
 
-# Product header, gallery, etc. (omitted for brevity, same as before)
 left_col, right_col = st.columns([1, 2])
 with left_col:
     image_urls_str = product_details.get('image_urls')
@@ -69,7 +69,7 @@ with right_col:
     m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
     m_col2.metric("Total Reviews in DB", f"{int(product_details.get('review_count', 0)):,}")
 
-# --- Sidebar Filters (same as before) ---
+# --- Sidebar Filters ---
 st.sidebar.header("📊 Interactive Filters")
 min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
 default_date_range = (min_date_db, max_date_db)
@@ -89,10 +89,9 @@ if chart_data.empty:
 else:
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- Section 1: Distribution Charts (same as before) ---
+    # --- Section 1: Distribution Charts ---
     st.markdown("### Key Distributions")
     col1, col2, col3 = st.columns(3)
-    # Chart rendering code for distributions (omitted for brevity)
     with col1:
         st.markdown("#### Rating Distribution")
         rating_counts_df = chart_data['rating'].value_counts().sort_index().reset_index()
@@ -109,15 +108,15 @@ else:
         helpful_chart = alt.Chart(helpful_df).mark_bar(color='skyblue').encode(x=alt.X('rating:O', title='Star Rating'), y=alt.Y('helpful_vote:Q', title='Average Helpful Votes'), tooltip=['rating', 'helpful_vote']).properties(height=300)
         st.altair_chart(helpful_chart, use_container_width=True)
 
-    # --- Section 2: Discrepancy Analysis (CORRECTED & ENHANCED) ---
+    # --- Section 2: Discrepancy Analysis (ROBUST STATE HANDLING) ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
     st.caption("Click a point on the chart to see the full review details on the right.")
 
-    # Create a two-column layout for the plot and the review details
     plot_col, review_col = st.columns([2, 1])
 
     with plot_col:
+        # Prepare data for plot
         chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
         rng = np.random.default_rng(seed=42)
         chart_data['rating_jittered'] = chart_data['rating'] + rng.uniform(-0.1, 0.1, size=len(chart_data))
@@ -133,14 +132,22 @@ else:
         discrepancy_plot.update_traces(marker=dict(size=8, opacity=0.7))
         discrepancy_plot.update_xaxes(title_text='Star Rating')
         discrepancy_plot.update_yaxes(title_text='Text Sentiment Polarity')
-        
-        # Capture click events and update session state
+
+        # This captures the click event
         selected_point = plotly_events(discrepancy_plot, click_event=True, key="discrepancy_click")
+        
+        # **FIX: Explicitly update state and force a rerun**
         if selected_point and 'customdata' in selected_point[0]:
-            st.session_state.discrepancy_review_id = selected_point[0]['customdata'][0]
+            # Get the ID of the review that was clicked
+            clicked_review_id = selected_point[0]['customdata'][0]
+            
+            # Only rerun if it's a *new* review being selected
+            if st.session_state.discrepancy_review_id != clicked_review_id:
+                st.session_state.discrepancy_review_id = clicked_review_id
+                st.rerun() # This is the crucial step
 
     with review_col:
-        # This section now reads from session_state to display the review
+        # This section now reliably reads from the session state after the rerun
         if st.session_state.discrepancy_review_id:
             st.markdown("#### Selected Review Details")
             
@@ -153,14 +160,13 @@ else:
             else:
                 st.warning("Could not retrieve review details.")
 
-            # Add a button to clear the selection
             if st.button("Close Review"):
                 st.session_state.discrepancy_review_id = None
-                st.rerun() # Rerun to hide the review immediately
+                st.rerun()
         else:
             st.info("Click a point on the plot to view details here.")
 
-    # --- Section 3: Trend Analysis (omitted for brevity, same as before) ---
+    # --- Section 3: Trend Analysis ---
     st.markdown("---")
     st.markdown("### Trends Over Time")
     time_df = chart_data.copy()
