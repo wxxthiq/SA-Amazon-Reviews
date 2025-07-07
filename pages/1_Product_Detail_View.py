@@ -1,14 +1,24 @@
-# pages/1_Product_Detail_View.py
+# pages/1_Sentiment_Overview.py
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import altair as alt
 from datetime import datetime
-from utils.database_utils import connect_to_db, get_product_details, get_reviews_for_product, get_product_date_range
+from streamlit_plotly_events import plotly_events
+from utils.database_utils import (
+    connect_to_db,
+    get_product_details,
+    get_reviews_for_product,
+    get_product_date_range,
+    get_single_review_text # Import the new function
+)
 
 # --- Page Configuration ---
-st.set_page_config(layout="wide", page_title="Product Analysis")
+st.set_page_config(layout="wide", page_title="Sentiment Overview")
+st.title("📊 Sentiment Overview")
+
+# --- Constants ---
 DB_PATH = "amazon_reviews_top100.duckdb"
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 
@@ -18,7 +28,8 @@ conn = connect_to_db(DB_PATH)
 # --- Check for Selected Product ---
 if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
     st.warning("Please select a product from the main search page first.")
-    st.page_link("app.py", label="Back to Search", icon="⬅️")
+    if st.button("⬅️ Back to Search"):
+        st.switch_page("app.py")
     st.stop()
 
 selected_asin = st.session_state.selected_product
@@ -27,139 +38,165 @@ selected_asin = st.session_state.selected_product
 product_details_df = get_product_details(conn, selected_asin)
 if product_details_df.empty:
     st.error("Could not find details for the selected product.")
-    st.page_link("app.py", label="Back to Search", icon="⬅️")
+    if st.button("⬅️ Back to Search"):
+        st.switch_page("app.py")
     st.stop()
 product_details = product_details_df.iloc[0]
 
 # --- RENDER PAGE ---
 
-# --- Header and Sidebar ---
-if st.page_link("app.py", label="Back to Search", icon="⬅️"):
-    # Clear product-specific state when going back
+# --- Header Section ---
+if st.button("⬅️ Back to Search"):
     st.session_state.selected_product = None
+    st.switch_page("app.py")
 
-# Product Info Header
+# Product Info Header with Image Gallery
 left_col, right_col = st.columns([1, 2])
 with left_col:
     image_urls_str = product_details.get('image_urls')
     image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
+    
+    # Display the main image
     st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, use_container_width=True)
+
+    # --- Restored Image Gallery Popover ---
+    if image_urls:
+        with st.popover("🖼️ View Image Gallery"):
+            st.image(image_urls, use_container_width=True)
 
 with right_col:
     st.header(product_details['product_title'])
     st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
-    st.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-    st.metric("Total Reviews in DB", f"{int(product_details.get('review_count', 0)):,}")
+    
+    m_col1, m_col2 = st.columns(2)
+    m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
+    m_col2.metric("Total Reviews in DB", f"{int(product_details.get('review_count', 0)):,}")
 
 # --- Interactive Sidebar Filters ---
 st.sidebar.header("📊 Interactive Filters")
 min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
 
-# Set defaults for filters
 default_date_range = (min_date_db, max_date_db)
 default_ratings = [1, 2, 3, 4, 5]
 default_sentiments = ['Positive', 'Negative', 'Neutral']
 
-# Create filter widgets
-selected_date_range = st.sidebar.date_input(
-    "Filter by Date Range",
-    value=default_date_range,
-    min_value=min_date_db,
-    max_value=max_date_db,
-    key='date_filter'
-)
-selected_ratings = st.sidebar.multiselect(
-    "Filter by Star Rating",
-    options=default_ratings,
-    default=default_ratings,
-    key='rating_filter'
-)
-selected_sentiments = st.sidebar.multiselect(
-    "Filter by Sentiment",
-    options=default_sentiments,
-    default=default_sentiments,
-    key='sentiment_filter'
-)
+selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db)
+selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings)
+selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments)
 
 # --- Load Filtered Data ---
-# This is the main data pull for all charts on this page
 chart_data = get_reviews_for_product(
     conn,
     selected_asin,
     selected_date_range,
-    tuple(selected_ratings),  # Use tuple for caching
-    tuple(selected_sentiments) # Use tuple for caching
+    tuple(selected_ratings),
+    tuple(selected_sentiments)
 )
 
 st.markdown("---")
-st.subheader("Sentiment Analysis Overview")
 
 if chart_data.empty:
     st.warning("No reviews match the selected filters.")
 else:
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
     
-    # --- RENDER CHARTS ---
-    col1, col2 = st.columns(2)
+    # --- Section 1: Distribution Charts ---
+    st.markdown("### Key Distributions")
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Rating Distribution Chart
         st.markdown("#### Rating Distribution")
         rating_counts_df = chart_data['rating'].value_counts().sort_index().reset_index()
-        rating_counts_df.columns = ['Rating', 'Count']
         bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(
-            x=alt.X('Rating:O', title="Stars"),
-            y=alt.Y('Count:Q', title="Number of Reviews"),
-            tooltip=['Rating', 'Count']
-        ).properties(title="Filtered Rating Distribution")
+            x=alt.X('rating:O', title="Stars"),
+            y=alt.Y('count:Q', title="Number of Reviews"),
+            tooltip=['rating', 'count']
+        ).properties(height=300)
         st.altair_chart(bar_chart, use_container_width=True)
 
     with col2:
-        # Sentiment Distribution Chart
         st.markdown("#### Sentiment Distribution")
         sentiment_counts_df = chart_data['sentiment'].value_counts().reset_index()
-        sentiment_counts_df.columns = ['Sentiment', 'Count']
         sentiment_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
-            x=alt.X('Sentiment:N', title="Sentiment", sort='-y'),
-            y=alt.Y('Count:Q', title="Number of Reviews"),
-            color=alt.Color('Sentiment:N',
-                            scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']),
-                            legend=None),
-            tooltip=['Sentiment', 'Count']
-        ).properties(title="Filtered Sentiment Distribution")
+            x=alt.X('sentiment:N', title="Sentiment", sort='-y'),
+            y=alt.Y('count:Q', title="Number of Reviews"),
+            color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=None),
+            tooltip=['sentiment', 'count']
+        ).properties(height=300)
         st.altair_chart(sentiment_chart, use_container_width=True)
-
-    # Helpfulness Analysis (NEW FEATURE)
-    st.markdown("---")
-    st.markdown("### 👍 Helpfulness Analysis")
-    col3, col4 = st.columns(2)
-
+    
     with col3:
-        # Average helpful votes per rating
-        st.markdown("#### Avg. Helpful Votes per Rating")
+        st.markdown("#### Avg. Helpful Votes")
         helpful_df = chart_data.groupby('rating')['helpful_vote'].mean().reset_index()
         helpful_chart = alt.Chart(helpful_df).mark_bar(color='skyblue').encode(
             x=alt.X('rating:O', title='Star Rating'),
             y=alt.Y('helpful_vote:Q', title='Average Helpful Votes'),
             tooltip=['rating', 'helpful_vote']
-        ).properties(title="Do higher or lower ratings get more helpful votes?")
+        ).properties(height=300)
         st.altair_chart(helpful_chart, use_container_width=True)
-
-    with col4:
-        # Verified vs Unverified reviews helpfulness
-        st.markdown("#### Verified vs. Unverified Reviews")
-        verified_df = chart_data.groupby('verified_purchase')['helpful_vote'].agg(['mean', 'count']).reset_index()
-        verified_df['verified_purchase'] = verified_df['verified_purchase'].map({True: 'Verified', False: 'Not Verified'})
         
-        # Ensure we have data to plot
-        if not verified_df.empty:
-            verified_chart = alt.Chart(verified_df).mark_bar().encode(
-                x=alt.X('verified_purchase:N', title='Purchase Status'),
-                y=alt.Y('mean:Q', title='Average Helpful Votes'),
-                tooltip=['verified_purchase', 'mean', 'count']
-            ).properties(
-                title='Are verified reviews more helpful?'
+    # --- Section 2: Discrepancy Analysis ---
+    st.markdown("---")
+    st.markdown("### Rating vs. Text Discrepancy")
+    st.caption("Click a point on the chart to read the corresponding review.")
+    
+    # Add jitter for better visualization
+    rng = np.random.default_rng(seed=42)
+    chart_data['rating_jittered'] = chart_data['rating'] + rng.uniform(-0.1, 0.1, size=len(chart_data))
+    chart_data['text_polarity_jittered'] = chart_data['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(chart_data))
+
+    discrepancy_plot = px.scatter(
+        chart_data,
+        x="rating_jittered",
+        y="text_polarity_jittered",
+        custom_data=['review_id'],
+        hover_name='review_title',
+        hover_data={'rating': True, 'text_polarity': ':.2f', 'rating_jittered': False, 'text_polarity_jittered': False}
+    )
+    discrepancy_plot.update_traces(marker=dict(size=8, opacity=0.7))
+    discrepancy_plot.update_xaxes(title_text='Star Rating')
+    discrepancy_plot.update_yaxes(title_text='Text Sentiment Polarity')
+    
+    # Capture click events
+    selected_point = plotly_events(discrepancy_plot, click_event=True, key="discrepancy_click")
+    
+    # Display the review text when a point is clicked
+    if selected_point:
+        review_id = selected_point[0]['customdata'][0]
+        review_text = get_single_review_text(conn, review_id)
+        with st.container(border=True):
+            st.markdown(f"**Selected Review Text:**")
+            st.markdown(f"> {review_text}")
+
+    # --- Section 3: Trend Analysis ---
+    st.markdown("---")
+    st.markdown("### Trends Over Time")
+    
+    time_df = chart_data.copy()
+    time_df['date'] = pd.to_datetime(time_df['date'])
+    # Resample to the beginning of the month for smoother charts
+    time_df['month'] = time_df['date'].dt.to_period('M').dt.start_time
+    
+    t_col1, t_col2 = st.columns(2)
+    
+    with t_col1:
+        st.markdown("#### Volume of Reviews")
+        review_counts_over_time = time_df.groupby('month').size().reset_index(name='count')
+        if not review_counts_over_time.empty:
+            review_stream_chart = px.area(
+                review_counts_over_time, x='month', y='count',
+                title="Total Reviews Published Per Month"
             )
-            st.altair_chart(verified_chart, use_container_width=True)
-        else:
-            st.info("No data available for verified vs. unverified comparison with current filters.")
+            st.plotly_chart(review_stream_chart, use_container_width=True)
+
+    with t_col2:
+        st.markdown("#### Volume of Sentiments")
+        sentiment_counts_over_time = time_df.groupby(['month', 'sentiment']).size().reset_index(name='count')
+        if not sentiment_counts_over_time.empty:
+            sentiment_stream_chart = px.area(
+                sentiment_counts_over_time, x='month', y='count', color='sentiment',
+                title="Sentiment Breakdown Per Month",
+                color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+            )
+            st.plotly_chart(sentiment_stream_chart, use_container_width=True)
