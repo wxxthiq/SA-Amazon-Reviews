@@ -169,27 +169,61 @@ def main():
         else:
             st.info("Click a point on the plot to view details here.")
             
-    # --- Trend Analysis Section (Unchanged) ---
+    # --- Section 3: Trend Analysis (ENHANCED) ---
     st.markdown("---")
-    # ... (Code omitted for brevity)
     st.markdown("### Trends Over Time")
+
+    time_granularity = st.radio(
+        "Select time period:",
+        ("Monthly", "Weekly", "Daily"),
+        index=0,
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
     time_df = chart_data.copy()
     time_df['date'] = pd.to_datetime(time_df['date'])
-    time_df['month'] = time_df['date'].dt.to_period('M').dt.start_time
-    t_col1, t_col2 = st.columns(2)
-    with t_col1:
-        st.markdown("#### Volume of Reviews")
-        review_counts_over_time = time_df.groupby('month').size().reset_index(name='count')
-        if not review_counts_over_time.empty:
-            review_stream_chart = px.area(review_counts_over_time, x='month', y='count', title="Total Reviews Published Per Month")
-            st.plotly_chart(review_stream_chart, use_container_width=True)
-    with t_col2:
-        st.markdown("#### Volume of Sentiments")
-        sentiment_counts_over_time = time_df.groupby(['month', 'sentiment']).size().reset_index(name='count')
-        if not sentiment_counts_over_time.empty:
-            sentiment_stream_chart = px.area(sentiment_counts_over_time, x='month', y='count', color='sentiment', title="Sentiment Breakdown Per Month", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
-            st.plotly_chart(sentiment_stream_chart, use_container_width=True)
 
+    if time_granularity == 'Monthly':
+        time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
+    elif time_granularity == 'Weekly':
+        time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
+    else: # Daily
+        time_df['period'] = time_df['date'].dt.date
+
+    t_col1, t_col2 = st.columns(2)
+
+    with t_col1:
+        # ** KEY CHANGE: Switched to Rating Distribution **
+        st.markdown("#### Rating Distribution Over Time")
+        rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
+        if not rating_counts_over_time.empty:
+            rating_stream_chart = px.area(
+                rating_counts_over_time,
+                x='period',
+                y='count',
+                color='rating',
+                title=f"Volume of Reviews by Star Rating",
+                color_discrete_map={
+                    5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b',
+                    2: '#fee08b', 1: '#d73027'
+                },
+                category_orders={"rating": [5, 4, 3, 2, 1]}
+            )
+            st.plotly_chart(rating_stream_chart, use_container_width=True)
+
+    with t_col2:
+        st.markdown("#### Sentiment Volume Over Time")
+        sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+        if not sentiment_counts_over_time.empty:
+            sentiment_stream_chart = px.area(
+                sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                title=f"Sentiment Breakdown Per {time_granularity.replace('ly', '')}",
+                color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+            )
+            st.plotly_chart(sentiment_stream_chart, use_container_width=True)
+            
     # --- Section 4: Navigation to Review Explorer ---
     st.markdown("---")
     st.subheader("📝 Browse Individual Reviews")
