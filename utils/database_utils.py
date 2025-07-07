@@ -15,6 +15,7 @@ VERSION_FILE_PATH = ".db_version"
 def connect_to_db(path):
     """Connects to the DuckDB database."""
     try:
+        # Connect in read-only mode as the app shouldn't modify the DB
         return duckdb.connect(database=path, read_only=True)
     except Exception as e:
         st.error(f"FATAL: Could not connect to database at '{path}'. Error: {e}")
