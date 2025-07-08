@@ -7,7 +7,8 @@ from wordcloud import STOPWORDS
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
-    get_reviews_for_product
+    get_reviews_for_product,
+    get_product_date_range # Import the missing function
 )
 
 # --- Page Configuration ---
@@ -33,13 +34,15 @@ def main():
     st.header(product_details['product_title'])
     st.caption("Select a keyword to see its rating distribution and read example reviews.")
 
-    # --- Use existing filters from session state ---
-    # This ensures that the analysis is consistent with the overview page
-    date_filter = st.session_state.get('date_filter')
-    rating_filter = st.session_state.get('rating_filter')
-    sentiment_filter = st.session_state.get('sentiment_filter')
+    # --- DEFINITIVE FIX FOR TypeError ---
+    # Get filters from session state, but provide default values if they don't exist
+    min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
+    
+    date_filter = st.session_state.get('date_filter', (min_date_db, max_date_db))
+    rating_filter = st.session_state.get('rating_filter', [1, 2, 3, 4, 5])
+    sentiment_filter = st.session_state.get('sentiment_filter', ['Positive', 'Negative', 'Neutral'])
 
-    # Load data based on the filters set on the overview page
+    # Load data using the (now guaranteed to exist) filter values
     chart_data = get_reviews_for_product(conn, selected_asin, date_filter, tuple(rating_filter), tuple(sentiment_filter))
 
     if chart_data.empty:
