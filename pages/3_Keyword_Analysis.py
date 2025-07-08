@@ -16,7 +16,7 @@ from utils.database_utils import (
 st.set_page_config(layout="wide", page_title="Keyword Analysis")
 DB_PATH = "amazon_reviews_top100.duckdb"
 conn = connect_to_db(DB_PATH)
-REVIEWS_PER_PAGE = 5 # For pagination
+REVIEWS_PER_PAGE = 5
 
 # --- Main App Logic ---
 def main():
@@ -45,7 +45,6 @@ def main():
     default_sentiments = ['Positive', 'Negative', 'Neutral']
     default_verified = "All"
     
-    # Initialize state for this page's filters if they don't exist
     if 'keyword_date_filter' not in st.session_state:
         st.session_state.keyword_date_filter = default_date_range
     if 'keyword_rating_filter' not in st.session_state:
@@ -58,13 +57,12 @@ def main():
     def reset_keyword_page():
         st.session_state.keyword_review_page = 0
 
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", key='keyword_date_filter', on_change=reset_keyword_page)
-    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, key='keyword_rating_filter', on_change=reset_keyword_page)
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, key='keyword_sentiment_filter', on_change=reset_keyword_page)
-    selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], key='keyword_verified_filter', on_change=reset_keyword_page)
+    st.sidebar.date_input("Filter by Date Range", key='keyword_date_filter', on_change=reset_keyword_page)
+    st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, key='keyword_rating_filter', on_change=reset_keyword_page)
+    st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, key='keyword_sentiment_filter', on_change=reset_keyword_page)
+    st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], key='keyword_verified_filter', on_change=reset_keyword_page)
     
-    # Load data based on the local filters
-    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+    chart_data = get_reviews_for_product(conn, selected_asin, st.session_state.keyword_date_filter, tuple(st.session_state.keyword_rating_filter), tuple(st.session_state.keyword_sentiment_filter), st.session_state.keyword_verified_filter)
 
     st.markdown("---")
     if chart_data.empty:
@@ -75,8 +73,8 @@ def main():
 
     # --- WORD CLOUD SUMMARY ---
     st.markdown("### ☁️ Keyword Summary")
-    # ... (code for word clouds is unchanged, omitted for brevity)
     wc_col1, wc_col2 = st.columns(2)
+    # ... (code for word clouds is unchanged, omitted for brevity)
     with wc_col1:
         st.markdown("#### Positive Keywords")
         pos_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Positive"]["text"])
@@ -100,27 +98,36 @@ def main():
     st.markdown("---")
     st.markdown("### 🔬 Interactive Keyword Explorer")
 
+    # ** KEY CHANGE: Function now returns words and their counts **
     @st.cache_data
-    def get_top_keywords(text_series, n=15):
+    def get_top_keywords_with_counts(text_series, n=20):
         all_text = ' '.join(text_series.astype(str))
         words = re.findall(r'\b\w+\b', all_text.lower())
-        custom_stopwords = set(STOPWORDS) | {'product', 'review', 'item', 'im', 'ive', 'id', 'get', 'it', 'the', 'and', 'but'}
+        custom_stopwords = set(STOPWORDS) | {'product', 'review', 'item', 'im', 'ive', 'id', 'get', 'it', 'the', 'and', 'but', 'use', 'one'}
         filtered_words = [word for word in words if word not in custom_stopwords and len(word) > 2]
-        return [word for word, count in Counter(filtered_words).most_common(n)]
+        return Counter(filtered_words).most_common(n)
 
     positive_text = chart_data[chart_data["sentiment"] == "Positive"]["text"]
     negative_text = chart_data[chart_data["sentiment"] == "Negative"]["text"]
-    top_pos_keywords = get_top_keywords(positive_text)
-    top_neg_keywords = get_top_keywords(negative_text)
-    all_top_keywords = sorted(list(set(top_pos_keywords + top_neg_keywords)))
+    top_pos_keywords = get_top_keywords_with_counts(positive_text)
+    top_neg_keywords = get_top_keywords_with_counts(negative_text)
 
-    selected_keyword = st.selectbox(
+    # Combine and deduplicate keywords
+    all_top_keywords_dict = {word: count for word, count in top_pos_keywords + top_neg_keywords}
+    
+    # ** KEY CHANGE: Format options for the dropdown **
+    formatted_options = [f"{word} ({count})" for word, count in all_top_keywords_dict.items()]
+    
+    selected_option = st.selectbox(
         "Select a keyword to analyze:",
-        options=["--- Select a Keyword ---"] + all_top_keywords,
-        on_change=reset_keyword_page # Reset pagination if keyword changes
+        options=["--- Select a Keyword ---"] + formatted_options,
+        on_change=reset_keyword_page
     )
 
-    if selected_keyword != "--- Select a Keyword ---":
+    if selected_option != "--- Select a Keyword ---":
+        # ** KEY CHANGE: Extract the keyword from the selected option **
+        selected_keyword = selected_option.split(' ')[0]
+
         keyword_df = chart_data[chart_data['text'].str.contains(r'\b' + selected_keyword + r'\b', case=False, na=False)]
         
         st.markdown(f"---")
@@ -137,15 +144,14 @@ def main():
             st.bar_chart(sentiment_dist)
 
         st.markdown("**Example Reviews**")
-        
-        # ** KEY CHANGE: Updated sort options **
         sort_reviews_by = st.selectbox(
             "Sort examples by:",
             ("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),
             key="keyword_review_sort",
-            on_change=reset_keyword_page # Reset pagination if sort changes
+            on_change=reset_keyword_page
         )
         
+        # (Sorting and display logic is unchanged)
         if sort_reviews_by == "Most Helpful":
             sorted_keyword_df = keyword_df.sort_values(by="helpful_vote", ascending=False)
         elif sort_reviews_by == "Highest Rating":
@@ -157,7 +163,6 @@ def main():
         else: # Newest
             sorted_keyword_df = keyword_df.sort_values(by="date", ascending=False)
         
-        # ** KEY CHANGE: Pagination Logic **
         if 'keyword_review_page' not in st.session_state:
             st.session_state.keyword_review_page = 0
             
@@ -178,7 +183,6 @@ def main():
                 st.caption(" | ".join(caption_parts))
                 st.markdown(f"> {review['text']}")
         
-        # Pagination Buttons
         total_reviews = len(sorted_keyword_df)
         total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
         
