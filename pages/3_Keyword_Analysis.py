@@ -5,6 +5,7 @@ import re
 from collections import Counter
 from wordcloud import WordCloud, STOPWORDS
 import matplotlib.pyplot as plt
+from sklearn.feature_extraction.text import CountVectorizer
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
@@ -20,7 +21,7 @@ REVIEWS_PER_PAGE = 5
 
 # --- Main App Logic ---
 def main():
-    st.title("🔑 Detailed Keyword Analysis")
+    st.title("🔑 Detailed Keyword & Phrase Analysis")
 
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
@@ -33,7 +34,7 @@ def main():
     selected_asin = st.session_state.selected_product
     product_details = get_product_details(conn, selected_asin).iloc[0]
     st.header(product_details['product_title'])
-    st.caption("Use the sidebar to filter the reviews, then select a keyword to analyze.")
+    st.caption("Use the sidebar to filter reviews, then explore the most common terms and phrases.")
     st.sidebar.header("🔬 Keyword Analysis Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     default_date_range = (min_date_db, max_date_db)
@@ -61,63 +62,79 @@ def main():
         st.stop()
     st.info(f"Analyzing keywords from **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- WORD CLOUD SUMMARY (WITH SLIDER) ---
-    st.markdown("### ☁️ Keyword Summary")
-
-    # ** NEW: Slider to control the number of words **
-    max_words = st.slider(
-        "Select the max number of words to display in the clouds:",
-        min_value=5, max_value=50, value=15,
-        key='keyword_max_words'
-    )
+    # --- N-GRAM WORD CLOUD SUMMARY ---
+    st.markdown("### ☁️ Keyword & Phrase Summary")
     
+    col1, col2 = st.columns([1,1])
+    with col1:
+        max_words = st.slider("Max Terms in Cloud:", min_value=5, max_value=50, value=15)
+    with col2:
+        ngram_level = st.radio("Term Type:", ("Single Words", "Bigrams", "Trigrams"), index=0, horizontal=True)
+    
+    # Helper function
+    def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
+        vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
+        bag_of_words = vec.transform(corpus)
+        sum_words = bag_of_words.sum(axis=0) 
+        words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
+        words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
+        return words_freq[:n]
+
+    ngram_range = {
+        "Single Words": (1,1),
+        "Bigrams": (2,2),
+        "Trigrams": (3,3)
+    }.get(ngram_level, (1,1))
+
     wc_col1, wc_col2 = st.columns(2)
     with wc_col1:
-        st.markdown("#### Positive Keywords")
-        pos_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Positive"]["text"])
-        if pos_text:
-            wordcloud_pos = WordCloud(
-                stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens',
-                max_words=max_words # Use the slider value here
-            ).generate(pos_text)
-            fig, ax = plt.subplots()
-            ax.imshow(wordcloud_pos, interpolation='bilinear')
-            ax.axis("off")
-            st.pyplot(fig)
+        st.markdown("#### Positive Terms")
+        pos_text = chart_data[chart_data["sentiment"]=="Positive"]["text"].dropna()
+        if not pos_text.empty:
+            top_pos_grams = get_top_ngrams(pos_text, n=max_words, ngram_range=ngram_range)
+            pos_freq_dict = dict(top_pos_grams)
+            if pos_freq_dict:
+                wordcloud_pos = WordCloud(stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens').generate_from_frequencies(pos_freq_dict)
+                fig, ax = plt.subplots()
+                ax.imshow(wordcloud_pos, interpolation='bilinear')
+                ax.axis("off")
+                st.pyplot(fig)
     with wc_col2:
-        st.markdown("#### Negative Keywords")
-        neg_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Negative"]["text"])
-        if neg_text:
-            wordcloud_neg = WordCloud(
-                stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds',
-                max_words=max_words # Use the slider value here
-            ).generate(neg_text)
-            fig, ax = plt.subplots()
-            ax.imshow(wordcloud_neg, interpolation='bilinear')
-            ax.axis("off")
-            st.pyplot(fig)
+        st.markdown("#### Negative Terms")
+        neg_text = chart_data[chart_data["sentiment"]=="Negative"]["text"].dropna()
+        if not neg_text.empty:
+            top_neg_grams = get_top_ngrams(neg_text, n=max_words, ngram_range=ngram_range)
+            neg_freq_dict = dict(top_neg_grams)
+            if neg_freq_dict:
+                wordcloud_neg = WordCloud(stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds').generate_from_frequencies(neg_freq_dict)
+                fig, ax = plt.subplots()
+                ax.imshow(wordcloud_neg, interpolation='bilinear')
+                ax.axis("off")
+                st.pyplot(fig)
 
     # --- INTERACTIVE KEYWORD EXPLORER ---
-    # ... (rest of the file is unchanged, omitted for brevity)
     st.markdown("---")
-    st.markdown("### 🔬 Interactive Keyword Explorer")
-    @st.cache_data
-    def get_top_keywords_by_mention(text_series, n=25):
-        mention_counter = Counter()
-        custom_stopwords = set(STOPWORDS) | {'product', 'review', 'item', 'im', 'ive', 'id', 'get', 'it', 'the', 'and', 'but', 'use', 'one'}
-        for text in text_series:
-            words = re.findall(r'\b\w+\b', str(text).lower())
-            unique_words_in_review = {word for word in words if word not in custom_stopwords and len(word) > 2}
-            mention_counter.update(unique_words_in_review)
-        return mention_counter.most_common(n)
-    top_keywords = get_top_keywords_by_mention(chart_data["text"])
-    formatted_options = [f"{word} ({count} mentions)" for word, count in top_keywords]
-    selected_option = st.selectbox("Select a keyword to analyze:", options=["--- Select a Keyword ---"] + formatted_options, on_change=reset_keyword_page)
-    if selected_option != "--- Select a Keyword ---":
-        selected_keyword = selected_option.split(' ')[0]
-        keyword_df = chart_data[chart_data['text'].str.contains(r'\b' + selected_keyword + r'\b', case=False, na=False)]
+    st.markdown("### 🔬 Interactive Term Explorer")
+
+    # Get top terms for the dropdown
+    top_terms = get_top_ngrams(chart_data["text"].dropna(), n=25, ngram_range=ngram_range)
+    formatted_options = [f"{term} ({count} mentions)" for term, count in top_terms]
+    
+    selected_option = st.selectbox(
+        "Select a term to analyze:",
+        options=["--- Select a Term ---"] + formatted_options,
+        on_change=reset_keyword_page
+    )
+
+    if selected_option != "--- Select a Term ---":
+        selected_term = " ".join(selected_option.split(' ')[:-1])
+
+        # Filter for reviews containing the exact term
+        keyword_df = chart_data[chart_data['text'].str.contains(r'\b' + re.escape(selected_term) + r'\b', case=False, na=False)]
+        
         st.markdown(f"---")
-        st.markdown(f"#### Analysis for keyword: `{selected_keyword}` ({len(keyword_df)} mentions)")
+        st.markdown(f"#### Analysis for term: `{selected_term}` ({len(keyword_df)} mentions)")
+
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**Rating Distribution**")
@@ -127,8 +144,11 @@ def main():
             st.markdown("**Sentiment Distribution**")
             sentiment_dist = keyword_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
             st.bar_chart(sentiment_dist)
+
+        # (Example reviews display logic is unchanged)
+        # ...
         st.markdown("**Example Reviews**")
-        sort_reviews_by = st.selectbox("Sort examples by:",("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),key="keyword_review_sort",on_change=reset_keyword_page)
+        sort_reviews_by = st.selectbox("Sort examples by:", ("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"), key="keyword_review_sort", on_change=reset_keyword_page)
         if sort_reviews_by == "Most Helpful":
             sorted_keyword_df = keyword_df.sort_values(by="helpful_vote", ascending=False)
         elif sort_reviews_by == "Highest Rating":
@@ -137,7 +157,7 @@ def main():
             sorted_keyword_df = keyword_df.sort_values(by="rating", ascending=True)
         elif sort_reviews_by == "Oldest":
             sorted_keyword_df = keyword_df.sort_values(by="date", ascending=True)
-        else:
+        else: # Newest
             sorted_keyword_df = keyword_df.sort_values(by="date", ascending=False)
         if 'keyword_review_page' not in st.session_state:
             st.session_state.keyword_review_page = 0
