@@ -67,7 +67,6 @@ def a_download_data_with_versioning(dataset_slug, db_path, expected_version):
         logging.error(f"Kaggle API error: {e}")
         st.stop()
 
-
 @st.cache_data
 def get_all_categories(_conn):
     """Fetches a list of all unique product categories."""
@@ -111,13 +110,10 @@ def get_product_details(_conn, asin):
     """Fetches all details for a single product."""
     return _conn.execute("SELECT * FROM products WHERE parent_asin = ?", [asin]).fetchdf()
 
-# In utils/database_utils.py
-
-# Replace the existing function with this one
 @st.cache_data
-def get_reviews_for_product(_conn, asin, date_range, rating_filter, sentiment_filter):
+def get_reviews_for_product(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter):
     """
-    Fetches and filters all reviews, and adds STABLE jitter for plotting.
+    Fetches and filters all reviews, now with verified purchase filter.
     """
     query = "SELECT * FROM reviews WHERE parent_asin = ?"
     params = [asin]
@@ -136,17 +132,22 @@ def get_reviews_for_product(_conn, asin, date_range, rating_filter, sentiment_fi
         placeholders = ', '.join(['?'] * len(sentiment_filter))
         query += f" AND sentiment IN ({placeholders})"
         params.extend(sentiment_filter)
+        
+    # ** NEW: Add verified purchase filter logic **
+    if verified_filter == "Verified Only":
+        query += " AND verified_purchase = TRUE"
+    elif verified_filter == "Not Verified":
+        query += " AND verified_purchase = FALSE"
 
     df = _conn.execute(query, params).fetchdf()
 
-    # ** KEY CHANGE: Calculate jitter here, inside the cached function **
     if not df.empty:
-        # Use a fixed seed for the random number generator for stable results
         rng = np.random.default_rng(seed=42)
         df['rating_jittered'] = df['rating'] + rng.uniform(-0.1, 0.1, size=len(df))
         df['text_polarity_jittered'] = df['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(df))
 
     return df
+    
 @st.cache_data
 def get_product_date_range(_conn, asin):
     """Gets the min and max review dates for a product."""
@@ -164,9 +165,6 @@ def get_single_review_text(_conn, review_id):
     except Exception:
         return "Could not retrieve review text."
 
-# utils/database_utils.py
-
-# Add this new function to the end of the file
 @st.cache_data
 def get_single_review_details(_conn, review_id):
     """Fetches all details for a single review by its ID."""
@@ -181,18 +179,13 @@ def get_single_review_details(_conn, review_id):
     except Exception:
         return None
 
-# In utils/database_utils.py
-
-# Add this new function to the end of the file
-def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filter, sort_by, limit, offset):
+def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter, sort_by, limit, offset):
     """
-    Fetches a paginated, filtered, and sorted list of reviews for a product.
+    Fetches paginated reviews, now with verified purchase filter.
     """
-    # Base query
     query = "FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
-    # Apply filters
     if date_range and len(date_range) == 2:
         start_date, end_date = date_range
         query += " AND date BETWEEN ? AND ?"
@@ -207,12 +200,16 @@ def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filt
         placeholders = ', '.join(['?'] * len(sentiment_filter))
         query += f" AND sentiment IN ({placeholders})"
         params.extend(sentiment_filter)
+        
+    # ** NEW: Add verified purchase filter logic **
+    if verified_filter == "Verified Only":
+        query += " AND verified_purchase = TRUE"
+    elif verified_filter == "Not Verified":
+        query += " AND verified_purchase = FALSE"
 
-    # Get total count of matching reviews for pagination info
     count_query = f"SELECT COUNT(*) {query}"
     total_reviews = _conn.execute(count_query, params).fetchone()[0]
 
-    # Define sorting logic
     sort_logic = {
         "Newest First": "date DESC",
         "Oldest First": "date ASC",
@@ -222,12 +219,7 @@ def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filt
     }
     order_by_sql = sort_logic.get(sort_by, "date DESC")
 
-    # Final query with sorting and pagination
-    final_query = f"""
-        SELECT * {query}
-        ORDER BY {order_by_sql}
-        LIMIT ? OFFSET ?
-    """
+    final_query = f"SELECT * {query} ORDER BY {order_by_sql} LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
     reviews_df = _conn.execute(final_query, params).fetchdf()
