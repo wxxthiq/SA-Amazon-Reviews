@@ -3,12 +3,13 @@ import streamlit as st
 import pandas as pd
 import re
 from collections import Counter
-from wordcloud import STOPWORDS
+from wordcloud import WordCloud, STOPWORDS
+import matplotlib.pyplot as plt
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
     get_reviews_for_product,
-    get_product_date_range # Import the missing function
+    get_product_date_range
 )
 
 # --- Page Configuration ---
@@ -32,24 +33,63 @@ def main():
     # --- Load Product Data ---
     product_details = get_product_details(conn, selected_asin).iloc[0]
     st.header(product_details['product_title'])
-    st.caption("Select a keyword to see its rating distribution and read example reviews.")
+    st.caption("Use the sidebar to filter the reviews, then select a keyword to analyze.")
 
-    # --- DEFINITIVE FIX FOR TypeError ---
-    # Get filters from session state, but provide default values if they don't exist
+    # --- DEDICATED SIDEBAR FILTERS FOR THIS PAGE ---
+    st.sidebar.header("🔬 Keyword Analysis Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     
-    date_filter = st.session_state.get('date_filter', (min_date_db, max_date_db))
-    rating_filter = st.session_state.get('rating_filter', [1, 2, 3, 4, 5])
-    sentiment_filter = st.session_state.get('sentiment_filter', ['Positive', 'Negative', 'Neutral'])
+    default_date_range = (min_date_db, max_date_db)
+    default_ratings = [1, 2, 3, 4, 5]
+    default_sentiments = ['Positive', 'Negative', 'Neutral']
 
-    # Load data using the (now guaranteed to exist) filter values
-    chart_data = get_reviews_for_product(conn, selected_asin, date_filter, tuple(rating_filter), tuple(sentiment_filter))
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db, key='keyword_date_filter')
+    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='keyword_rating_filter')
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='keyword_sentiment_filter')
 
+    # Load data based on the local filters
+    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
+
+    st.markdown("---")
     if chart_data.empty:
-        st.warning("No review data available for the selected filters. Please adjust them on the overview page.")
+        st.warning("No review data available for the selected filters.")
         st.stop()
+        
+    st.info(f"Analyzing keywords from **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- Keyword Extraction and Selection ---
+    # --- WORD CLOUD SUMMARY ---
+    st.markdown("### ☁️ Keyword Summary")
+    
+    wc_col1, wc_col2 = st.columns(2)
+    with wc_col1:
+        st.markdown("#### Positive Keywords")
+        pos_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Positive"]["text"])
+        if pos_text:
+            wordcloud_pos = WordCloud(stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens').generate(pos_text)
+            fig, ax = plt.subplots()
+            ax.imshow(wordcloud_pos, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
+        else:
+            st.info("No positive reviews to generate a word cloud.")
+
+    with wc_col2:
+        st.markdown("#### Negative Keywords")
+        neg_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Negative"]["text"])
+        if neg_text:
+            wordcloud_neg = WordCloud(stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds').generate(neg_text)
+            fig, ax = plt.subplots()
+            ax.imshow(wordcloud_neg, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
+        else:
+            st.info("No negative reviews to generate a word cloud.")
+
+    # --- INTERACTIVE KEYWORD EXPLORER ---
+    st.markdown("---")
+    st.markdown("### 🔬 Interactive Keyword Explorer")
+
+    # Helper function to get top keywords
     @st.cache_data
     def get_top_keywords(text_series, n=15):
         all_text = ' '.join(text_series.astype(str))
@@ -69,7 +109,6 @@ def main():
         options=["--- Select a Keyword ---"] + all_top_keywords
     )
 
-    # --- Display Keyword Analysis ---
     if selected_keyword != "--- Select a Keyword ---":
         keyword_df = chart_data[chart_data['text'].str.contains(r'\b' + selected_keyword + r'\b', case=False, na=False)]
         
