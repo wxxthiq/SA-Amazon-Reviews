@@ -16,6 +16,7 @@ from utils.database_utils import (
 st.set_page_config(layout="wide", page_title="Keyword Analysis")
 DB_PATH = "amazon_reviews_top100.duckdb"
 conn = connect_to_db(DB_PATH)
+REVIEWS_PER_PAGE = 5 # For pagination
 
 # --- Main App Logic ---
 def main():
@@ -44,10 +45,23 @@ def main():
     default_sentiments = ['Positive', 'Negative', 'Neutral']
     default_verified = "All"
     
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='keyword_date_filter')
-    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='keyword_rating_filter')
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='keyword_sentiment_filter')
-    selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='keyword_verified_filter')
+    # Initialize state for this page's filters if they don't exist
+    if 'keyword_date_filter' not in st.session_state:
+        st.session_state.keyword_date_filter = default_date_range
+    if 'keyword_rating_filter' not in st.session_state:
+        st.session_state.keyword_rating_filter = default_ratings
+    if 'keyword_sentiment_filter' not in st.session_state:
+        st.session_state.keyword_sentiment_filter = default_sentiments
+    if 'keyword_verified_filter' not in st.session_state:
+        st.session_state.keyword_verified_filter = default_verified
+        
+    def reset_keyword_page():
+        st.session_state.keyword_review_page = 0
+
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", key='keyword_date_filter', on_change=reset_keyword_page)
+    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, key='keyword_rating_filter', on_change=reset_keyword_page)
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, key='keyword_sentiment_filter', on_change=reset_keyword_page)
+    selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], key='keyword_verified_filter', on_change=reset_keyword_page)
     
     # Load data based on the local filters
     chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
@@ -61,7 +75,7 @@ def main():
 
     # --- WORD CLOUD SUMMARY ---
     st.markdown("### ☁️ Keyword Summary")
-    
+    # ... (code for word clouds is unchanged, omitted for brevity)
     wc_col1, wc_col2 = st.columns(2)
     with wc_col1:
         st.markdown("#### Positive Keywords")
@@ -72,9 +86,6 @@ def main():
             ax.imshow(wordcloud_pos, interpolation='bilinear')
             ax.axis("off")
             st.pyplot(fig)
-        else:
-            st.info("No positive reviews to generate a word cloud.")
-
     with wc_col2:
         st.markdown("#### Negative Keywords")
         neg_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Negative"]["text"])
@@ -84,8 +95,6 @@ def main():
             ax.imshow(wordcloud_neg, interpolation='bilinear')
             ax.axis("off")
             st.pyplot(fig)
-        else:
-            st.info("No negative reviews to generate a word cloud.")
 
     # --- INTERACTIVE KEYWORD EXPLORER ---
     st.markdown("---")
@@ -107,7 +116,8 @@ def main():
 
     selected_keyword = st.selectbox(
         "Select a keyword to analyze:",
-        options=["--- Select a Keyword ---"] + all_top_keywords
+        options=["--- Select a Keyword ---"] + all_top_keywords,
+        on_change=reset_keyword_page # Reset pagination if keyword changes
     )
 
     if selected_keyword != "--- Select a Keyword ---":
@@ -118,21 +128,22 @@ def main():
 
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("**Rating Distribution for this Keyword**")
+            st.markdown("**Rating Distribution**")
             rating_dist = keyword_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).sort_index()
             st.bar_chart(rating_dist)
         with col2:
-            st.markdown("**Sentiment Distribution for this Keyword**")
+            st.markdown("**Sentiment Distribution**")
             sentiment_dist = keyword_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
             st.bar_chart(sentiment_dist)
 
         st.markdown("**Example Reviews**")
         
-        # ** KEY CHANGE: Added more sorting options **
+        # ** KEY CHANGE: Updated sort options **
         sort_reviews_by = st.selectbox(
             "Sort examples by:",
-            ("Most Helpful", "Newest", "Highest Rating", "Lowest Rating"),
-            key="keyword_review_sort"
+            ("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),
+            key="keyword_review_sort",
+            on_change=reset_keyword_page # Reset pagination if sort changes
         )
         
         if sort_reviews_by == "Most Helpful":
@@ -141,23 +152,49 @@ def main():
             sorted_keyword_df = keyword_df.sort_values(by="rating", ascending=False)
         elif sort_reviews_by == "Lowest Rating":
             sorted_keyword_df = keyword_df.sort_values(by="rating", ascending=True)
+        elif sort_reviews_by == "Oldest":
+            sorted_keyword_df = keyword_df.sort_values(by="date", ascending=True)
         else: # Newest
             sorted_keyword_df = keyword_df.sort_values(by="date", ascending=False)
+        
+        # ** KEY CHANGE: Pagination Logic **
+        if 'keyword_review_page' not in st.session_state:
+            st.session_state.keyword_review_page = 0
+            
+        start_idx = st.session_state.keyword_review_page * REVIEWS_PER_PAGE
+        end_idx = start_idx + REVIEWS_PER_PAGE
+        
+        reviews_to_display = sorted_keyword_df.iloc[start_idx:end_idx]
 
-        for _, review in sorted_keyword_df.head(5).iterrows():
+        for _, review in reviews_to_display.iterrows():
             with st.container(border=True):
-                # ** KEY CHANGE: Display title and detailed caption **
                 st.subheader(review['review_title'])
-                
                 caption_parts = []
                 if review['verified_purchase']:
                     caption_parts.append("✅ Verified")
                 caption_parts.append(f"Reviewed on: {review['date']}")
                 caption_parts.append(f"Rating: {review['rating']} ⭐")
                 caption_parts.append(f"Helpful Votes: {review['helpful_vote']} 👍")
-                
                 st.caption(" | ".join(caption_parts))
                 st.markdown(f"> {review['text']}")
+        
+        # Pagination Buttons
+        total_reviews = len(sorted_keyword_df)
+        total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
+        
+        st.caption(f"Page {st.session_state.keyword_review_page + 1} of {total_pages}")
+        
+        p_col1, p_col2 = st.columns(2)
+        with p_col1:
+            if st.session_state.keyword_review_page > 0:
+                if st.button("⬅️ Previous 5 Reviews"):
+                    st.session_state.keyword_review_page -= 1
+                    st.rerun()
+        with p_col2:
+            if end_idx < total_reviews:
+                if st.button("Next 5 Reviews ➡️"):
+                    st.session_state.keyword_review_page += 1
+                    st.rerun()
 
 if __name__ == "__main__":
     main()
