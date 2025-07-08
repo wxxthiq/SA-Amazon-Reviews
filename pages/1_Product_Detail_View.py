@@ -69,8 +69,8 @@ def main():
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
         st.stop()
-        
-    # --- Header Section (Unchanged) ---
+
+    # --- Header Section (WITH NEW VISUALS) ---
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
         st.session_state.selected_review_id = None
@@ -84,46 +84,53 @@ def main():
         if image_urls:
             with st.popover("🖼️ View Image Gallery"):
                 st.image(image_urls, use_container_width=True)
+
     with right_col:
-            st.header(product_details['product_title'])
-            st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
-            
-            # Display key metrics first
-            m_col1, m_col2 = st.columns(2)
-            m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-            m_col2.metric("Filtered Reviews", f"{len(chart_data):,}")
-            st.markdown("---")
-    
-            # ** NEW DISTRIBUTION SECTION **
-            dist_col1, dist_col2 = st.columns(2)
-    
-            # Rating Distribution
-            with dist_col1:
-                st.markdown("**Rating Distribution**")
-                # Calculate frequencies and percentages
+        st.header(product_details['product_title'])
+        st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
+        
+        m_col1, m_col2 = st.columns(2)
+        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
+        m_col2.metric("Filtered Reviews", f"{len(chart_data):,}")
+        st.markdown("---")
+
+        dist_col1, dist_col2 = st.columns(2)
+
+        with dist_col1:
+            st.markdown("**Rating Distribution**")
+            if not chart_data.empty:
                 rating_counts = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0)
                 total_ratings = len(chart_data)
                 
                 for rating in range(5, 0, -1):
                     count = rating_counts.get(rating, 0)
                     percentage = (count / total_ratings * 100) if total_ratings > 0 else 0
-                    label = f"{rating} star{'s' if rating > 1 else ''}"
-                    st.text(f"{label}: {percentage:.1f}% ({count})")
+                    # ** KEY CHANGE: Use emojis for stars **
+                    star_emojis = "⭐" * rating
+                    st.text(f"{star_emojis}: {percentage:.1f}% ({count})")
                     st.progress(int(percentage))
-    
-            # Sentiment Distribution
-            with dist_col2:
-                st.markdown("**Sentiment Distribution**")
-                # Calculate frequencies and percentages
+            else:
+                st.info("No reviews to display distribution for.")
+
+        with dist_col2:
+            st.markdown("**Sentiment Distribution**")
+            if not chart_data.empty:
                 sentiment_counts = chart_data['sentiment'].value_counts()
                 total_sentiments = len(chart_data)
-    
+                
+                # Define colors for sentiments
+                sentiment_colors = {"Positive": "green", "Neutral": "grey", "Negative": "red"}
+
                 for sentiment in ['Positive', 'Neutral', 'Negative']:
                     count = sentiment_counts.get(sentiment, 0)
                     percentage = (count / total_sentiments * 100) if total_sentiments > 0 else 0
-                    st.text(f"{sentiment}: {percentage:.1f}% ({count})")
+                    color = sentiment_colors.get(sentiment, "default")
+                    # ** KEY CHANGE: Use markdown for colored text **
+                    st.markdown(f":{color}[{sentiment}]: {percentage:.1f}% ({count})")
                     st.progress(int(percentage))
-
+            else:
+                st.info("No reviews to display distribution for.")
+                
      # --- NEW SECTION: WORD CLOUD ANALYSIS ---
     st.markdown("---")
     st.markdown("### ☁️ Word Cloud Analysis")
