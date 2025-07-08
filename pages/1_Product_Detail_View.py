@@ -115,6 +115,78 @@ def main():
         st.warning("No reviews match the selected filters.")
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
+
+    # --- KEYWORD ANALYSIS SECTION (WITH N-GRAMS) ---
+    st.markdown("---")
+    st.markdown("### ☁️ Keyword & Phrase Summary")
+    st.caption("The most common terms found in positive and negative reviews. Use the options below to explore single words or multi-word phrases.")
+
+    col1, col2 = st.columns([1,1])
+    with col1:
+        max_words = st.slider("Max Terms in Cloud:", min_value=5, max_value=50, value=15)
+    with col2:
+        ngram_level = st.radio("Term Type:", ("Single Words", "Bigrams", "Trigrams"), index=0, horizontal=True)
+
+    # Helper function to generate n-grams
+    def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
+        vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
+        bag_of_words = vec.transform(corpus)
+        sum_words = bag_of_words.sum(axis=0) 
+        words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
+        words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
+        return words_freq[:n]
+
+    ngram_range = {
+        "Single Words": (1,1),
+        "Bigrams": (2,2),
+        "Trigrams": (3,3)
+    }.get(ngram_level, (1,1))
+
+    wc_col1, wc_col2 = st.columns(2)
+
+    with wc_col1:
+        st.markdown("#### Positive Reviews")
+        pos_text = chart_data[chart_data["sentiment"]=="Positive"]["text"].dropna()
+        if not pos_text.empty:
+            top_pos_grams = get_top_ngrams(pos_text, n=max_words, ngram_range=ngram_range)
+            pos_freq_dict = dict(top_pos_grams)
+            if pos_freq_dict:
+                wordcloud_pos = WordCloud(
+                    stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens'
+                ).generate_from_frequencies(pos_freq_dict)
+                fig, ax = plt.subplots()
+                ax.imshow(wordcloud_pos, interpolation='bilinear')
+                ax.axis("off")
+                st.pyplot(fig)
+            else:
+                st.info("No terms found for this n-gram level.")
+        else:
+            st.info("No positive reviews to analyze.")
+
+    with wc_col2:
+        st.markdown("#### Negative Reviews")
+        neg_text = chart_data[chart_data["sentiment"]=="Negative"]["text"].dropna()
+        if not neg_text.empty:
+            top_neg_grams = get_top_ngrams(neg_text, n=max_words, ngram_range=ngram_range)
+            neg_freq_dict = dict(top_neg_grams)
+            if neg_freq_dict:
+                wordcloud_neg = WordCloud(
+                    stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds'
+                ).generate_from_frequencies(neg_freq_dict)
+                fig, ax = plt.subplots()
+                ax.imshow(wordcloud_neg, interpolation='bilinear')
+                ax.axis("off")
+                st.pyplot(fig)
+            else:
+                st.info("No terms found for this n-gram level.")
+        else:
+            st.info("No negative reviews to analyze.")
+    
+    # --- Navigation Buttons ---
+    st.markdown("---")
+    if st.button("Perform Detailed Keyword Analysis 🔑"):
+        st.switch_page("pages/3_Keyword_Analysis.py")
+    
     st.markdown("### Rating vs. Text Discrepancy")
     plot_col, review_col = st.columns([2, 1])
     with plot_col:
@@ -169,55 +241,6 @@ def main():
         if not sentiment_counts_over_time.empty:
             sentiment_stream_chart = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', title=f"Sentiment Breakdown Per {time_granularity.replace('ly', '')}", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
             st.plotly_chart(sentiment_stream_chart, use_container_width=True)
-
-    # --- REVISED KEYWORD ANALYSIS SECTION ---
-    st.markdown("---")
-    st.markdown("### ☁️ Keyword Summary")
-    st.caption("The most common words found in positive and negative reviews. Click below to perform a detailed analysis.")
-
-    max_words = st.slider(
-    "Select the max number of words to display in the clouds:",
-    min_value=5, max_value=50, value=15,
-    key='overview_max_words'
-    )
-    wc_col1, wc_col2 = st.columns(2)
-
-    # Positive Word Cloud
-    with wc_col1:
-        st.markdown("#### Positive Reviews")
-        pos_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Positive"]["text"])
-        if pos_text:
-            wordcloud_pos = WordCloud(
-                stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens',
-                max_words=max_words
-            ).generate(pos_text)
-            fig, ax = plt.subplots()
-            ax.imshow(wordcloud_pos, interpolation='bilinear')
-            ax.axis("off")
-            st.pyplot(fig)
-        else:
-            st.info("No positive reviews to generate a word cloud.")
-
-    # Negative Word Cloud
-    with wc_col2:
-        st.markdown("#### Negative Reviews")
-        neg_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Negative"]["text"])
-        if neg_text:
-            wordcloud_neg = WordCloud(
-                stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds',
-                max_words=max_words
-            ).generate(neg_text)
-            fig, ax = plt.subplots()
-            ax.imshow(wordcloud_neg, interpolation='bilinear')
-            ax.axis("off")
-            st.pyplot(fig)
-        else:
-            st.info("No negative reviews to generate a word cloud.")
-    
-    # --- Navigation to Keyword Analysis Page ---
-    st.markdown("---")
-    if st.button("Perform Detailed Keyword Analysis 🔑"):
-        st.switch_page("pages/3_Keyword_Analysis.py")
 
     # --- Navigation to Review Explorer ---
     st.markdown("---")
