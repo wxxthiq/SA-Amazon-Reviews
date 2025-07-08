@@ -10,6 +10,8 @@ from wordcloud import WordCloud, STOPWORDS
 import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import CountVectorizer
 import spacy
+from collections import Counter
+import re
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
