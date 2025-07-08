@@ -116,9 +116,9 @@ def main():
                 for rating in range(5, 0, -1):
                     count = rating_counts.get(rating, 0)
                     percentage = (count / total_ratings * 100) if total_ratings > 0 else 0
-                    # ** KEY CHANGE: Use emojis for stars **
-                    star_emojis = "⭐" * rating
-                    st.text(f"{star_emojis}: {percentage:.1f}% ({count})")
+                    # ** KEY CHANGE: Use single star emoji **
+                    label = f"{rating} ⭐"
+                    st.text(f"{label}: {percentage:.1f}% ({count})")
                     st.progress(int(percentage))
             else:
                 st.info("No reviews to display distribution for.")
