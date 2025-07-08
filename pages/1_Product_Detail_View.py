@@ -175,6 +175,11 @@ def main():
     st.markdown("### ☁️ Keyword Summary")
     st.caption("The most common words found in positive and negative reviews. Click below to perform a detailed analysis.")
 
+    max_words = st.slider(
+    "Select the max number of words to display in the clouds:",
+    min_value=5, max_value=50, value=15,
+    key='overview_max_words'
+    )
     wc_col1, wc_col2 = st.columns(2)
 
     # Positive Word Cloud
@@ -184,7 +189,7 @@ def main():
         if pos_text:
             wordcloud_pos = WordCloud(
                 stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens',
-                max_words=15
+                max_words=max_words
             ).generate(pos_text)
             fig, ax = plt.subplots()
             ax.imshow(wordcloud_pos, interpolation='bilinear')
@@ -200,7 +205,7 @@ def main():
         if neg_text:
             wordcloud_neg = WordCloud(
                 stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds',
-                max_words=15
+                max_words=max_words
             ).generate(neg_text)
             fig, ax = plt.subplots()
             ax.imshow(wordcloud_neg, interpolation='bilinear')
