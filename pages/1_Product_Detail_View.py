@@ -8,8 +8,6 @@ from datetime import datetime
 from streamlit_plotly_events import plotly_events
 from wordcloud import WordCloud, STOPWORDS
 import matplotlib.pyplot as plt
-from collections import Counter
-import re
 
 from utils.database_utils import (
     connect_to_db,
@@ -29,11 +27,10 @@ if 'selected_review_id' not in st.session_state:
 def main():
     st.title("📊 Sentiment Overview")
 
-    # --- Constants & DB Connection ---
+    # (Code for DB connection, product loading, header, and sidebar is unchanged)
+    # ...
     DB_PATH = "amazon_reviews_top100.duckdb"
     conn = connect_to_db(DB_PATH)
-
-    # --- Product and Data Loading ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
         st.warning("Please select a product from the main search page first.")
         st.stop()
@@ -43,39 +40,35 @@ def main():
         st.error("Could not find details for the selected product.")
         st.stop()
     product_details = product_details_df.iloc[0]
-
-    # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
-    def reset_selection():
-        st.session_state.selected_review_id = None
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
     default_sentiments = ['Positive', 'Negative', 'Neutral']
-    
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='date_filter', on_change=reset_selection)
-    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='rating_filter', on_change=reset_selection)
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='sentiment_filter', on_change=reset_selection)
-
     def reset_all_filters():
         st.session_state.date_filter = default_date_range
         st.session_state.rating_filter = default_ratings
         st.session_state.sentiment_filter = default_sentiments
         st.session_state.selected_review_id = None
+    def reset_selection():
+        st.session_state.selected_review_id = None
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='date_filter', on_change=reset_selection)
+    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='rating_filter', on_change=reset_selection)
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='sentiment_filter', on_change=reset_selection)
     st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
-
-    # --- Load Filtered Data ---
     chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
-
-    # --- Header Section ---
-    # ... (code is unchanged, omitted for brevity)
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
         st.session_state.selected_review_id = None
         st.switch_page("app.py")
     left_col, right_col = st.columns([1, 2])
     with left_col:
-        st.image(product_details.get('image_urls', '').split(',')[0] if product_details.get('image_urls') else "https://via.placeholder.com/200", use_container_width=True)
+        image_urls_str = product_details.get('image_urls')
+        image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
+        st.image(image_urls[0] if image_urls else "https://via.placeholder.com/200", use_container_width=True)
+        if image_urls:
+            with st.popover("🖼️ View Image Gallery"):
+                st.image(image_urls, use_container_width=True)
     with right_col:
         st.header(product_details['product_title'])
         st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
@@ -105,15 +98,11 @@ def main():
                     percentage = (count / total_sentiments * 100) if total_sentiments > 0 else 0
                     st.markdown(f":{sentiment_colors.get(sentiment, 'default')}[{sentiment}]: {percentage:.1f}% ({count})")
                     st.progress(int(percentage))
-    
     st.markdown("---")
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
-
-    # --- Discrepancy & Trend Analysis Sections (Unchanged) ---
-    # ... (code omitted for brevity)
     st.markdown("### Rating vs. Text Discrepancy")
     plot_col, review_col = st.columns([2, 1])
     with plot_col:
@@ -146,6 +135,7 @@ def main():
     st.markdown("---")
     st.markdown("### Trends Over Time")
     time_granularity = st.radio("Select time period:", ("Monthly", "Weekly", "Daily"), index=0, horizontal=True, label_visibility="collapsed")
+    # ... (code for time charts omitted for brevity)
     time_df = chart_data.copy()
     time_df['date'] = pd.to_datetime(time_df['date'])
     if time_granularity == 'Monthly':
@@ -168,81 +158,53 @@ def main():
             sentiment_stream_chart = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', title=f"Sentiment Breakdown Per {time_granularity.replace('ly', '')}", color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
             st.plotly_chart(sentiment_stream_chart, use_container_width=True)
 
-
-    # --- NEW KEYWORD ANALYSIS SECTION ---
+    # --- REVISED KEYWORD ANALYSIS SECTION ---
     st.markdown("---")
-    st.markdown("### 🔑 Keyword Analysis")
-    st.caption("Explore the most common themes in positive and negative reviews.")
+    st.markdown("### ☁️ Keyword Summary")
+    st.caption("The most common words found in positive and negative reviews. Click below to perform a detailed analysis.")
 
-    # Helper function to get top keywords
-    @st.cache_data
-    def get_top_keywords(text_series, n=10):
-        # Combine all text, clean it, and count words
-        all_text = ' '.join(text_series.astype(str))
-        words = re.findall(r'\b\w+\b', all_text.lower())
-        # Use a more extensive list of stopwords
-        custom_stopwords = set(STOPWORDS) | {'product', 'review', 'item', 'im', 'ive', 'id', 'get', 'it', 'the', 'and', 'but'}
-        filtered_words = [word for word in words if word not in custom_stopwords and len(word) > 2]
-        return [word for word, count in Counter(filtered_words).most_common(n)]
+    wc_col1, wc_col2 = st.columns(2)
 
-    # Get and display top keywords
-    positive_text = chart_data[chart_data["sentiment"] == "Positive"]["text"]
-    negative_text = chart_data[chart_data["sentiment"] == "Negative"]["text"]
+    # Positive Word Cloud
+    with wc_col1:
+        st.markdown("#### Positive Reviews")
+        pos_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Positive"]["text"])
+        if pos_text:
+            wordcloud_pos = WordCloud(
+                stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens'
+            ).generate(pos_text)
+            fig, ax = plt.subplots()
+            ax.imshow(wordcloud_pos, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
+        else:
+            st.info("No positive reviews to generate a word cloud.")
 
-    top_pos_keywords = get_top_keywords(positive_text)
-    top_neg_keywords = get_top_keywords(negative_text)
-
-    kw_col1, kw_col2 = st.columns(2)
-    with kw_col1:
-        st.markdown("#### Top Positive Keywords")
-        st.info(" ".join(f"`{word}`" for word in top_pos_keywords))
-    with kw_col2:
-        st.markdown("#### Top Negative Keywords")
-        st.error(" ".join(f"`{word}`" for word in top_neg_keywords))
-
-    # --- Interactive Keyword Explorer ---
+    # Negative Word Cloud
+    with wc_col2:
+        st.markdown("#### Negative Reviews")
+        neg_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Negative"]["text"])
+        if neg_text:
+            wordcloud_neg = WordCloud(
+                stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds'
+            ).generate(neg_text)
+            fig, ax = plt.subplots()
+            ax.imshow(wordcloud_neg, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
+        else:
+            st.info("No negative reviews to generate a word cloud.")
+    
+    # --- Navigation to Keyword Analysis Page ---
     st.markdown("---")
-    all_top_keywords = sorted(list(set(top_pos_keywords + top_neg_keywords)))
-    
-    selected_keyword = st.selectbox(
-        "Select a keyword to analyze:",
-        options=["--- Select a Keyword ---"] + all_top_keywords
-    )
+    if st.button("Perform Detailed Keyword Analysis 🔑"):
+        st.switch_page("pages/3_Keyword_Analysis.py")
 
-    if selected_keyword != "--- Select a Keyword ---":
-        # Filter reviews containing the selected keyword
-        keyword_df = chart_data[chart_data['text'].str.contains(r'\b' + selected_keyword + r'\b', case=False, na=False)]
-        
-        st.markdown(f"#### Analysis for keyword: `{selected_keyword}` ({len(keyword_df)} mentions)")
-
-        # Display rating distribution for the keyword
-        dist_chart_col, _ = st.columns([2,1])
-        with dist_chart_col:
-            st.markdown("**Rating Distribution for this Keyword**")
-            rating_dist = keyword_df['rating'].value_counts().sort_index()
-            st.bar_chart(rating_dist)
-
-        # Display 5 reviews with sorting
-        st.markdown("**Example Reviews**")
-        sort_reviews_by = st.selectbox("Sort examples by:", ["Most Helpful", "Newest"], key="keyword_review_sort")
-        
-        if sort_reviews_by == "Most Helpful":
-            sorted_keyword_df = keyword_df.sort_values(by="helpful_vote", ascending=False)
-        else: # Newest
-            sorted_keyword_df = keyword_df.sort_values(by="date", ascending=False)
-
-        for _, review in sorted_keyword_df.head(5).iterrows():
-            with st.container(border=True):
-                st.caption(f"**Rating: {review['rating']} ⭐ | Helpful Votes: {review['helpful_vote']}**")
-                st.markdown(f"> {review['text']}")
-    
     # --- Navigation to Review Explorer ---
     st.markdown("---")
     st.subheader("📝 Browse Individual Reviews")
-    st.markdown("Click the button below to browse, sort, and filter all reviews for this product.")
     if st.button("Explore All Reviews"):
         st.switch_page("pages/2_Review_Explorer.py")
-
 
 if __name__ == "__main__":
     main()
