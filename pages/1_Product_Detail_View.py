@@ -8,7 +8,7 @@ from datetime import datetime
 from streamlit_plotly_events import plotly_events
 from wordcloud import WordCloud, STOPWORDS
 import matplotlib.pyplot as plt
-
+from sklearn.feature_extraction.text import CountVectorizer
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
