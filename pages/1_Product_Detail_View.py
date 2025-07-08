@@ -67,7 +67,8 @@ def main():
     selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='verified_filter', on_change=reset_selection)
     
     st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
-    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_verified))
+    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+    
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
         st.session_state.selected_review_id = None
