@@ -1,6 +1,5 @@
 # pages/3_Keyword_Analysis.py
 import streamlit as st
-import numpy as np
 import pandas as pd
 import re
 from collections import Counter
@@ -82,7 +81,6 @@ def main():
     with col2:
         ngram_level = st.radio("Term Type:", ("Single Words", "Bigrams", "Trigrams"), index=0, horizontal=True, key="keyword_ngram_radio")
     
-    # Helper function
     def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
         vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
         bag_of_words = vec.transform(corpus)
@@ -127,19 +125,12 @@ def main():
     st.markdown("---")
     st.markdown("### 🔬 Interactive Term Explorer")
 
-    # This function now correctly counts mentions (reviews containing the term)
     @st.cache_data
     def get_top_ngrams_by_mention(corpus, n=25, ngram_range=(1,1)):
         vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
         bag_of_words = vec.transform(corpus)
-        
-        # Get feature names (the n-grams)
         terms = vec.get_feature_names_out()
-        
-        # Count mentions (non-zero entries in each column)
         term_mentions = np.asarray(bag_of_words.sum(axis=0)).flatten()
-        
-        # Create a list of (term, mention_count) tuples
         term_freq = [(term, term_mentions[i]) for i, term in enumerate(terms)]
         term_freq = sorted(term_freq, key=lambda x: x[1], reverse=True)
         return term_freq[:n]
@@ -154,13 +145,10 @@ def main():
     )
 
     if selected_option != "--- Select a Term ---":
-        # ** KEY CHANGE: Robustly parse the selected term **
         match = re.match(r"(.+) \((\d+) mentions\)", selected_option)
         if match:
             selected_term = match.group(1)
             
-            # ** KEY CHANGE: Use a more reliable search method for phrases **
-            # We escape the term to handle special characters and search for it directly.
             keyword_df = chart_data[chart_data['text'].str.contains(re.escape(selected_term), case=False, na=False)]
             
             st.markdown(f"---")
@@ -176,24 +164,34 @@ def main():
                 sentiment_dist = keyword_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
                 st.bar_chart(sentiment_dist)
 
-            # ... (rest of the display logic is unchanged)
             st.markdown("**Example Reviews**")
-            sort_reviews_by = st.selectbox("Sort examples by:",("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),key="keyword_review_sort",on_change=reset_keyword_page)
+            sort_reviews_by = st.selectbox(
+                "Sort examples by:",
+                ("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),
+                key="keyword_review_sort",
+                on_change=reset_keyword_page
+            )
+            
+            # ** KEY CHANGE: Added secondary sort key for rating options **
             if sort_reviews_by == "Most Helpful":
                 sorted_keyword_df = keyword_df.sort_values(by="helpful_vote", ascending=False)
             elif sort_reviews_by == "Highest Rating":
-                sorted_keyword_df = keyword_df.sort_values(by="rating", ascending=False)
+                sorted_keyword_df = keyword_df.sort_values(by=["rating", "helpful_vote"], ascending=[False, False])
             elif sort_reviews_by == "Lowest Rating":
-                sorted_keyword_df = keyword_df.sort_values(by="rating", ascending=True)
+                sorted_keyword_df = keyword_df.sort_values(by=["rating", "helpful_vote"], ascending=[True, False])
             elif sort_reviews_by == "Oldest":
                 sorted_keyword_df = keyword_df.sort_values(by="date", ascending=True)
             else: # Newest
                 sorted_keyword_df = keyword_df.sort_values(by="date", ascending=False)
+            
             if 'keyword_review_page' not in st.session_state:
                 st.session_state.keyword_review_page = 0
+                
             start_idx = st.session_state.keyword_review_page * REVIEWS_PER_PAGE
             end_idx = start_idx + REVIEWS_PER_PAGE
+            
             reviews_to_display = sorted_keyword_df.iloc[start_idx:end_idx]
+
             for _, review in reviews_to_display.iterrows():
                 with st.container(border=True):
                     st.subheader(review['review_title'])
@@ -205,8 +203,10 @@ def main():
                     caption_parts.append(f"Helpful Votes: {review['helpful_vote']} 👍")
                     st.caption(" | ".join(caption_parts))
                     st.markdown(f"> {review['text']}")
+            
             total_reviews = len(sorted_keyword_df)
             total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
+            
             if total_pages > 1:
                 st.caption(f"Page {st.session_state.keyword_review_page + 1} of {total_pages}")
                 p_col1, p_col2 = st.columns(2)
