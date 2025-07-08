@@ -50,19 +50,29 @@ def main():
      # --- Sidebar Filters (WITH STATE RESET) ---
     st.sidebar.header("📊 Interactive Filters")
     
-    def reset_selection():
-        st.session_state.selected_review_id = None
-
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
     default_sentiments = ['Positive', 'Negative', 'Neutral']
-
-    # ** KEY CHANGE: Add the on_change callback to all filter widgets **
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db, on_change=reset_selection)
-    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, on_change=reset_selection)
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, on_change=reset_selection)
     
+        # Callback function to reset all filters
+    def reset_all_filters():
+        st.session_state.date_filter = default_date_range
+        st.session_state.rating_filter = default_ratings
+        st.session_state.sentiment_filter = default_sentiments
+        st.session_state.selected_review_id = None
+
+    # Add keys to each filter widget so they can be controlled by the callback
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db, key='date_filter', on_change=reset_selection)
+    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='rating_filter', on_change=reset_selection)
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='sentiment_filter', on_change=reset_selection)
+
+        # Add the reset button
+    st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
+
+    def reset_selection():
+        st.session_state.selected_review_id = None
+        
     # --- Load Filtered Data (Now includes stable jitter) ---
     chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
 
