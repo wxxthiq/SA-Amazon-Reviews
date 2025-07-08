@@ -20,6 +20,12 @@ from utils.database_utils import (
 # --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
 
+@st.cache_resource
+def load_spacy_model():
+    return spacy.load("en_core_web_sm")
+
+nlp = load_spacy_model()
+
 if 'selected_review_id' not in st.session_state:
     st.session_state.selected_review_id = None
 
