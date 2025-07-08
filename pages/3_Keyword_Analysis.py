@@ -35,20 +35,23 @@ def main():
     st.header(product_details['product_title'])
     st.caption("Use the sidebar to filter the reviews, then select a keyword to analyze.")
 
-    # --- DEDICATED SIDEBAR FILTERS FOR THIS PAGE ---
+   # --- DEDICATED SIDEBAR FILTERS FOR THIS PAGE ---
     st.sidebar.header("🔬 Keyword Analysis Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
     default_sentiments = ['Positive', 'Negative', 'Neutral']
-
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db, key='keyword_date_filter')
+    default_verified = "All"
+    
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='keyword_date_filter')
     selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='keyword_rating_filter')
     selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='keyword_sentiment_filter')
-
+    # ** NEW: Verified Purchase Filter **
+    selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='keyword_verified_filter')
+    
     # Load data based on the local filters
-    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
+    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
 
     st.markdown("---")
     if chart_data.empty:
