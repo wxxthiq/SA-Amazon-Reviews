@@ -87,6 +87,7 @@ def main():
         date_range=st.session_state.date_filter_explorer,
         rating_filter=tuple(st.session_state.rating_filter_explorer),
         sentiment_filter=tuple(st.session_state.sentiment_filter_explorer),
+        verified_filter=st.session_state.verified_filter_explorer, 
         sort_by=sort_by,
         limit=REVIEWS_PER_PAGE,
         offset=st.session_state.review_page * REVIEWS_PER_PAGE
