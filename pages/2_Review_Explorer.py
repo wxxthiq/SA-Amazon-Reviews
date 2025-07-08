@@ -32,7 +32,7 @@ def main():
         st.stop()
     product_details = product_details_df.iloc[0]
     st.header(product_details['product_title'])
-    st.caption("Browse, filter, and sort all reviews for this product.")
+    st.caption("Browse, filter, and sort all reviews for this product. Verified reviews are always shown first.")
 
     # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
@@ -75,8 +75,8 @@ def main():
     st.markdown("---")
     sort_by = st.selectbox(
         "Sort reviews by:",
-        # ** KEY CHANGE: Updated sorting options **
-        ("Verified First", "Newest First", "Oldest First", "Highest Rating", "Lowest Rating"),
+        # ** KEY CHANGE: Removed "Verified First" as it's now the default **
+        ("Newest First", "Oldest First", "Highest Rating", "Lowest Rating"),
         on_change=reset_page_number
     )
 
@@ -108,7 +108,6 @@ def main():
                 with col1:
                     st.subheader(review['review_title'])
                     
-                    # ** KEY CHANGE: Build a dynamic caption with verified status **
                     caption_parts = []
                     if review['verified_purchase']:
                         caption_parts.append("✅ Verified")
