@@ -179,9 +179,11 @@ def get_single_review_details(_conn, review_id):
     except Exception:
         return None
 
+# In utils/database_utils.py
+
 def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter, sort_by, limit, offset):
     """
-    Fetches paginated reviews, now with verified purchase filter.
+    Fetches paginated reviews with the new 'Verified First' sorting option.
     """
     query = "FROM reviews WHERE parent_asin = ?"
     params = [asin]
@@ -201,7 +203,6 @@ def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filt
         query += f" AND sentiment IN ({placeholders})"
         params.extend(sentiment_filter)
         
-    # ** NEW: Add verified purchase filter logic **
     if verified_filter == "Verified Only":
         query += " AND verified_purchase = TRUE"
     elif verified_filter == "Not Verified":
@@ -210,14 +211,16 @@ def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filt
     count_query = f"SELECT COUNT(*) {query}"
     total_reviews = _conn.execute(count_query, params).fetchone()[0]
 
+    # ** KEY CHANGE: Update the sorting logic **
     sort_logic = {
+        "Verified First": "verified_purchase DESC, helpful_vote DESC",
         "Newest First": "date DESC",
         "Oldest First": "date ASC",
         "Highest Rating": "rating DESC, helpful_vote DESC",
-        "Lowest Rating": "rating ASC, helpful_vote DESC",
-        "Most Helpful": "helpful_vote DESC, rating DESC"
+        "Lowest Rating": "rating ASC, helpful_vote DESC"
     }
-    order_by_sql = sort_logic.get(sort_by, "date DESC")
+    # Use "Verified First" as the new default if the selected option is invalid
+    order_by_sql = sort_logic.get(sort_by, "verified_purchase DESC, helpful_vote DESC")
 
     final_query = f"SELECT * {query} ORDER BY {order_by_sql} LIMIT ? OFFSET ?"
     params.extend([limit, offset])
