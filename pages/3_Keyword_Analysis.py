@@ -74,7 +74,6 @@ def main():
     # --- WORD CLOUD SUMMARY ---
     st.markdown("### ☁️ Keyword Summary")
     wc_col1, wc_col2 = st.columns(2)
-    # ... (code for word clouds is unchanged, omitted for brevity)
     with wc_col1:
         st.markdown("#### Positive Keywords")
         pos_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Positive"]["text"])
@@ -98,39 +97,35 @@ def main():
     st.markdown("---")
     st.markdown("### 🔬 Interactive Keyword Explorer")
 
-    # ** KEY CHANGE: Function now returns words and their counts **
+    # ** KEY CHANGE: This function now just returns the top words **
     @st.cache_data
-    def get_top_keywords_with_counts(text_series, n=20):
+    def get_top_keywords(text_series, n=20):
         all_text = ' '.join(text_series.astype(str))
         words = re.findall(r'\b\w+\b', all_text.lower())
         custom_stopwords = set(STOPWORDS) | {'product', 'review', 'item', 'im', 'ive', 'id', 'get', 'it', 'the', 'and', 'but', 'use', 'one'}
         filtered_words = [word for word in words if word not in custom_stopwords and len(word) > 2]
-        return Counter(filtered_words).most_common(n)
+        return [word for word, count in Counter(filtered_words).most_common(n)]
 
     positive_text = chart_data[chart_data["sentiment"] == "Positive"]["text"]
     negative_text = chart_data[chart_data["sentiment"] == "Negative"]["text"]
-    top_pos_keywords = get_top_keywords_with_counts(positive_text)
-    top_neg_keywords = get_top_keywords_with_counts(negative_text)
-
-    # Combine and deduplicate keywords
-    all_top_keywords_dict = {word: count for word, count in top_pos_keywords + top_neg_keywords}
+    top_pos_keywords = get_top_keywords(positive_text)
+    top_neg_keywords = get_top_keywords(negative_text)
     
-    # ** KEY CHANGE: Format options for the dropdown **
-    formatted_options = [f"{word} ({count})" for word, count in all_top_keywords_dict.items()]
+    # Combine and get unique, sorted keywords for the dropdown
+    all_top_keywords = sorted(list(set(top_pos_keywords + top_neg_keywords)))
     
-    selected_option = st.selectbox(
+    selected_keyword = st.selectbox(
         "Select a keyword to analyze:",
-        options=["--- Select a Keyword ---"] + formatted_options,
+        options=["--- Select a Keyword ---"] + all_top_keywords,
         on_change=reset_keyword_page
     )
 
-    if selected_option != "--- Select a Keyword ---":
-        # ** KEY CHANGE: Extract the keyword from the selected option **
-        selected_keyword = selected_option.split(' ')[0]
-
+    if selected_keyword != "--- Select a Keyword ---":
+        # The accurate count is derived from filtering the DataFrame
         keyword_df = chart_data[chart_data['text'].str.contains(r'\b' + selected_keyword + r'\b', case=False, na=False)]
         
         st.markdown(f"---")
+        # This count is now the single source of truth
         st.markdown(f"#### Analysis for keyword: `{selected_keyword}` ({len(keyword_df)} mentions)")
 
         col1, col2 = st.columns(2)
@@ -151,7 +146,6 @@ def main():
             on_change=reset_keyword_page
         )
         
-        # (Sorting and display logic is unchanged)
         if sort_reviews_by == "Most Helpful":
             sorted_keyword_df = keyword_df.sort_values(by="helpful_vote", ascending=False)
         elif sort_reviews_by == "Highest Rating":
