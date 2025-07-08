@@ -34,41 +34,41 @@ def main():
     st.header(product_details['product_title'])
     st.caption("Browse, filter, and sort all reviews for this product.")
 
-    # --- Sidebar Filters (DEFINITIVE FIX) ---
+    # --- Sidebar Filters (WITH VERIFIED PURCHASE) ---
     st.sidebar.header("📊 Interactive Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     
-    # Define defaults
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
     default_sentiments = ['Positive', 'Negative', 'Neutral']
-
-    # Initialize session state for filters if they don't exist
+    default_verified = "All"
+    
     if 'date_filter_explorer' not in st.session_state:
         st.session_state.date_filter_explorer = default_date_range
     if 'rating_filter_explorer' not in st.session_state:
         st.session_state.rating_filter_explorer = default_ratings
     if 'sentiment_filter_explorer' not in st.session_state:
         st.session_state.sentiment_filter_explorer = default_sentiments
+    if 'verified_filter_explorer' not in st.session_state:
+        st.session_state.verified_filter_explorer = default_verified
     if 'review_page' not in st.session_state:
         st.session_state.review_page = 0
         
-    # Callback to reset the page number when a filter changes
     def reset_page_number():
         st.session_state.review_page = 0
-
-    # Callback to reset all filters to their default values
+    
     def reset_all_filters():
         st.session_state.date_filter_explorer = default_date_range
         st.session_state.rating_filter_explorer = default_ratings
         st.session_state.sentiment_filter_explorer = default_sentiments
+        st.session_state.verified_filter_explorer = default_verified # Reset new filter
         st.session_state.review_page = 0
-
-    # Create widgets. The `key` parameter links them to the session state.
-    # We no longer need the 'value' or 'default' parameters.
-    st.sidebar.date_input("Filter by Date Range", min_value=min_date_db, max_value=max_date_db, key='date_filter_explorer', on_change=reset_page_number)
+    
+    st.sidebar.date_input("Filter by Date Range", key='date_filter_explorer', on_change=reset_page_number)
     st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, key='rating_filter_explorer', on_change=reset_page_number)
     st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, key='sentiment_filter_explorer', on_change=reset_page_number)
+    # ** NEW: Verified Purchase Filter **
+    st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], key='verified_filter_explorer', on_change=reset_page_number)
     
     st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True, key='reset_button_explorer')
 
