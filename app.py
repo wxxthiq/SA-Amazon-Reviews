@@ -78,7 +78,7 @@ else:
                         # When clicked, this sets the session state and Streamlit's multi-page feature will take over
                         if st.button("View Details", key=row['parent_asin']):
                             st.session_state.selected_product = row['parent_asin']
-                            st.switch_page("pages/1_Product_Detail_View.py")
+                            st.switch_page("pages/1_Sentiment_Overview.py")
 
     # --- Pagination Buttons ---
     st.markdown("---")
