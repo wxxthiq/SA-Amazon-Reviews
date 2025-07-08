@@ -110,12 +110,67 @@ def main():
                     percentage = (count / total_sentiments * 100) if total_sentiments > 0 else 0
                     st.markdown(f":{sentiment_colors.get(sentiment, 'default')}[{sentiment}]: {percentage:.1f}% ({count})")
                     st.progress(int(percentage))
-    st.markdown("---")
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
+    # --- NEW: ASPECT SENTIMENT SUMMARY ---
+    st.markdown("### 🔎 Aspect Sentiment Summary")
+    st.caption("A summary of sentiment towards the most common product features (aspects).")
+
+    @st.cache_data
+    def get_aspect_summary(data):
+        # Extract top 5 nouns as aspects
+        all_nouns = []
+        for doc in nlp.pipe(data['text'].astype(str), disable=["parser", "ner"]):
+            all_nouns.extend([token.lemma_.lower() for token in doc if token.pos_ in ('NOUN', 'PROPN') and len(token.lemma_) > 3])
+        top_aspects = [noun for noun, freq in Counter(all_nouns).most_common(5)]
+
+        # Calculate sentiment for each aspect
+        aspect_sentiments = []
+        for aspect in top_aspects:
+            for text in data['text']:
+                if re.search(r'\b' + aspect + r'\b', str(text).lower()):
+                    for match in re.finditer(r'\b' + aspect + r'\b', str(text).lower()):
+                        # Analyze a window of text around the aspect
+                        window = str(text).lower()[max(0, match.start()-50):min(len(text), match.end()+50)]
+                        polarity = TextBlob(window).sentiment.polarity
+                        sentiment_cat = 'Positive' if polarity > 0.1 else 'Negative' if polarity < -0.1 else 'Neutral'
+                        aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment_cat})
+        
+        if not aspect_sentiments:
+            return pd.DataFrame()
+            
+        return pd.DataFrame(aspect_sentiments)
+
+    aspect_summary_df = get_aspect_summary(chart_data)
+
+    if not aspect_summary_df.empty:
+        # Create a summary chart
+        summary_chart_data = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        
+        chart = alt.Chart(summary_chart_data).mark_bar().encode(
+            x=alt.X('count:Q', stack='normalize', title='Proportion of Mentions'),
+            y=alt.Y('aspect:N', sort='-x', title='Aspect'),
+            color=alt.Color('sentiment:N',
+                scale=alt.Scale(
+                    domain=['Positive', 'Neutral', 'Negative'],
+                    range=['#1a9850', '#cccccc', '#d73027']
+                ),
+                legend=alt.Legend(title="Sentiment")
+            ),
+            tooltip=['aspect', 'sentiment', 'count']
+        ).properties(
+            height=200
+        )
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.info("Not enough data to generate an aspect summary for the current filters.")
+
+    if st.button("Perform Detailed Aspect Analysis 🔎"):
+        st.switch_page("pages/4_Aspect_Analysis.py")
+    
     # --- KEYWORD ANALYSIS SECTION (WITH N-GRAMS) ---
     st.markdown("---")
     st.markdown("### ☁️ Keyword & Phrase Summary")
