@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import CountVectorizer
 import spacy
 from collections import Counter
+from textblob import TextBlob
 import re
 from utils.database_utils import (
     connect_to_db,
