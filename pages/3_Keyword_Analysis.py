@@ -97,34 +97,23 @@ def main():
     st.markdown("---")
     st.markdown("### 🔬 Interactive Keyword Explorer")
 
-    # ** KEY CHANGE: This function now counts reviews (documents), not total occurrences. **
     @st.cache_data
-    def get_top_keywords_by_mention(text_series, n=20):
-        # This counter will store the number of reviews each word appears in.
+    def get_top_keywords_by_mention(text_series, n=25):
         mention_counter = Counter()
         custom_stopwords = set(STOPWORDS) | {'product', 'review', 'item', 'im', 'ive', 'id', 'get', 'it', 'the', 'and', 'but', 'use', 'one'}
 
         for text in text_series:
             words = re.findall(r'\b\w+\b', str(text).lower())
-            # Get the unique set of words for this single review
             unique_words_in_review = {word for word in words if word not in custom_stopwords and len(word) > 2}
-            # Update the counter with this set (counts each word once per review)
             mention_counter.update(unique_words_in_review)
             
         return mention_counter.most_common(n)
 
-    positive_text = chart_data[chart_data["sentiment"] == "Positive"]["text"]
-    negative_text = chart_data[chart_data["sentiment"] == "Negative"]["text"]
+    # ** KEY CHANGE: Calculate top keywords from the ENTIRE filtered dataset **
+    top_keywords = get_top_keywords_by_mention(chart_data["text"])
     
-    top_pos_keywords = get_top_keywords_by_mention(positive_text)
-    top_neg_keywords = get_top_keywords_by_mention(negative_text)
-
-    all_top_keywords_dict = {word: count for word, count in top_pos_keywords + top_neg_keywords}
-    
-    # Sort by count descending to show most mentioned first
-    sorted_keywords = sorted(all_top_keywords_dict.items(), key=lambda item: item[1], reverse=True)
-    
-    formatted_options = [f"{word} ({count} mentions)" for word, count in sorted_keywords]
+    # Format the options for the dropdown with the correct counts
+    formatted_options = [f"{word} ({count} mentions)" for word, count in top_keywords]
     
     selected_option = st.selectbox(
         "Select a keyword to analyze:",
@@ -138,6 +127,7 @@ def main():
         keyword_df = chart_data[chart_data['text'].str.contains(r'\b' + selected_keyword + r'\b', case=False, na=False)]
         
         st.markdown(f"---")
+        # This count will now match the one in the dropdown
         st.markdown(f"#### Analysis for keyword: `{selected_keyword}` ({len(keyword_df)} mentions)")
 
         col1, col2 = st.columns(2)
@@ -192,19 +182,19 @@ def main():
         total_reviews = len(sorted_keyword_df)
         total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
         
-        st.caption(f"Page {st.session_state.keyword_review_page + 1} of {total_pages}")
-        
-        p_col1, p_col2 = st.columns(2)
-        with p_col1:
-            if st.session_state.keyword_review_page > 0:
-                if st.button("⬅️ Previous 5 Reviews"):
-                    st.session_state.keyword_review_page -= 1
-                    st.rerun()
-        with p_col2:
-            if end_idx < total_reviews:
-                if st.button("Next 5 Reviews ➡️"):
-                    st.session_state.keyword_review_page += 1
-                    st.rerun()
+        if total_pages > 1:
+            st.caption(f"Page {st.session_state.keyword_review_page + 1} of {total_pages}")
+            p_col1, p_col2 = st.columns(2)
+            with p_col1:
+                if st.session_state.keyword_review_page > 0:
+                    if st.button("⬅️ Previous 5 Reviews"):
+                        st.session_state.keyword_review_page -= 1
+                        st.rerun()
+            with p_col2:
+                if end_idx < total_reviews:
+                    if st.button("Next 5 Reviews ➡️"):
+                        st.session_state.keyword_review_page += 1
+                        st.rerun()
 
 if __name__ == "__main__":
     main()
