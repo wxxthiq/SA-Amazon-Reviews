@@ -179,9 +179,11 @@ def get_single_review_details(_conn, review_id):
     except Exception:
         return None
 
+# In utils/database_utils.py
+
 def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter, sort_by, limit, offset):
     """
-    Fetches paginated reviews, with 'verified_purchase' as the default primary sort.
+    Fetches paginated reviews with updated sorting logic.
     """
     query = "FROM reviews WHERE parent_asin = ?"
     params = [asin]
@@ -209,20 +211,18 @@ def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filt
     count_query = f"SELECT COUNT(*) {query}"
     total_reviews = _conn.execute(count_query, params).fetchone()[0]
 
-    # ** KEY CHANGE: This dictionary now only contains secondary sort options **
-    secondary_sort_logic = {
-        "Newest First": "date DESC",
-        "Oldest First": "date ASC",
-        "Highest Rating": "rating DESC, helpful_vote DESC",
-        "Lowest Rating": "rating ASC, helpful_vote DESC"
+    # --- KEY CHANGE: Updated sort logic ---
+    # The default sort is now a combination of verified status and another metric.
+    # We've added a standalone "Most Helpful" option.
+    sort_logic = {
+        "Newest First": "verified_purchase DESC, date DESC",
+        "Oldest First": "verified_purchase DESC, date ASC",
+        "Highest Rating": "verified_purchase DESC, rating DESC, helpful_vote DESC",
+        "Lowest Rating": "verified_purchase DESC, rating ASC, helpful_vote DESC",
+        "Most Helpful": "helpful_vote DESC, rating DESC" # This option ignores verified status
     }
     
-    # Get the user's selected secondary sort key
-    secondary_sort_key = secondary_sort_logic.get(sort_by, "date DESC")
-    
-    # ** KEY CHANGE: Construct the final ORDER BY clause **
-    # Always sort by verified status first, then by the user's choice.
-    order_by_sql = f"verified_purchase DESC, {secondary_sort_key}"
+    order_by_sql = sort_logic.get(sort_by, "verified_purchase DESC, date DESC")
 
     final_query = f"SELECT * {query} ORDER BY {order_by_sql} LIMIT ? OFFSET ?"
     params.extend([limit, offset])
