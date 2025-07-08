@@ -78,7 +78,10 @@ def main():
         st.markdown("#### Positive Keywords")
         pos_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Positive"]["text"])
         if pos_text:
-            wordcloud_pos = WordCloud(stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens').generate(pos_text)
+            wordcloud_pos = WordCloud(
+                stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens',
+                max_words=15
+            ).generate(pos_text)
             fig, ax = plt.subplots()
             ax.imshow(wordcloud_pos, interpolation='bilinear')
             ax.axis("off")
@@ -87,7 +90,10 @@ def main():
         st.markdown("#### Negative Keywords")
         neg_text = " ".join(review for review in chart_data[chart_data["sentiment"]=="Negative"]["text"])
         if neg_text:
-            wordcloud_neg = WordCloud(stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds').generate(neg_text)
+            wordcloud_neg = WordCloud(
+                stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds',
+                max_words=15
+            ).generate(neg_text)
             fig, ax = plt.subplots()
             ax.imshow(wordcloud_neg, interpolation='bilinear')
             ax.axis("off")
