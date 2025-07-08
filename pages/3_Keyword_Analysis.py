@@ -35,7 +35,7 @@ def main():
     st.header(product_details['product_title'])
     st.caption("Use the sidebar to filter the reviews, then select a keyword to analyze.")
 
-   # --- DEDICATED SIDEBAR FILTERS FOR THIS PAGE ---
+    # --- DEDICATED SIDEBAR FILTERS FOR THIS PAGE ---
     st.sidebar.header("🔬 Keyword Analysis Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     
@@ -47,7 +47,6 @@ def main():
     selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='keyword_date_filter')
     selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='keyword_rating_filter')
     selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='keyword_sentiment_filter')
-    # ** NEW: Verified Purchase Filter **
     selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='keyword_verified_filter')
     
     # Load data based on the local filters
@@ -92,7 +91,6 @@ def main():
     st.markdown("---")
     st.markdown("### 🔬 Interactive Keyword Explorer")
 
-    # Helper function to get top keywords
     @st.cache_data
     def get_top_keywords(text_series, n=15):
         all_text = ' '.join(text_series.astype(str))
@@ -129,16 +127,36 @@ def main():
             st.bar_chart(sentiment_dist)
 
         st.markdown("**Example Reviews**")
-        sort_reviews_by = st.selectbox("Sort examples by:", ["Most Helpful", "Newest"], key="keyword_review_sort")
+        
+        # ** KEY CHANGE: Added more sorting options **
+        sort_reviews_by = st.selectbox(
+            "Sort examples by:",
+            ("Most Helpful", "Newest", "Highest Rating", "Lowest Rating"),
+            key="keyword_review_sort"
+        )
         
         if sort_reviews_by == "Most Helpful":
             sorted_keyword_df = keyword_df.sort_values(by="helpful_vote", ascending=False)
-        else:
+        elif sort_reviews_by == "Highest Rating":
+            sorted_keyword_df = keyword_df.sort_values(by="rating", ascending=False)
+        elif sort_reviews_by == "Lowest Rating":
+            sorted_keyword_df = keyword_df.sort_values(by="rating", ascending=True)
+        else: # Newest
             sorted_keyword_df = keyword_df.sort_values(by="date", ascending=False)
 
         for _, review in sorted_keyword_df.head(5).iterrows():
             with st.container(border=True):
-                st.caption(f"**Rating: {review['rating']} ⭐ | Helpful Votes: {review['helpful_vote']} | Sentiment: {review['sentiment']}**")
+                # ** KEY CHANGE: Display title and detailed caption **
+                st.subheader(review['review_title'])
+                
+                caption_parts = []
+                if review['verified_purchase']:
+                    caption_parts.append("✅ Verified")
+                caption_parts.append(f"Reviewed on: {review['date']}")
+                caption_parts.append(f"Rating: {review['rating']} ⭐")
+                caption_parts.append(f"Helpful Votes: {review['helpful_vote']} 👍")
+                
+                st.caption(" | ".join(caption_parts))
                 st.markdown(f"> {review['text']}")
 
 if __name__ == "__main__":
