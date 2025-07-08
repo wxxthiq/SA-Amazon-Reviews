@@ -18,7 +18,7 @@ def main():
     st.title("📝 Review Explorer")
 
     if st.button("⬅️ Back to Sentiment Overview"):
-        st.switch_page("pages/1_Sentiment_Overview.py")
+        st.switch_page("pages/1_Product_Detail_View.py")
 
     # --- Check for Selected Product ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
@@ -34,7 +34,7 @@ def main():
     st.header(product_details['product_title'])
     st.caption("Browse, filter, and sort all reviews for this product.")
 
-    # --- Sidebar Filters (WITH VERIFIED PURCHASE) ---
+    # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     
@@ -61,33 +61,33 @@ def main():
         st.session_state.date_filter_explorer = default_date_range
         st.session_state.rating_filter_explorer = default_ratings
         st.session_state.sentiment_filter_explorer = default_sentiments
-        st.session_state.verified_filter_explorer = default_verified # Reset new filter
+        st.session_state.verified_filter_explorer = default_verified
         st.session_state.review_page = 0
     
     st.sidebar.date_input("Filter by Date Range", key='date_filter_explorer', on_change=reset_page_number)
     st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, key='rating_filter_explorer', on_change=reset_page_number)
     st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, key='sentiment_filter_explorer', on_change=reset_page_number)
-    # ** NEW: Verified Purchase Filter **
     st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], key='verified_filter_explorer', on_change=reset_page_number)
     
     st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True, key='reset_button_explorer')
 
-    # --- Sorting Control ---
+    # --- Sorting Control (UPDATED) ---
     st.markdown("---")
     sort_by = st.selectbox(
         "Sort reviews by:",
-        ("Newest First", "Oldest First", "Highest Rating", "Lowest Rating", "Most Helpful"),
+        # ** KEY CHANGE: Updated sorting options **
+        ("Verified First", "Newest First", "Oldest First", "Highest Rating", "Lowest Rating"),
         on_change=reset_page_number
     )
 
-    # --- Data Fetching (reads from session state) ---
+    # --- Data Fetching ---
     reviews_df, total_reviews = get_paginated_reviews(
         _conn=conn,
         asin=selected_asin,
         date_range=st.session_state.date_filter_explorer,
         rating_filter=tuple(st.session_state.rating_filter_explorer),
         sentiment_filter=tuple(st.session_state.sentiment_filter_explorer),
-        verified_filter=st.session_state.verified_filter_explorer, 
+        verified_filter=st.session_state.verified_filter_explorer,
         sort_by=sort_by,
         limit=REVIEWS_PER_PAGE,
         offset=st.session_state.review_page * REVIEWS_PER_PAGE
@@ -107,21 +107,33 @@ def main():
                 col1, col2 = st.columns([4, 1])
                 with col1:
                     st.subheader(review['review_title'])
-                    st.caption(f"Reviewed on: {review['date']} | Sentiment: {review['sentiment']}")
+                    
+                    # ** KEY CHANGE: Build a dynamic caption with verified status **
+                    caption_parts = []
+                    if review['verified_purchase']:
+                        caption_parts.append("✅ Verified")
+                    caption_parts.append(f"Reviewed on: {review['date']}")
+                    caption_parts.append(f"Sentiment: {review['sentiment']}")
+                    st.caption(" | ".join(caption_parts))
+                    
                     st.markdown(f"> {review['text']}")
                 with col2:
                     st.metric("⭐ Rating", f"{review['rating']:.1f}")
                     st.metric("👍 Helpful Votes", f"{review['helpful_vote']}")
         
+        # --- Pagination Buttons ---
         st.markdown("---")
         nav_cols = st.columns([1, 1, 1])
+        
         with nav_cols[0]:
             if st.session_state.review_page > 0:
                 if st.button("⬅️ Previous Page"):
                     st.session_state.review_page -= 1
                     st.rerun()
+        
         with nav_cols[1]:
             st.write(f"Page {st.session_state.review_page + 1} of {total_pages}")
+            
         with nav_cols[2]:
             if (st.session_state.review_page + 1) < total_pages:
                 if st.button("Next Page ➡️"):
