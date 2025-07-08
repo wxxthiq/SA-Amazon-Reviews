@@ -39,27 +39,33 @@ def main():
     st.header(product_details['product_title'])
     st.caption("Browse, filter, and sort all reviews for this product.")
 
-    # --- Sidebar Filters ---
+    # --- Sidebar Filters (WITH RESET BUTTON) ---
     st.sidebar.header("📊 Interactive Filters")
-    
-    def reset_page_number():
-        st.session_state.review_page = 0
-
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
+
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
     default_sentiments = ['Positive', 'Negative', 'Neutral']
 
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db, on_change=reset_page_number)
-    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, on_change=reset_page_number)
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, on_change=reset_page_number)
+    def reset_all_filters():
+        st.session_state.date_filter_explorer = default_date_range
+        st.session_state.rating_filter_explorer = default_ratings
+        st.session_state.sentiment_filter_explorer = default_sentiments
+        st.session_state.review_page = 0
+
+    # Use unique keys for these widgets to avoid conflicts with the other page
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, min_value=min_date_db, max_value=max_date_db, key='date_filter_explorer', on_change=reset_all_filters)
+    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='rating_filter_explorer', on_change=reset_all_filters)
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='sentiment_filter_explorer', on_change=reset_all_filters)
+    
+    st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True, key='reset_button_explorer')
 
     # --- Sorting Control ---
     st.markdown("---")
     sort_by = st.selectbox(
         "Sort reviews by:",
         ("Newest First", "Oldest First", "Highest Rating", "Lowest Rating", "Most Helpful"),
-        on_change=reset_page_number
+        on_change=lambda: st.session_state.update(review_page=0)
     )
 
     # --- Data Fetching ---
