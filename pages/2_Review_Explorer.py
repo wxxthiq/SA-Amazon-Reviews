@@ -18,7 +18,7 @@ def main():
     st.title("📝 Review Explorer")
 
     if st.button("⬅️ Back to Sentiment Overview"):
-        st.switch_page("pages/1_Product_Detail_View.py")
+        st.switch_page("pages/1_Sentiment_Overview.py")
 
     # --- Check for Selected Product ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
@@ -32,7 +32,7 @@ def main():
         st.stop()
     product_details = product_details_df.iloc[0]
     st.header(product_details['product_title'])
-    st.caption("Browse, filter, and sort all reviews for this product. Verified reviews are always shown first.")
+    st.caption("Browse, filter, and sort all reviews for this product. Most options prioritize verified reviews.")
 
     # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
@@ -75,8 +75,9 @@ def main():
     st.markdown("---")
     sort_by = st.selectbox(
         "Sort reviews by:",
-        # ** KEY CHANGE: Removed "Verified First" as it's now the default **
-        ("Newest First", "Oldest First", "Highest Rating", "Lowest Rating"),
+        # ** KEY CHANGE: Added "Most Helpful" back as a distinct option **
+        ("Newest First", "Oldest First", "Highest Rating", "Lowest Rating", "Most Helpful"),
+        index=0, # Default to "Newest First"
         on_change=reset_page_number
     )
 
