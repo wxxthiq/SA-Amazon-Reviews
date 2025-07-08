@@ -26,35 +26,47 @@ if 'selected_review_id' not in st.session_state:
 # --- Main App Logic ---
 def main():
     st.title("📊 Sentiment Overview")
-
-    # (Code for DB connection, product loading, header, and sidebar is unchanged)
-    # ...
+    
     DB_PATH = "amazon_reviews_top100.duckdb"
     conn = connect_to_db(DB_PATH)
+    
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
         st.warning("Please select a product from the main search page first.")
         st.stop()
+        
     selected_asin = st.session_state.selected_product
     product_details_df = get_product_details(conn, selected_asin)
     if product_details_df.empty:
         st.error("Could not find details for the selected product.")
         st.stop()
+        
     product_details = product_details_df.iloc[0]
+    
+    # --- Sidebar Filters (WITH VERIFIED PURCHASE) ---
     st.sidebar.header("📊 Interactive Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
+    
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
     default_sentiments = ['Positive', 'Negative', 'Neutral']
+    default_verified = "All"
+    
     def reset_all_filters():
         st.session_state.date_filter = default_date_range
         st.session_state.rating_filter = default_ratings
         st.session_state.sentiment_filter = default_sentiments
+        st.session_state.verified_filter = default_verified # Reset new filter
         st.session_state.selected_review_id = None
+        
     def reset_selection():
         st.session_state.selected_review_id = None
+    
     selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='date_filter', on_change=reset_selection)
     selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='rating_filter', on_change=reset_selection)
     selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='sentiment_filter', on_change=reset_selection)
+    # ** NEW: Verified Purchase Filter **
+    selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='verified_filter', on_change=reset_selection)
+    
     st.sidebar.button("Reset All Filters", on_click=reset_all_filters, use_container_width=True)
     chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments))
     if st.button("⬅️ Back to Search"):
