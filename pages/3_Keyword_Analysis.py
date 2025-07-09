@@ -226,50 +226,54 @@ def main():
     with net_col2:
         min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=5, key="min_co_slider")
 
+    # --- UPDATED: generate_network_graph function ---
     @st.cache_data
     def generate_network_graph(corpus, top_n, min_occur):
+        # (The logic for building the graph 'G' is the same)
         vec = CountVectorizer(ngram_range=(1, 1), stop_words='english').fit(corpus)
         bag_of_words = vec.transform(corpus)
         sum_words = bag_of_words.sum(axis=0)
         words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
         words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
         top_keywords = [word for word, freq in words_freq[:top_n]]
-
         co_occurrence = pd.DataFrame(index=top_keywords, columns=top_keywords).fillna(0)
-
         for text in corpus:
             tokens = [word for word in text.lower().split() if word in top_keywords]
             for w1, w2 in combinations(set(tokens), 2):
                 co_occurrence.loc[w1, w2] += 1
                 co_occurrence.loc[w2, w1] += 1
-
         G = nx.Graph()
         for word1 in co_occurrence.index:
             for word2 in co_occurrence.columns:
                 weight = co_occurrence.loc[word1, word2]
                 if weight >= min_occur:
-                    # --- FIX: Convert the numpy.int64 weight to a standard Python int ---
                     G.add_edge(word1, word2, weight=int(weight))
         
         if not G.edges:
             return None
 
+        # --- FIX: Use a temporary file to safely generate and read the HTML ---
         net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
         net.from_nx(G)
         
-        # Using a temporary file name to avoid clashes
-        html_file_name = f"network_{top_n}_{min_occur}.html"
-        net.generate_html(html_file_name)
-        return html_file_name
+        # Create a temporary file to save the network
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
+            net.save_graph(tmp_file.name)
+            # Read the content of the file
+            with open(tmp_file.name, 'r', encoding='utf-8') as f:
+                source_code = f.read()
+        
+        return source_code
 
     with st.spinner("Building keyword network..."):
         all_text = chart_data["text"].dropna()
         if not all_text.empty:
-            network_html_file = generate_network_graph(all_text, top_n_keywords, min_cooccurrence)
-            if network_html_file:
-                with open(network_html_file, 'r', encoding='utf-8') as f:
-                    source_code = f.read()
-                    components.html(source_code, height=610)
+            # --- UPDATED: This variable now holds HTML content, not a filename ---
+            network_html_content = generate_network_graph(all_text, top_n_keywords, min_cooccurrence)
+            
+            if network_html_content:
+                # --- FIX: Directly render the HTML content ---
+                components.html(network_html_content, height=610)
             else:
                 st.warning("No significant keyword co-occurrences found with the current settings. Try lowering the minimum co-occurrence threshold.")
         else:
