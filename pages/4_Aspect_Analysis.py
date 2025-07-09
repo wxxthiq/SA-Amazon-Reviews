@@ -8,6 +8,7 @@ import spacy
 from collections import Counter
 import re
 from textblob import TextBlob
+
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
@@ -42,7 +43,7 @@ def main():
     # --- Load Product Data ---
     product_details = get_product_details(conn, selected_asin).iloc[0]
     st.header(product_details['product_title'])
-    st.caption("This page automatically identifies key product features and analyzes the sentiment towards them.")
+    st.caption("This page automatically identifies key product features (aspects) and analyzes the specific sentiment towards them.")
 
     # --- Sidebar Filters (COMPLETE SET) ---
     st.sidebar.header("🔬 Aspect Analysis Filters")
@@ -50,12 +51,12 @@ def main():
     
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
-    default_sentiments = ['Positive', 'Negative', 'Neutral'] # Added sentiment filter
+    default_sentiments = ['Positive', 'Negative', 'Neutral']
     default_verified = "All"
     
     selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='aspect_date_filter')
     selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='aspect_rating_filter')
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='aspect_sentiment_filter') # Added widget
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='aspect_sentiment_filter')
     selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='aspect_verified_filter')
     
     # Load data based on all filters
@@ -72,13 +73,14 @@ def main():
     @st.cache_data
     def extract_top_aspects(texts, top_n=15):
         all_aspects = []
-        for doc in nlp.pipe(texts):
+        for doc in nlp.pipe(texts, disable=["ner"]): # Keep the parser enabled
             for chunk in doc.noun_chunks:
-                if len(chunk.text.split()) > 1 or chunk.root.pos_ == 'PROPN':
+                # A simple filter to avoid very short or irrelevant chunks
+                if len(chunk.text.split()) > 1 and chunk.root.pos_ != 'PRON':
                     all_aspects.append(chunk.lemma_.lower())
         return [aspect for aspect, freq in Counter(all_aspects).most_common(top_n)]
 
-    with st.spinner("Automatically identifying key aspects..."):
+    with st.spinner("Automatically identifying key aspects from reviews..."):
         top_aspects = extract_top_aspects(chart_data['text'].astype(str))
 
     # --- Interactive Aspect Explorer ---
@@ -89,9 +91,9 @@ def main():
     )
 
     if selected_aspect != "--- Select an Aspect ---":
-        # Find all reviews that mention the selected aspect
+        # Filter the DataFrame for reviews mentioning the aspect
         aspect_df = chart_data[chart_data['text'].str.contains(r'\b' + re.escape(selected_aspect) + r'\b', case=False, na=False)].copy()
-        
+
         st.markdown(f"---")
         st.markdown(f"#### Analysis for aspect: `{selected_aspect}` ({len(aspect_df)} mentions)")
         
@@ -101,11 +103,11 @@ def main():
             # --- Distribution Charts for the Aspect ---
             col1, col2 = st.columns(2)
             with col1:
-                st.markdown("**Rating Distribution for this Aspect**")
+                st.markdown("**Rating Distribution**")
                 rating_dist = aspect_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).sort_index()
                 st.bar_chart(rating_dist)
             with col2:
-                st.markdown("**Sentiment Distribution for this Aspect**")
+                st.markdown("**Sentiment Distribution**")
                 sentiment_dist = aspect_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
                 st.bar_chart(sentiment_dist)
             
@@ -135,11 +137,9 @@ def main():
             st.markdown("---")
             st.markdown("**Example Reviews Mentioning this Aspect**")
 
-            # Helper function to highlight the aspect in text
             def highlight_text(text, aspect):
                 return re.sub(r'(\b' + re.escape(aspect) + r'\b)', r'**:\orange[\1]**', text, flags=re.IGNORECASE)
 
-            # Sort and display reviews
             sorted_aspect_df = aspect_df.sort_values(by="helpful_vote", ascending=False)
             
             for _, review in sorted_aspect_df.head(10).iterrows():
@@ -154,7 +154,6 @@ def main():
                     caption_parts.append(f"Helpful Votes: {review['helpful_vote']} 👍")
                     st.caption(" | ".join(caption_parts))
                     
-                    # Highlight the aspect in the full review text
                     highlighted_review = highlight_text(review['text'], selected_aspect)
                     st.markdown(f"> {highlighted_review}", unsafe_allow_html=True)
 
