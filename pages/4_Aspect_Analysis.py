@@ -53,12 +53,21 @@ def main():
     default_ratings = [1, 2, 3, 4, 5]
     default_sentiments = ['Positive', 'Negative', 'Neutral'] # Added sentiment filter
     default_verified = "All"
+
+    # Callback to reset all filters on this page
+    def reset_all_aspect_filters():
+        st.session_state.aspect_date_filter = default_date_range
+        st.session_state.aspect_rating_filter = default_ratings
+        st.session_state.aspect_sentiment_filter = default_sentiments
+        st.session_state.aspect_verified_filter = default_verified
     
     selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='aspect_date_filter')
     selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='aspect_rating_filter')
     selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='aspect_sentiment_filter') # Added widget
     selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='aspect_verified_filter')
     
+    # Add the reset button
+    st.sidebar.button("Reset All Filters", on_click=reset_all_aspect_filters, use_container_width=True, key='reset_aspect_filters')
     # Load data based on all filters
     chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
 
@@ -155,13 +164,13 @@ def main():
                 st.markdown("###### Rating Volume")
                 rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
                 if not rating_counts_over_time.empty:
-                    rating_stream_chart = px.area(rating_counts_over_time, x='period', y='count', color='rating', color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'})
+                    rating_stream_chart = px.area(rating_counts_over_time, x='period', y='count', color='rating', color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}, category_orders={"rating": [5, 4, 3, 2, 1])
                     st.plotly_chart(rating_stream_chart, use_container_width=True)
             with t_col2:
                 st.markdown("###### Sentiment Volume")
                 sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
                 if not sentiment_counts_over_time.empty:
-                    sentiment_stream_chart = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'})
+                    sentiment_stream_chart = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"])
                     st.plotly_chart(sentiment_stream_chart, use_container_width=True)
 
             # --- Example Reviews Display ---
