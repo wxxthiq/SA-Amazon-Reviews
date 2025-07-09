@@ -253,9 +253,11 @@ def main():
                 if weight >= min_occur:
                     G.add_edge(word1, word2, value=int(weight), title=f"Co-occurrences: {int(weight)}")
         
+        # --- FINAL FIX: Explicitly cast all node attribute values to standard Python int ---
         for node in G.nodes():
-            G.nodes[node]['value'] = top_keywords.get(node, 1)
-            G.nodes[node]['title'] = f"Frequency: {top_keywords.get(node, 1)}"
+            freq = top_keywords.get(node, 1)
+            G.nodes[node]['value'] = int(freq)
+            G.nodes[node]['title'] = f"Frequency: {int(freq)}"
         
         return G
 
