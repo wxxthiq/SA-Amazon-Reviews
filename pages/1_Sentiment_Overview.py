@@ -125,7 +125,7 @@ def main():
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- ASPECT SENTIMENT SUMMARY (WITH GROUPED BAR CHART) ---
+    # --- ASPECT SENTIMENT SUMMARY (WITH ENHANCED EXTRACTION) ---
     st.markdown("---")
     st.markdown("### 🔎 Aspect Sentiment Summary")
     st.caption("A summary of sentiment towards the most common product features (aspects).")
@@ -133,24 +133,37 @@ def main():
     @st.cache_data
     def get_aspect_summary_with_chunks(data):
         all_aspects = []
+        # ** KEY CHANGE: New function to clean noun chunks **
+        def clean_chunk(chunk):
+            cleaned_tokens = []
+            for token in chunk:
+                # Keep nouns, proper nouns, and adjectives; remove determiners and pronouns
+                if token.pos_ in ['NOUN', 'PROPN', 'ADJ']:
+                    cleaned_tokens.append(token.lemma_.lower())
+            return " ".join(cleaned_tokens)
+
         for doc in nlp.pipe(data['text'].astype(str)):
             for chunk in doc.noun_chunks:
-                if len(chunk.text.split()) > 1 or chunk.root.pos_ == 'PROPN':
-                    all_aspects.append(chunk.lemma_.lower())
+                cleaned = clean_chunk(chunk)
+                if cleaned and len(cleaned) > 2: # Ensure the cleaned chunk is not empty
+                    all_aspects.append(cleaned)
         
         if not all_aspects:
             return pd.DataFrame()
             
-        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(5)]
+        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(7)]
 
         aspect_sentiments = []
         for aspect in top_aspects:
-            for text in data['text']:
-                if re.search(r'\b' + re.escape(aspect) + r'\b', str(text).lower()):
-                    window = str(text).lower()[max(0, text.lower().find(aspect)-50):min(len(text), text.lower().find(aspect)+len(aspect)+50)]
-                    polarity = TextBlob(window).sentiment.polarity
-                    sentiment_cat = 'Positive' if polarity > 0.1 else 'Negative' if polarity < -0.1 else 'Neutral'
-                    aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment_cat})
+            # Find reviews that contain any word from the aspect phrase
+            search_regex = r'\b(' + '|'.join(re.escape(word) for word in aspect.split()) + r')\b'
+            aspect_reviews = data[data['text'].str.contains(search_regex, case=False, na=False)]
+            
+            for text in aspect_reviews['text']:
+                window = str(text).lower()[max(0, str(text).lower().find(aspect)-50):min(len(text), str(text).lower().find(aspect)+len(aspect)+50)]
+                polarity = TextBlob(window).sentiment.polarity
+                sentiment_cat = 'Positive' if polarity > 0.1 else 'Negative' if polarity < -0.1 else 'Neutral'
+                aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment_cat})
         
         if not aspect_sentiments:
             return pd.DataFrame()
@@ -160,27 +173,15 @@ def main():
     aspect_summary_df = get_aspect_summary_with_chunks(chart_data)
 
     if not aspect_summary_df.empty:
+        # (The chart rendering code is unchanged)
+        # ...
         summary_chart_data = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
-        
-        # ** KEY CHANGE: Use a grouped bar chart for clarity **
         chart = alt.Chart(summary_chart_data).mark_bar().encode(
             x=alt.X('count:Q', title='Number of Mentions'),
             y=alt.Y('aspect:N', sort='-x', title='Aspect'),
-            # Group the bars by sentiment
-            color=alt.Color('sentiment:N',
-                scale=alt.Scale(
-                    domain=['Positive', 'Neutral', 'Negative'],
-                    range=['#1a9850', '#cccccc', '#d73027']
-                ),
-                legend=alt.Legend(title="Sentiment")
-            ),
-            # Display bars next to each other
+            color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
             yOffset='sentiment:N'
-        ).configure_axis(
-            grid=False
-        ).configure_view(
-            strokeWidth=0
-        )
+        ).configure_axis(grid=False).configure_view(strokeWidth=0)
         st.altair_chart(chart, use_container_width=True)
     else:
         st.info("Not enough data to generate an aspect summary for the current filters.")
