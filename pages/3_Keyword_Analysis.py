@@ -224,9 +224,9 @@ def main():
 
     net_col1, net_col2 = st.columns(2)
     with net_col1:
-        top_n_keywords = st.slider("Number of Top Keywords to Analyze:", min_value=10, max_value=50, value=25, key="top_n_slider")
+        top_n_keywords = st.slider("Number of Top Keywords to Analyze:", min_value=5, max_value=20, value=10, key="top_n_slider")
     with net_col2:
-        min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=2, key="min_co_slider")
+        min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=100, value=50, key="min_co_slider")
 
     # --- UPDATED: This function is now cached and only returns the graph data ---
     @st.cache_data
