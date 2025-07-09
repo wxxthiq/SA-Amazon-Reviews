@@ -158,7 +158,7 @@ def main():
         for aspect in top_aspects:
             # Find reviews that contain any word from the aspect phrase
             search_regex = r'\b(' + '|'.join(re.escape(word) for word in aspect.split()) + r')\b'
-            aspect_reviews = data[data['text'].str.contains(search_regex, case=False, na=False)]
+            aspect_reviews = data[data['text'].str.contains(search_regex, case=False, na=False, regex=True)]
             
             for text in aspect_reviews['text']:
                 window = str(text).lower()[max(0, str(text).lower().find(aspect)-50):min(len(text), str(text).lower().find(aspect)+len(aspect)+50)]
