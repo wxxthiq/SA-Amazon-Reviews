@@ -133,7 +133,7 @@ def main():
     @st.cache_data
     def get_aspect_summary_with_chunks(data):
         all_aspects = []
-        for doc in nlp.pipe(data['text'].astype(str), disable=["parser", "ner"]):
+        for doc in nlp.pipe(data['text'].astype(str)):
             for chunk in doc.noun_chunks:
                 if len(chunk.text.split()) > 1 or chunk.root.pos_ == 'PROPN':
                     all_aspects.append(chunk.lemma_.lower())
