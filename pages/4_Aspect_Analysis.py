@@ -30,7 +30,10 @@ conn = connect_to_db(DB_PATH)
 # --- Main App Logic ---
 def main():
     st.title("🔎 Aspect-Based Sentiment Analysis")
-
+    
+    if 'aspect_review_page' not in st.session_state:
+        st.session_state.aspect_review_page = 0
+        
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
 
@@ -125,13 +128,17 @@ def main():
     # --- Interactive Aspect Explorer (ENHANCED) ---
     st.markdown("---")
     st.markdown("### 🔬 Interactive Aspect Explorer")
+    # Callback to reset the page number for the reviews
+    def reset_aspect_page_number():
+        st.session_state.aspect_review_page = 0
+    
     selected_aspect = st.selectbox(
         "Select an auto-detected aspect to analyze in detail:",
-        options=["--- Select an Aspect ---"] + top_aspects_list
+        options=["--- Select an Aspect ---"] + top_aspects_list,
+        on_change=reset_aspect_page_number # Reset pagination if aspect changes
     )
-
+    
     if selected_aspect != "--- Select an Aspect ---":
-        # Find all reviews that mention the selected aspect
         aspect_df = chart_data[chart_data['text'].str.contains(r'\b' + re.escape(selected_aspect) + r'\b', case=False, na=False)].copy()
         
         st.markdown(f"---")
@@ -140,7 +147,8 @@ def main():
         if aspect_df.empty:
             st.warning(f"No mentions of '{selected_aspect}' found with the current filters.")
         else:
-            # --- Distribution Charts for the Aspect ---
+            # (Distribution and Trend charts are unchanged)
+            # ...
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown("**Rating Distribution for this Aspect**")
@@ -150,50 +158,58 @@ def main():
                 st.markdown("**Sentiment Distribution for this Aspect**")
                 sentiment_dist = aspect_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
                 st.bar_chart(sentiment_dist)
-            
-            # --- Trend Charts for the Aspect ---
             st.markdown("---")
             st.markdown("**Trends for this Aspect Over Time**")
-            
             time_df = aspect_df.copy()
             time_df['date'] = pd.to_datetime(time_df['date'])
             time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
-            
             t_col1, t_col2 = st.columns(2)
             with t_col1:
                 st.markdown("###### Rating Volume")
                 rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
                 if not rating_counts_over_time.empty:
-                    rating_stream_chart = px.area(rating_counts_over_time, x='period', y='count', color='rating', color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}, category_orders={"rating": [5, 4, 3, 2, 1])
+                    rating_stream_chart = px.area(rating_counts_over_time, x='period', y='count', color='rating', color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}, category_orders={"rating": [5, 4, 3, 2, 1]})
                     st.plotly_chart(rating_stream_chart, use_container_width=True)
             with t_col2:
                 st.markdown("###### Sentiment Volume")
                 sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
                 if not sentiment_counts_over_time.empty:
-                    sentiment_stream_chart = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"])
+                    sentiment_stream_chart = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
                     st.plotly_chart(sentiment_stream_chart, use_container_width=True)
-
-            # --- Example Reviews Display ---
+    
+            # --- Example Reviews Display with Sorting and Pagination ---
             st.markdown("---")
             st.markdown("**Example Reviews Mentioning this Aspect**")
-
-            # ** KEY CHANGE: Using a lambda function for robust replacement **
-            def highlight_text(text, aspect):
-                # This lambda function is a safer way to perform the replacement
-                return re.sub(
-                    r'(\b' + re.escape(aspect) + r'\b)',
-                    lambda m: f'**<span style="color:orange">{m.group(1)}</span>**',
-                    text,
-                    flags=re.IGNORECASE
-                )
-
-            # Sort and display reviews
-            sorted_aspect_df = aspect_df.sort_values(by="helpful_vote", ascending=False)
+    
+            sort_reviews_by = st.selectbox(
+                "Sort examples by:",
+                ("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),
+                key="aspect_review_sort",
+                on_change=reset_aspect_page_number # Reset pagination if sort changes
+            )
+    
+            if sort_reviews_by == "Most Helpful":
+                sorted_aspect_df = aspect_df.sort_values(by="helpful_vote", ascending=False)
+            elif sort_reviews_by == "Highest Rating":
+                sorted_aspect_df = aspect_df.sort_values(by=["rating", "helpful_vote"], ascending=[False, False])
+            elif sort_reviews_by == "Lowest Rating":
+                sorted_aspect_df = aspect_df.sort_values(by=["rating", "helpful_vote"], ascending=[True, False])
+            elif sort_reviews_by == "Oldest":
+                sorted_aspect_df = aspect_df.sort_values(by="date", ascending=True)
+            else: # Newest
+                sorted_aspect_df = aspect_df.sort_values(by="date", ascending=False)
+    
+            start_idx = st.session_state.aspect_review_page * REVIEWS_PER_PAGE
+            end_idx = start_idx + REVIEWS_PER_PAGE
+            reviews_to_display = sorted_aspect_df.iloc[start_idx:end_idx]
             
-            for _, review in sorted_aspect_df.head(10).iterrows():
+            # Helper function to highlight text
+            def highlight_text(text, aspect):
+                return re.sub(r'(\b' + re.escape(aspect) + r'\b)', r'**<span style="color:orange">\1</span>**', text, flags=re.IGNORECASE)
+    
+            for _, review in reviews_to_display.iterrows():
                 with st.container(border=True):
                     st.subheader(review['review_title'])
-                    
                     caption_parts = []
                     if review['verified_purchase']:
                         caption_parts.append("✅ Verified")
@@ -202,9 +218,25 @@ def main():
                     caption_parts.append(f"Helpful Votes: {review['helpful_vote']} 👍")
                     st.caption(" | ".join(caption_parts))
                     
-                    # Highlight the aspect in the full review text
                     highlighted_review = highlight_text(review['text'], selected_aspect)
                     st.markdown(f"> {highlighted_review}", unsafe_allow_html=True)
-
+            
+            # Pagination Buttons
+            total_reviews = len(sorted_aspect_df)
+            total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
+            
+            if total_pages > 1:
+                st.caption(f"Page {st.session_state.aspect_review_page + 1} of {total_pages}")
+                p_col1, p_col2 = st.columns(2)
+                with p_col1:
+                    if st.session_state.aspect_review_page > 0:
+                        if st.button("⬅️ Previous 5 Reviews"):
+                            st.session_state.aspect_review_page -= 1
+                            st.rerun()
+                with p_col2:
+                    if end_idx < total_reviews:
+                        if st.button("Next 5 Reviews ➡️"):
+                            st.session_state.aspect_review_page += 1
+                            st.rerun()
 if __name__ == "__main__":
     main()
