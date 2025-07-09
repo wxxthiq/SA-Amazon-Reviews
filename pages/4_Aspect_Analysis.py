@@ -26,6 +26,7 @@ def load_spacy_model():
 nlp = load_spacy_model()
 DB_PATH = "amazon_reviews_top100.duckdb"
 conn = connect_to_db(DB_PATH)
+REVIEWS_PER_PAGE = 5
 
 # --- Main App Logic ---
 def main():
