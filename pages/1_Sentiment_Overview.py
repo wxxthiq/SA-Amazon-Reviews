@@ -134,7 +134,6 @@ def main():
     @st.cache_data
     def get_aspect_summary_with_chunks(data):
         all_aspects = []
-        # ** KEY CHANGE: New function to clean noun chunks **
         def clean_chunk(chunk):
             cleaned_tokens = []
             for token in chunk:
@@ -175,8 +174,6 @@ def main():
     aspect_summary_df = get_aspect_summary_with_chunks(chart_data)
 
     if not aspect_summary_df.empty:
-        # (The chart rendering code is unchanged)
-        # ...
         summary_chart_data = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         chart = alt.Chart(summary_chart_data).mark_bar().encode(
             x=alt.X('count:Q', title='Number of Mentions'),
@@ -308,90 +305,82 @@ def main():
 
     with t_col1:
         st.markdown("#### Rating Distribution Over Time")
+        # --- NEW: Add toggle for the trendline ---
+        show_rating_trend = st.toggle('Show Average Rating Trend', key='show_rating_trend')
+
         rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
-        
-        # --- NEW: Calculate the average rating trend ---
-        avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
 
         if not rating_counts_over_time.empty:
-            # Base area chart for volume
-            fig = px.area(
-                rating_counts_over_time, 
-                x='period', 
-                y='count', 
-                color='rating',
-                title="Volume of Reviews and Average Rating Trend",
-                color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
-                category_orders={"rating": [5, 4, 3, 2, 1]}
-            )
-            
-            # --- NEW: Add the average rating line ---
-            fig.add_trace(go.Scatter(
-                x=avg_rating_trend['period'],
-                y=avg_rating_trend['rating'],
-                mode='lines',
-                name='Average Rating',
-                yaxis='y2', # Assign to the secondary y-axis
-                line=dict(color='blue', width=3, dash='dash')
-            ))
-            
-            # --- NEW: Configure layout with a secondary y-axis ---
-            fig.update_layout(
-                yaxis_title='Number of Reviews',
-                yaxis2=dict(
-                    title='Average Rating (1-5)',
-                    overlaying='y',
-                    side='right',
-                    range=[1, 5]
-                ),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            # --- NEW: Conditional chart rendering based on the toggle ---
+            if show_rating_trend:
+                # ADVANCED VIEW with secondary axis and trendline
+                avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
+                fig = px.area(
+                    rating_counts_over_time, x='period', y='count', color='rating',
+                    title="Volume of Reviews and Average Rating Trend",
+                    color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
+                    category_orders={"rating": [5, 4, 3, 2, 1]}
+                )
+                fig.add_trace(go.Scatter(
+                    x=avg_rating_trend['period'], y=avg_rating_trend['rating'],
+                    mode='lines', name='Average Rating', yaxis='y2',
+                    line=dict(color='blue', width=3, dash='dash')
+                ))
+                fig.update_layout(
+                    yaxis_title='Number of Reviews',
+                    yaxis2=dict(title='Average Rating (1-5)', overlaying='y', side='right', range=[1, 5]),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                # DEFAULT VIEW with simple volume chart
+                fig = px.area(
+                    rating_counts_over_time, x='period', y='count', color='rating',
+                    title="Volume of Reviews by Star Rating",
+                    color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
+                    category_orders={"rating": [5, 4, 3, 2, 1]}
+                )
+                st.plotly_chart(fig, use_container_width=True)
     
-    # pages/1_Sentiment_Overview.py
-
     with t_col2:
         st.markdown("#### Sentiment Volume Over Time")
-        sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+        # --- NEW: Add toggle for the trendline ---
+        show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='show_sentiment_trend')
         
-        # --- NEW: Calculate the average sentiment trend ---
-        avg_sentiment_trend = time_df.groupby('period')['text_polarity'].mean().reset_index()
+        sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
 
         if not sentiment_counts_over_time.empty:
-            # Base area chart for volume
-            fig = px.area(
-                sentiment_counts_over_time, 
-                x='period', 
-                y='count', 
-                color='sentiment',
-                title=f"Sentiment Breakdown and Average Polarity Trend",
-                color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
-            )
-
-            # --- NEW: Add the average sentiment polarity line ---
-            fig.add_trace(go.Scatter(
-                x=avg_sentiment_trend['period'],
-                y=avg_sentiment_trend['text_polarity'],
-                mode='lines',
-                name='Avg. Sentiment',
-                yaxis='y2', # Assign to the secondary y-axis
-                line=dict(color='blue', width=3, dash='dash')
-            ))
-            
-            # --- NEW: Configure layout with a secondary y-axis ---
-            fig.update_layout(
-                yaxis_title='Number of Reviews',
-                yaxis2=dict(
-                    title='Average Polarity (-1 to 1)',
-                    overlaying='y',
-                    side='right',
-                    range=[-1, 1]
-                ),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
+            # --- NEW: Conditional chart rendering based on the toggle ---
+            if show_sentiment_trend:
+                # ADVANCED VIEW with secondary axis and trendline
+                avg_sentiment_trend = time_df.groupby('period')['text_polarity'].mean().reset_index()
+                fig = px.area(
+                    sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                    title=f"Sentiment Breakdown and Average Polarity Trend",
+                    color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                )
+                fig.add_trace(go.Scatter(
+                    x=avg_sentiment_trend['period'], y=avg_sentiment_trend['text_polarity'],
+                    mode='lines', name='Avg. Sentiment', yaxis='y2',
+                    line=dict(color='blue', width=3, dash='dash')
+                ))
+                fig.update_layout(
+                    yaxis_title='Number of Reviews',
+                    yaxis2=dict(title='Average Polarity (-1 to 1)', overlaying='y', side='right', range=[-1, 1]),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                # DEFAULT VIEW with simple volume chart
+                fig = px.area(
+                    sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                    title=f"Sentiment Breakdown Per {time_granularity.replace('ly', '')}",
+                    color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
     # --- Navigation to Review Explorer ---
     st.markdown("---")
     st.subheader("📝 Browse Individual Reviews")
