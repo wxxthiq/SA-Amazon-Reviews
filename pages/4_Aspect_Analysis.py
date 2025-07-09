@@ -72,7 +72,7 @@ def main():
     @st.cache_data
     def extract_top_aspects(texts, top_n=15):
         all_aspects = []
-        for doc in nlp.pipe(texts, disable=["parser", "ner"]):
+        for doc in nlp.pipe(texts):
             for chunk in doc.noun_chunks:
                 if len(chunk.text.split()) > 1 or chunk.root.pos_ == 'PROPN':
                     all_aspects.append(chunk.lemma_.lower())
