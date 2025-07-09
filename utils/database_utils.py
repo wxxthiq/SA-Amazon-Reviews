@@ -75,7 +75,8 @@ def get_all_categories(_conn):
     categories.insert(0, "--- Select a Category ---")
     return categories
 
-def get_filtered_products(_conn, category, search_term, sort_by, limit, offset):
+@st.cache_data
+def get_filtered_products(_conn, category, search_term, sort_by, rating_range, review_count_range, limit, offset):
     """Fetches a paginated and filtered list of products using positional placeholders."""
     params = [category]
 
@@ -83,6 +84,16 @@ def get_filtered_products(_conn, category, search_term, sort_by, limit, offset):
     if search_term:
         where_clauses.append("product_title ILIKE ?")
         params.append(f"%{search_term}%")
+
+    # --- NEW: Add rating and review count filters ---
+    if rating_range:
+        where_clauses.append("average_rating BETWEEN ? AND ?")
+        params.extend([rating_range[0], rating_range[1]])
+
+    if review_count_range:
+        where_clauses.append("review_count BETWEEN ? AND ?")
+        params.extend([review_count_range[0], review_count_range[1]])
+
 
     where_sql = " WHERE " + " AND ".join(where_clauses)
 
