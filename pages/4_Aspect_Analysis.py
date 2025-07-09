@@ -23,10 +23,9 @@ conn = connect_to_db(DB_PATH)
 
 # --- Main App Logic ---
 def main():
-    st.title("🔎 Aspect-Based Sentiment Analysis")
-  
-    if st.button("Back to Sentiment Overview"):
-        st.switch_page("pages/1_Sentiment_Overview.py")
+  st.title("🔎 Aspect-Based Sentiment Analysis")
+  if st.button("Back to Sentiment Overview"):
+    st.switch_page("pages/1_Sentiment_Overview.py")
 
     # --- Check for Selected Product ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
