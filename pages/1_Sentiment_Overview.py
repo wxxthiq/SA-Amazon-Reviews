@@ -306,83 +306,48 @@ def main():
     
     t_col1, t_col2 = st.columns(2)
     
+# pages/1_Sentiment_Overview.py
+
     with t_col1:
-        st.markdown("#### Rating Distribution Over Time")
+        st.markdown("#### Rating Trend Over Time") # Renamed for clarity
         rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
         
         if not rating_counts_over_time.empty:
-            # --- NEW: Calculate Moving Average for Ratings ---
-            # Sort values to ensure correct rolling calculation
-            rating_counts_over_time = rating_counts_over_time.sort_values('period')
             # Calculate a 7-period moving average for each rating category
             rating_counts_over_time['moving_average'] = rating_counts_over_time.groupby('rating')['count'].transform(lambda x: x.rolling(7, min_periods=1).mean())
 
-            # --- UPDATED: Build chart with Plotly Graph Objects ---
-            fig = go.Figure()
-
-            # Define colors for a 5-star rating scale
-            ratings = [5, 4, 3, 2, 1]
-            colors = {5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}
-
-            for rating in ratings:
-                df_rating = rating_counts_over_time[rating_counts_over_time['rating'] == rating]
-                if not df_rating.empty:
-                    # Original volume area chart (semi-transparent)
-                    fig.add_trace(go.Scatter(
-                        x=df_rating['period'],
-                        y=df_rating['count'],
-                        mode='lines',
-                        fill='tozeroy',
-                        name=f"{rating}⭐ Volume",
-                        line=dict(width=0.5, color=colors[rating]),
-                        opacity=0.4
-                    ))
-                    # Moving average trendline
-                    fig.add_trace(go.Scatter(
-                        x=df_rating['period'],
-                        y=df_rating['moving_average'],
-                        mode='lines',
-                        name=f"{rating}⭐ Trend",
-                        line=dict(width=2, color=colors[rating])
-                    ))
-            
-            fig.update_layout(
-                title=f"Volume of Reviews by Star Rating",
-                yaxis_title="Number of Reviews"
+            # --- UPDATED: Use Plotly Express for a cleaner line chart ---
+            fig = px.line(
+                rating_counts_over_time,
+                x='period',
+                y='moving_average',
+                color='rating',
+                title="7-Day Moving Average of Ratings",
+                labels={'moving_average': 'Smoothed Review Volume', 'period': 'Date', 'rating': 'Star Rating'},
+                color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
+                category_orders={"rating": [5, 4, 3, 2, 1]}
             )
+            
+            fig.update_traces(mode='lines+markers', line_shape='spline')
             st.plotly_chart(fig, use_container_width=True)
     
     with t_col2:
         st.markdown("#### Sentiment Volume Over Time")
         sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+        
         if not sentiment_counts_over_time.empty:
-            # Sort values to ensure correct rolling calculation
-            sentiment_counts_over_time = sentiment_counts_over_time.sort_values('period')
-            # Calculate a 7-period moving average for each sentiment category
-            sentiment_counts_over_time['moving_average'] = sentiment_counts_over_time.groupby('sentiment')['count'].transform(lambda x: x.rolling(7, min_periods=1).mean())
-    
-            fig = go.Figure()
-            sentiments = ['Positive', 'Neutral', 'Negative']
-            colors = {'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}
-    
-            for sentiment in sentiments:
-                df_sentiment = sentiment_counts_over_time[sentiment_counts_over_time['sentiment'] == sentiment]
-                if not df_sentiment.empty:
-                    # Moving average trendline
-                    fig.add_trace(go.Scatter(
-                        x=df_sentiment['period'],
-                        y=df_sentiment['moving_average'],
-                        mode='lines',
-                        name=f"{sentiment} Trend",
-                        line=dict(width=2, color=colors[sentiment])
-                    ))
-            
-            fig.update_layout(
-                title=f"Sentiment Breakdown Per {time_granularity.replace('ly', '')} (7-Day Avg)",
-                yaxis_title="Average Number of Reviews"
+            # --- REVERTED: Simple area chart for sentiment volume ---
+            sentiment_stream_chart = px.area(
+                sentiment_counts_over_time,
+                x='period',
+                y='count',
+                color='sentiment',
+                title=f"Sentiment Breakdown Per {time_granularity.replace('ly', '')}",
+                color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
             )
-            st.plotly_chart(fig, use_container_width=True)
-
+            st.plotly_chart(sentiment_stream_chart, use_container_width=True)
+            
     # --- Navigation to Review Explorer ---
     st.markdown("---")
     st.subheader("📝 Browse Individual Reviews")
