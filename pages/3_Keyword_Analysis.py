@@ -217,6 +217,7 @@ def main():
                         st.rerun()
     
     # --- Keyword Co-occurrence Network ---
+    # --- Keyword Co-occurrence Network ---
     st.markdown("---")
     st.markdown("### 🕸️ Keyword Co-occurrence Network")
     st.caption("This network shows which keywords frequently appear together. Larger nodes are more frequent, and thicker links mean a stronger connection.")
@@ -225,7 +226,8 @@ def main():
     with net_col1:
         top_n_keywords = st.slider("Number of Top Keywords to Analyze:", min_value=10, max_value=50, value=25, key="top_n_slider")
     with net_col2:
-        min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=3, key="min_co_slider")
+        # --- Default value lowered to 2 to ensure a graph appears ---
+        min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=2, key="min_co_slider")
 
     @st.cache_data
     def generate_network_graph(corpus, top_n, min_occur):
@@ -243,39 +245,46 @@ def main():
             for w1, w2 in combinations(set(tokens), 2):
                 co_occurrence.loc[w1, w2] += 1
                 co_occurrence.loc[w2, w1] += 1
-
-        G = nx.Graph()
         
-        # --- UPDATED: Add nodes with size attribute based on frequency ---
-        for keyword, freq in top_keywords.items():
-            G.add_node(keyword, size=int(freq), title=f"Frequency: {freq}")
-
-        # --- UPDATED: Add edges with width attribute based on co-occurrence weight ---
+        # --- UPDATED: Build graph only from edges that meet the threshold ---
+        G = nx.Graph()
         for word1 in co_occurrence.index:
             for word2 in co_occurrence.columns:
                 weight = co_occurrence.loc[word1, word2]
                 if weight >= min_occur:
-                    G.add_edge(word1, word2, weight=int(weight), title=f"Co-occurrences: {int(weight)}")
+                    # Use 'value' for pyvis edge thickness scaling
+                    G.add_edge(word1, word2, value=int(weight), title=f"Co-occurrences: {int(weight)}")
+        
+        # Add node attributes after building the graph from edges
+        # This ensures only connected nodes are included and sized correctly
+        for node in G.nodes():
+            # Use 'value' for pyvis node size scaling
+            G.nodes[node]['value'] = top_keywords.get(node, 1)
+            G.nodes[node]['title'] = f"Frequency: {top_keywords.get(node, 1)}"
         
         if not G.edges:
             return None
 
         net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
-        
-        # --- NEW: Set scaling options for node size and edge width ---
-        net.repulsion(node_distance=150, spring_length=200)
         net.from_nx(G)
-
-        # Stabilize the network physics
+        
         options = """
         var options = {
           "nodes": {
-            "font": {
-              "size": 20, "face": "Tahoma", "color": "#ffffff"
-            },
-            "scaling": { "min": 10, "max": 50 }
+            "font": { "size": 20, "face": "Tahoma", "color": "#ffffff" },
+            "scaling": { "min": 15, "max": 60 }
           },
-          "edges": { "scaling": { "min": 1, "max": 15 } }
+          "edges": {
+            "scaling": { "min": 1, "max": 20 },
+            "smooth": { "enabled": false }
+          },
+          "physics": {
+            "enabled": true,
+            "stabilization": { "enabled": true, "iterations": 500 },
+            "barnesHut": {
+              "gravitationalConstant": -80000, "springConstant": 0.001, "springLength": 200
+            }
+          }
         }
         """
         net.set_options(options)
