@@ -6,7 +6,7 @@ from utils.database_utils import (
     get_product_date_range,
     get_paginated_reviews
 )
-import re # --- NEW: Import the regular expression module
+import re
 
 # --- Page Configuration and Constants ---
 st.set_page_config(layout="wide", page_title="Review Explorer")
@@ -34,7 +34,7 @@ def main():
 
     product_details = get_product_details(conn, selected_asin).iloc[0]
     st.header(product_details['product_title'])
-    st.caption("Browse, filter, and sort all reviews for this product. Use the search box or export your filtered results.")
+    st.caption("Browse, filter, and sort all reviews. When searching, results are sorted by helpfulness.")
 
     # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
@@ -56,22 +56,37 @@ def main():
     st.sidebar.multiselect("Filter by Sentiment", options=['Positive', 'Negative', 'Neutral'], key='explorer_sentiment_filter', on_change=reset_page_number)
     st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], key='explorer_verified_filter', on_change=reset_page_number)
 
-    # --- Controls for Sorting and Searching ---
+    # --- Controls for Sorting and Searching (WITH CONDITIONAL LOGIC) ---
     st.markdown("---")
     c1, c2 = st.columns([1, 1])
-    with c1:
-        sort_by = st.selectbox(
-            "Sort reviews by:",
-            ("Newest First", "Oldest First", "Highest Rating", "Lowest Rating", "Most Helpful"),
-            index=0,
-            on_change=reset_page_number
-        )
+    
     with c2:
         st.session_state.explorer_search_term = st.text_input(
             "Search within review text:", 
             value=st.session_state.explorer_search_term,
             on_change=reset_page_number,
             placeholder="e.g., battery life, easy to use"
+        )
+    
+    with c1:
+        sort_options = ("Newest First", "Oldest First", "Highest Rating", "Lowest Rating", "Most Helpful")
+        search_active = bool(st.session_state.explorer_search_term)
+        
+        # If search is active, force sort to "Most Helpful". Otherwise, use the user's selection.
+        if search_active:
+            current_index = sort_options.index("Most Helpful")
+        else:
+            # Check if a sort option has been selected before, otherwise default to "Newest First"
+            current_index = st.session_state.get('sort_by_index', 0)
+
+        # The selectbox is disabled when a search term is entered
+        sort_by = st.selectbox(
+            "Sort reviews by:",
+            sort_options,
+            index=current_index,
+            on_change=lambda: st.session_state.update(sort_by_index=sort_options.index(st.session_state.sort_selector)),
+            disabled=search_active,
+            key='sort_selector'
         )
 
     # --- Data Fetching ---
@@ -92,8 +107,9 @@ def main():
     st.markdown("---")
     
     if paginated_reviews_df.empty:
-        st.warning("No reviews match your current filter and sort criteria.")
+        st.warning("No reviews match your current filter and search criteria.")
     else:
+        # Display informational message and export button
         info_c1, export_c2 = st.columns([3, 1])
         with info_c1:
             total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
@@ -107,6 +123,7 @@ def main():
                use_container_width=True
             )
 
+        # Loop to display reviews with keyword highlighting
         for _, review in paginated_reviews_df.iterrows():
             with st.container(border=True):
                 col1, col2 = st.columns([4, 1])
@@ -114,19 +131,15 @@ def main():
                     st.subheader(review['review_title'])
                     caption_parts = ["✅ Verified" if review['verified_purchase'] else "❌ Not Verified", f"Reviewed on: {review['date']}", f"Sentiment: {review['sentiment']}"]
                     st.caption(" | ".join(caption_parts))
-
-                    # --- UPDATED: Logic to highlight the search term ---
+                    
                     search_term = st.session_state.explorer_search_term
                     review_text = review['text']
                     
                     if search_term:
-                        # Use re.sub for case-insensitive replacement and wrap with <mark> tags for highlighting
                         highlighted_text = re.sub(f'({re.escape(search_term)})', r'<mark>\1</mark>', review_text, flags=re.IGNORECASE)
                         st.markdown(f"> {highlighted_text}", unsafe_allow_html=True)
                     else:
                         st.markdown(f"> {review_text}")
-                    # --- END of update ---
-
                 with col2:
                     st.metric("⭐ Rating", f"{review['rating']:.1f}")
                     st.metric("👍 Helpful", f"{review['helpful_vote']}")
