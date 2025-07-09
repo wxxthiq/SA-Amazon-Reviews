@@ -309,31 +309,46 @@ def main():
     with t_col1:
         st.markdown("#### Rating Distribution Over Time")
         rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
+        
         if not rating_counts_over_time.empty:
+            # --- NEW: Calculate Moving Average for Ratings ---
             # Sort values to ensure correct rolling calculation
             rating_counts_over_time = rating_counts_over_time.sort_values('period')
             # Calculate a 7-period moving average for each rating category
             rating_counts_over_time['moving_average'] = rating_counts_over_time.groupby('rating')['count'].transform(lambda x: x.rolling(7, min_periods=1).mean())
-    
+
+            # --- UPDATED: Build chart with Plotly Graph Objects ---
             fig = go.Figure()
-            ratings = [1, 2, 3, 4, 5]
+
+            # Define colors for a 5-star rating scale
+            ratings = [5, 4, 3, 2, 1]
             colors = {5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}
-    
+
             for rating in ratings:
                 df_rating = rating_counts_over_time[rating_counts_over_time['rating'] == rating]
                 if not df_rating.empty:
+                    # Original volume area chart (semi-transparent)
+                    fig.add_trace(go.Scatter(
+                        x=df_rating['period'],
+                        y=df_rating['count'],
+                        mode='lines',
+                        fill='tozeroy',
+                        name=f"{rating}⭐ Volume",
+                        line=dict(width=0.5, color=colors[rating]),
+                        opacity=0.4
+                    ))
                     # Moving average trendline
                     fig.add_trace(go.Scatter(
                         x=df_rating['period'],
                         y=df_rating['moving_average'],
                         mode='lines',
-                        name=f"{rating} Star Trend",
+                        name=f"{rating}⭐ Trend",
                         line=dict(width=2, color=colors[rating])
                     ))
-    
+            
             fig.update_layout(
-                title=f"Volume of Reviews by Star Rating (7-Day Avg)",
-                yaxis_title="Average Number of Reviews"
+                title=f"Volume of Reviews by Star Rating",
+                yaxis_title="Number of Reviews"
             )
             st.plotly_chart(fig, use_container_width=True)
     
