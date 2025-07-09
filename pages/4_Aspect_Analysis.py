@@ -168,10 +168,15 @@ def main():
             st.markdown("---")
             st.markdown("**Example Reviews Mentioning this Aspect**")
 
-            # Helper function to highlight the aspect in text
+            # ** KEY CHANGE: Using a lambda function for robust replacement **
             def highlight_text(text, aspect):
-                # Use markdown to make the aspect bold and orange
-                return re.sub(r'(\b' + re.escape(aspect) + r'\b)', r'**:\orange[\1]**', text, flags=re.IGNORECASE)
+                # This lambda function is a safer way to perform the replacement
+                return re.sub(
+                    r'(\b' + re.escape(aspect) + r'\b)',
+                    lambda m: f'**<span style="color:orange">{m.group(1)}</span>**',
+                    text,
+                    flags=re.IGNORECASE
+                )
 
             # Sort and display reviews
             sorted_aspect_df = aspect_df.sort_values(by="helpful_vote", ascending=False)
