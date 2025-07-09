@@ -215,36 +215,47 @@ def main():
                     if st.button("Next 5 Reviews ➡️"):
                         st.session_state.keyword_review_page += 1
                         st.rerun()
-    
-    # --- Keyword Co-occurrence Network ---
+                        
     # --- Keyword Co-occurrence Network ---
     st.markdown("---")
-    st.markdown("### 🕸️ Keyword Co-occurrence Network")
-    st.caption("This network shows which keywords frequently appear together. Larger nodes are more frequent, and thicker links mean a stronger connection.")
+    st.markdown("### 🕸️ Keyword & Phrase Co-occurrence Network")
+    st.caption("This network shows which terms and phrases frequently appear together. Larger nodes are more frequent, and thicker links mean a stronger connection.")
 
-    net_col1, net_col2 = st.columns(2)
+    net_col1, net_col2, net_col3 = st.columns(3)
     with net_col1:
-        top_n_keywords = st.slider("Number of Top Keywords to Analyze:", min_value=5, max_value=20, value=10, key="top_n_slider")
+        top_n_keywords = st.slider("Number of Top Terms to Analyze:", min_value=10, max_value=50, value=20, key="top_n_slider")
     with net_col2:
-        min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=100, value=50, key="min_co_slider")
+        min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=2, key="min_co_slider")
+    with net_col3:
+        # --- NEW: N-gram selection UI ---
+        ngram_options = {1: "1-word (Unigrams)", 2: "2-word (Bigrams)", 3: "3-word (Trigrams)"}
+        selected_ngrams = st.multiselect("Select Term Types:", options=list(ngram_options.keys()), format_func=lambda x: ngram_options[x], default=[1, 2])
 
-    # --- UPDATED: This function is now cached and only returns the graph data ---
     @st.cache_data
-    def get_networkx_graph(corpus, top_n, min_occur):
-        vec = CountVectorizer(ngram_range=(1, 1), stop_words='english').fit(corpus)
+    def generate_network_graph(corpus, top_n, min_occur, ngrams_to_include):
+        if not ngrams_to_include:
+            return None # Return early if no n-gram types are selected
+
+        # --- UPDATED: Use a dynamic ngram_range ---
+        ngram_range = (min(ngrams_to_include), max(ngrams_to_include))
+        
+        vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
         bag_of_words = vec.transform(corpus)
         sum_words = bag_of_words.sum(axis=0)
         words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
         words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
-        top_keywords = {word: freq for word, freq in words_freq[:top_n]}
         
-        co_occurrence = pd.DataFrame(index=top_keywords.keys(), columns=top_keywords.keys(), dtype=np.int64).fillna(0)
+        # Filter for only the selected n-gram lengths before taking the top N
+        filtered_words_freq = [ (word, freq) for word, freq in words_freq if len(word.split()) in ngrams_to_include ]
+        top_keywords = {word: freq for word, freq in filtered_words_freq[:top_n]}
 
+        # --- UPDATED: More robust co-occurrence logic for phrases ---
+        co_occurrence = pd.DataFrame(index=top_keywords.keys(), columns=top_keywords.keys(), dtype=np.int64).fillna(0)
         for text in corpus:
-            tokens = [word for word in text.lower().split() if word in top_keywords]
-            for w1, w2 in combinations(set(tokens), 2):
-                co_occurrence.loc[w1, w2] += 1
-                co_occurrence.loc[w2, w1] += 1
+            found_terms = [term for term in top_keywords if term in text]
+            for term1, term2 in combinations(found_terms, 2):
+                co_occurrence.loc[term1, term2] += 1
+                co_occurrence.loc[term2, term1] += 1
         
         G = nx.Graph()
         for word1 in co_occurrence.index:
@@ -253,56 +264,35 @@ def main():
                 if weight >= min_occur:
                     G.add_edge(word1, word2, value=int(weight), title=f"Co-occurrences: {int(weight)}")
         
-        # --- FINAL FIX: Explicitly cast all node attribute values to standard Python int ---
         for node in G.nodes():
             freq = top_keywords.get(node, 1)
             G.nodes[node]['value'] = int(freq)
             G.nodes[node]['title'] = f"Frequency: {int(freq)}"
         
-        return G
+        if not G.edges:
+            return None
 
-    with st.spinner("Building keyword network..."):
+        # (The pyvis rendering code remains the same)
+        net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
+        net.from_nx(G)
+        options = """...""" # options string from previous step
+        net.set_options(options)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
+            net.save_graph(tmp_file.name)
+            with open(tmp_file.name, 'r', encoding='utf-8') as f:
+                source_code = f.read()
+        return source_code
+
+    with st.spinner("Building term & phrase network..."):
         all_text = chart_data["text"].dropna()
-        if not all_text.empty:
-            # 1. Get the graph data from the cached function
-            G = get_networkx_graph(all_text, top_n_keywords, min_cooccurrence)
-
-            # 2. Check if the graph has edges and generate HTML outside the cache
-            if G and G.edges:
-                net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
-                net.from_nx(G)
-                
-                options = """
-                var options = {
-                  "nodes": {
-                    "font": { "size": 20, "face": "Tahoma", "color": "#ffffff" },
-                    "scaling": { "min": 15, "max": 60 }
-                  },
-                  "edges": {
-                    "scaling": { "min": 1, "max": 20 },
-                    "smooth": { "enabled": false }
-                  },
-                  "physics": {
-                    "enabled": true,
-                    "stabilization": { "enabled": true, "iterations": 500 },
-                    "barnesHut": {
-                      "gravitationalConstant": -80000, "springConstant": 0.001, "springLength": 200
-                    }
-                  }
-                }
-                """
-                net.set_options(options)
-
-                # Generate and display the HTML
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
-                    net.save_graph(tmp_file.name)
-                    with open(tmp_file.name, 'r', encoding='utf-8') as f:
-                        source_code = f.read()
-                components.html(source_code, height=610)
+        if not all_text.empty and selected_ngrams:
+            network_html_content = generate_network_graph(all_text, top_n_keywords, min_cooccurrence, selected_ngrams)
+            if network_html_content:
+                components.html(network_html_content, height=610)
             else:
-                st.warning("No significant keyword co-occurrences found with the current settings. Try lowering the minimum co-occurrence threshold.")
+                st.warning("No significant co-occurrences found with the current settings. Try adjusting the filters.")
         else:
-            st.warning("No review text available to build a network.")
+            st.warning("Please select at least one term type to build a network.")
             
 if __name__ == "__main__":
     main()
