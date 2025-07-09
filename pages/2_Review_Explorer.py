@@ -6,6 +6,7 @@ from utils.database_utils import (
     get_product_date_range,
     get_paginated_reviews
 )
+import re # --- NEW: Import the regular expression module
 
 # --- Page Configuration and Constants ---
 st.set_page_config(layout="wide", page_title="Review Explorer")
@@ -66,7 +67,6 @@ def main():
             on_change=reset_page_number
         )
     with c2:
-        # --- NEW: Search bar ---
         st.session_state.explorer_search_term = st.text_input(
             "Search within review text:", 
             value=st.session_state.explorer_search_term,
@@ -99,7 +99,6 @@ def main():
             total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
             st.info(f"Showing **{len(paginated_reviews_df)}** of **{total_reviews}** matching reviews. (Page **{st.session_state.review_page + 1}** of **{total_pages}**)")
         with export_c2:
-            # --- NEW: Export button ---
             st.download_button(
                label="📥 Export to CSV",
                data=convert_df_to_csv(all_filtered_df),
@@ -115,7 +114,19 @@ def main():
                     st.subheader(review['review_title'])
                     caption_parts = ["✅ Verified" if review['verified_purchase'] else "❌ Not Verified", f"Reviewed on: {review['date']}", f"Sentiment: {review['sentiment']}"]
                     st.caption(" | ".join(caption_parts))
-                    st.markdown(f"> {review['text']}")
+
+                    # --- UPDATED: Logic to highlight the search term ---
+                    search_term = st.session_state.explorer_search_term
+                    review_text = review['text']
+                    
+                    if search_term:
+                        # Use re.sub for case-insensitive replacement and wrap with <mark> tags for highlighting
+                        highlighted_text = re.sub(f'({re.escape(search_term)})', r'<mark>\1</mark>', review_text, flags=re.IGNORECASE)
+                        st.markdown(f"> {highlighted_text}", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"> {review_text}")
+                    # --- END of update ---
+
                 with col2:
                     st.metric("⭐ Rating", f"{review['rating']:.1f}")
                     st.metric("👍 Helpful", f"{review['helpful_vote']}")
