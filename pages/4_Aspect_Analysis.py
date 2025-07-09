@@ -24,7 +24,7 @@ conn = connect_to_db(DB_PATH)
 # --- Main App Logic ---
 def main():
     st.title("🔎 Aspect-Based Sentiment Analysis")
-
+  
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
 
@@ -42,15 +42,15 @@ def main():
     # --- Sidebar Filters ---
     st.sidebar.header("🔬 Aspect Analysis Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
-    
+
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
     default_verified = "All"
-    
+
     selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='aspect_date_filter')
     selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='aspect_rating_filter')
     selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='aspect_verified_filter')
-    
+
     # Load data based on the filters
     chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), ['Positive', 'Negative', 'Neutral'], selected_verified)
 
