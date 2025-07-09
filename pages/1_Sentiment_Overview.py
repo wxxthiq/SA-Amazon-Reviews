@@ -125,20 +125,16 @@ def main():
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- NEW: ASPECT SENTIMENT SUMMARY ---
-    # --- ASPECT SENTIMENT SUMMARY (WITH NOUN CHUNKING) ---
+    # --- ASPECT SENTIMENT SUMMARY (WITH GROUPED BAR CHART) ---
     st.markdown("---")
     st.markdown("### 🔎 Aspect Sentiment Summary")
     st.caption("A summary of sentiment towards the most common product features (aspects).")
 
     @st.cache_data
     def get_aspect_summary_with_chunks(data):
-        # ** KEY CHANGE: Use noun chunks to find multi-word aspects **
         all_aspects = []
         for doc in nlp.pipe(data['text'].astype(str), disable=["parser", "ner"]):
-            # We filter for noun chunks that are more than one word or are significant single nouns
             for chunk in doc.noun_chunks:
-                # A simple filter to avoid very short or irrelevant chunks
                 if len(chunk.text.split()) > 1 or chunk.root.pos_ == 'PROPN':
                     all_aspects.append(chunk.lemma_.lower())
         
@@ -165,12 +161,26 @@ def main():
 
     if not aspect_summary_df.empty:
         summary_chart_data = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        
+        # ** KEY CHANGE: Use a grouped bar chart for clarity **
         chart = alt.Chart(summary_chart_data).mark_bar().encode(
-            x=alt.X('count:Q', stack='normalize', title='Proportion of Mentions'),
+            x=alt.X('count:Q', title='Number of Mentions'),
             y=alt.Y('aspect:N', sort='-x', title='Aspect'),
-            color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
-            tooltip=['aspect', 'sentiment', 'count']
-        ).properties(height=200)
+            # Group the bars by sentiment
+            color=alt.Color('sentiment:N',
+                scale=alt.Scale(
+                    domain=['Positive', 'Neutral', 'Negative'],
+                    range=['#1a9850', '#cccccc', '#d73027']
+                ),
+                legend=alt.Legend(title="Sentiment")
+            ),
+            # Display bars next to each other
+            yOffset='sentiment:N'
+        ).configure_axis(
+            grid=False
+        ).configure_view(
+            strokeWidth=0
+        )
         st.altair_chart(chart, use_container_width=True)
     else:
         st.info("Not enough data to generate an aspect summary for the current filters.")
