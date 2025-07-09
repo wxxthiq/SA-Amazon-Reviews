@@ -8,12 +8,7 @@ from collections import Counter
 import re
 from textblob import TextBlob
 
-from utils.database_utils import (
-    connect_to_db,
-    get_product_details,
-    get_reviews_for_product,
-    get_product_date_range
-)
+from utils.database_utils import(connect_to_db, get_product_details, get_reviews_for_product, get_product_date_range)
 
 # --- Page Configuration and NLP Model Loading ---
 st.set_page_config(layout="wide", page_title="Aspect Analysis")
