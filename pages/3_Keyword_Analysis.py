@@ -217,6 +217,88 @@ def main():
                         st.rerun()
 
     # --- Keyword Co-occurrence Network ---
+    Of course. My apologies, the default pyvis styling can make the labels difficult to read, especially on a dark background.
+
+The ideal way to fix this is to explicitly set the font size and color within the graph's options. This gives you direct control over the appearance of the node labels.
+
+Here is the updated code for wxxthiq/sa-amazon-reviews/SA-Amazon-Reviews-dev/pages/3_Keyword_Analysis.py with the necessary changes to make the text clearly visible.
+
+Corrected Keyword Analysis Page
+Replace the entire content of pages/3_Keyword_Analysis.py with this final version:
+
+Python
+
+# pages/3_Keyword_Analysis.py
+import streamlit as st
+import pandas as pd
+import re
+from collections import Counter
+from wordcloud import WordCloud, STOPWORDS
+import matplotlib.pyplot as plt
+from sklearn.feature_extraction.text import CountVectorizer
+import numpy as np
+from utils.database_utils import (
+    connect_to_db,
+    get_product_details,
+    get_reviews_for_product,
+    get_product_date_range
+)
+import networkx as nx
+from pyvis.network import Network
+from itertools import combinations
+import streamlit.components.v1 as components
+import tempfile
+
+# --- Page Configuration ---
+st.set_page_config(layout="wide", page_title="Keyword Analysis")
+DB_PATH = "amazon_reviews_top100.duckdb"
+conn = connect_to_db(DB_PATH)
+REVIEWS_PER_PAGE = 5
+
+# --- Main App Logic ---
+def main():
+    st.title("🔑 Detailed Keyword & Phrase Analysis")
+
+    if st.button("⬅️ Back to Sentiment Overview"):
+        st.switch_page("pages/1_Sentiment_Overview.py")
+
+    # --- Check for Selected Product ---
+    if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
+        st.warning("Please select a product from the main search page first.")
+        st.stop()
+    selected_asin = st.session_state.selected_product
+
+    # --- Load Product Data ---
+    product_details = get_product_details(conn, selected_asin).iloc[0]
+    st.header(product_details['product_title'])
+    st.caption("Use the sidebar to filter reviews, then explore the most common terms and phrases.")
+
+    # --- Sidebar Filters ---
+    st.sidebar.header("🔬 Keyword Analysis Filters")
+    min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
+    default_date_range = (min_date_db, max_date_db)
+    default_ratings = [1, 2, 3, 4, 5]
+    default_sentiments = ['Positive', 'Negative', 'Neutral']
+    default_verified = "All"
+    if 'keyword_date_filter' not in st.session_state: st.session_state.keyword_date_filter = default_date_range
+    if 'keyword_rating_filter' not in st.session_state: st.session_state.keyword_rating_filter = default_ratings
+    if 'keyword_sentiment_filter' not in st.session_state: st.session_state.keyword_sentiment_filter = default_sentiments
+    if 'keyword_verified_filter' not in st.session_state: st.session_state.keyword_verified_filter = default_verified
+    def reset_keyword_page():
+        st.session_state.keyword_review_page = 0
+    st.sidebar.date_input("Filter by Date Range", key='keyword_date_filter', on_change=reset_keyword_page)
+    st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, key='keyword_rating_filter', on_change=reset_keyword_page)
+    st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, key='keyword_sentiment_filter', on_change=reset_keyword_page)
+    st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], key='keyword_verified_filter', on_change=reset_keyword_page)
+    chart_data = get_reviews_for_product(conn, selected_asin, st.session_state.keyword_date_filter, tuple(st.session_state.keyword_rating_filter), tuple(st.session_state.keyword_sentiment_filter), st.session_state.keyword_verified_filter)
+
+    st.markdown("---")
+    if chart_data.empty:
+        st.warning("No review data available for the selected filters.")
+        st.stop()
+    st.info(f"Analyzing keywords from **{len(chart_data)}** reviews matching your criteria.")
+    
+    # --- Keyword Co-occurrence Network ---
     st.markdown("---")
     st.markdown("### 🕸️ Keyword Co-occurrence Network")
     st.caption("This network shows which keywords frequently appear together in the same review. Stronger links indicate more frequent co-occurrence.")
@@ -236,7 +318,6 @@ def main():
         words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
         top_keywords = [word for word, freq in words_freq[:top_n]]
         
-        # --- FIX 2: Explicitly set dtype to int to prevent FutureWarning ---
         co_occurrence = pd.DataFrame(index=top_keywords, columns=top_keywords, dtype=np.int64).fillna(0)
 
         for text in corpus:
@@ -250,7 +331,7 @@ def main():
             for word2 in co_occurrence.columns:
                 weight = co_occurrence.loc[word1, word2]
                 if weight >= min_occur:
-                    G.add_edge(word1, word2, weight=int(weight))
+                    G.add_edge(word1, word2, weight=int(weight), title=f"Co-occurrences: {int(weight)}")
         
         if not G.edges:
             return None
@@ -258,9 +339,29 @@ def main():
         net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
         net.from_nx(G)
         
-        # --- FIX 1: Add options to stabilize the network graph ---
+        # --- UPDATED: Add font settings to the options ---
         options = """
         var options = {
+          "nodes": {
+            "font": {
+              "size": 20,
+              "face": "Tahoma",
+              "color": "#ffffff"
+            },
+            "borderWidth": 2,
+            "shapeProperties": {
+              "useBorderWithImage": true
+            }
+          },
+          "edges": {
+            "color": {
+              "inherit": true
+            },
+            "smooth": {
+              "enabled": false,
+              "type": "continuous"
+            }
+          },
           "physics": {
             "enabled": true,
             "stabilization": {
@@ -295,5 +396,6 @@ def main():
                 st.warning("No significant keyword co-occurrences found with the current settings. Try lowering the minimum co-occurrence threshold.")
         else:
             st.warning("No review text available to build a network.")
+            
 if __name__ == "__main__":
     main()
