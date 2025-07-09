@@ -219,13 +219,13 @@ def main():
     # --- Keyword Co-occurrence Network ---
     st.markdown("---")
     st.markdown("### 🕸️ Keyword Co-occurrence Network")
-    st.caption("This network shows which keywords frequently appear together in the same review. Stronger links indicate more frequent co-occurrence.")
+    st.caption("This network shows which keywords frequently appear together. Larger nodes are more frequent, and thicker links mean a stronger connection.")
 
     net_col1, net_col2 = st.columns(2)
     with net_col1:
         top_n_keywords = st.slider("Number of Top Keywords to Analyze:", min_value=10, max_value=50, value=25, key="top_n_slider")
     with net_col2:
-        min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=5, key="min_co_slider")
+        min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=3, key="min_co_slider")
 
     @st.cache_data
     def generate_network_graph(corpus, top_n, min_occur):
@@ -234,9 +234,9 @@ def main():
         sum_words = bag_of_words.sum(axis=0)
         words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
         words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
-        top_keywords = [word for word, freq in words_freq[:top_n]]
+        top_keywords = {word: freq for word, freq in words_freq[:top_n]}
         
-        co_occurrence = pd.DataFrame(index=top_keywords, columns=top_keywords, dtype=np.int64).fillna(0)
+        co_occurrence = pd.DataFrame(index=top_keywords.keys(), columns=top_keywords.keys(), dtype=np.int64).fillna(0)
 
         for text in corpus:
             tokens = [word for word in text.lower().split() if word in top_keywords]
@@ -245,6 +245,12 @@ def main():
                 co_occurrence.loc[w2, w1] += 1
 
         G = nx.Graph()
+        
+        # --- UPDATED: Add nodes with size attribute based on frequency ---
+        for keyword, freq in top_keywords.items():
+            G.add_node(keyword, size=int(freq), title=f"Frequency: {freq}")
+
+        # --- UPDATED: Add edges with width attribute based on co-occurrence weight ---
         for word1 in co_occurrence.index:
             for word2 in co_occurrence.columns:
                 weight = co_occurrence.loc[word1, word2]
@@ -255,44 +261,21 @@ def main():
             return None
 
         net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
-        net.from_nx(G)
         
-        # --- UPDATED: Add font settings to the options ---
+        # --- NEW: Set scaling options for node size and edge width ---
+        net.repulsion(node_distance=150, spring_length=200)
+        net.from_nx(G)
+
+        # Stabilize the network physics
         options = """
         var options = {
           "nodes": {
             "font": {
-              "size": 20,
-              "face": "Tahoma",
-              "color": "#ffffff"
+              "size": 20, "face": "Tahoma", "color": "#ffffff"
             },
-            "borderWidth": 2,
-            "shapeProperties": {
-              "useBorderWithImage": true
-            }
+            "scaling": { "min": 10, "max": 50 }
           },
-          "edges": {
-            "color": {
-              "inherit": true
-            },
-            "smooth": {
-              "enabled": false,
-              "type": "continuous"
-            }
-          },
-          "physics": {
-            "enabled": true,
-            "stabilization": {
-              "enabled": true,
-              "iterations": 1000,
-              "fit": true
-            },
-            "barnesHut": {
-              "gravitationalConstant": -80000,
-              "springConstant": 0.001,
-              "springLength": 200
-            }
-          }
+          "edges": { "scaling": { "min": 1, "max": 15 } }
         }
         """
         net.set_options(options)
