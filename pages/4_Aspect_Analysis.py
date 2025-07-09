@@ -43,22 +43,24 @@ def main():
     # --- Load Product Data ---
     product_details = get_product_details(conn, selected_asin).iloc[0]
     st.header(product_details['product_title'])
-    st.caption("This page automatically identifies key product features (aspects) and analyzes the specific sentiment towards them.")
+    st.caption("This page automatically identifies key product features and analyzes the specific sentiment towards them.")
 
-    # --- Sidebar Filters ---
+    # --- Sidebar Filters (COMPLETE SET) ---
     st.sidebar.header("🔬 Aspect Analysis Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
     
     default_date_range = (min_date_db, max_date_db)
     default_ratings = [1, 2, 3, 4, 5]
+    default_sentiments = ['Positive', 'Negative', 'Neutral'] # Added sentiment filter
     default_verified = "All"
     
     selected_date_range = st.sidebar.date_input("Filter by Date Range", value=default_date_range, key='aspect_date_filter')
     selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=default_ratings, default=default_ratings, key='aspect_rating_filter')
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=default_sentiments, default=default_sentiments, key='aspect_sentiment_filter') # Added widget
     selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='aspect_verified_filter')
     
-    # Load data based on the filters
-    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), ['Positive', 'Negative', 'Neutral'], selected_verified)
+    # Load data based on all filters
+    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
 
     st.markdown("---")
     if chart_data.empty:
@@ -67,7 +69,7 @@ def main():
         
     st.info(f"Analyzing aspects from **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- Aspect Summary Chart ---
+    # --- Aspect Summary Chart (Unchanged) ---
     @st.cache_data
     def get_aspect_summary(data):
         all_aspects = []
@@ -111,7 +113,7 @@ def main():
     else:
         st.info("Not enough data to generate an aspect summary.")
 
-    # --- Interactive Aspect Explorer ---
+    # --- Interactive Aspect Explorer (ENHANCED) ---
     st.markdown("---")
     st.markdown("### 🔬 Interactive Aspect Explorer")
     selected_aspect = st.selectbox(
@@ -120,57 +122,75 @@ def main():
     )
 
     if selected_aspect != "--- Select an Aspect ---":
-        @st.cache_data
-        def calculate_aspect_sentiments(data, aspect, window=10):
-            sentiments = []
-            snippets = []
-            
-            for index, row in data.iterrows():
-                text = str(row['text']).lower()
-                # Use regex to find the aspect as a whole word
-                if re.search(r'\b' + re.escape(aspect) + r'\b', text):
-                    for match in re.finditer(r'\b' + re.escape(aspect) + r'\b', text):
-                        start, end = match.start(), match.end()
-                        words_before = text[:start].split()[-window:]
-                        words_after = text[end:].split()[:window]
-                        context_text = " ".join(words_before + [aspect] + words_after)
-                        
-                        sentiment = TextBlob(context_text).sentiment.polarity
-                        sentiments.append(sentiment)
-                        
-                        # Create a highlighted snippet for display
-                        highlighted_snippet = " ".join(words_before) + f" **:orange[{aspect}]** " + " ".join(words_after)
-                        snippets.append((row['review_id'], highlighted_snippet, row['rating'], row['helpful_vote']))
-            
-            return sentiments, snippets
-
-        aspect_sentiments, aspect_snippets = calculate_aspect_sentiments(chart_data, selected_aspect)
-
-        st.markdown(f"---")
-        st.markdown(f"#### Analysis for aspect: `{selected_aspect}` ({len(aspect_sentiments)} mentions)")
+        # Find all reviews that mention the selected aspect
+        aspect_df = chart_data[chart_data['text'].str.contains(r'\b' + re.escape(selected_aspect) + r'\b', case=False, na=False)].copy()
         
-        if not aspect_sentiments:
-            st.warning(f"No mentions of the aspect '{selected_aspect}' found in the filtered reviews.")
+        st.markdown(f"---")
+        st.markdown(f"#### Analysis for aspect: `{selected_aspect}` ({len(aspect_df)} mentions)")
+        
+        if aspect_df.empty:
+            st.warning(f"No mentions of '{selected_aspect}' found with the current filters.")
         else:
-            sentiment_df = pd.DataFrame(aspect_sentiments, columns=['polarity'])
-            sentiment_df['sentiment_category'] = sentiment_df['polarity'].apply(lambda p: 'Positive' if p > 0.1 else ('Negative' if p < -0.1 else 'Neutral'))
-            
+            # --- Distribution Charts for the Aspect ---
             col1, col2 = st.columns(2)
             with col1:
-                st.markdown("**Aspect Sentiment Distribution**")
-                dist = sentiment_df['sentiment_category'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
-                st.bar_chart(dist)
+                st.markdown("**Rating Distribution for this Aspect**")
+                rating_dist = aspect_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).sort_index()
+                st.bar_chart(rating_dist)
             with col2:
-                st.markdown("**Sentiment Polarity Trend**")
-                st.line_chart(sentiment_df['polarity'])
+                st.markdown("**Sentiment Distribution for this Aspect**")
+                sentiment_dist = aspect_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
+                st.bar_chart(sentiment_dist)
+            
+            # --- Trend Charts for the Aspect ---
+            st.markdown("---")
+            st.markdown("**Trends for this Aspect Over Time**")
+            
+            time_df = aspect_df.copy()
+            time_df['date'] = pd.to_datetime(time_df['date'])
+            time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
+            
+            t_col1, t_col2 = st.columns(2)
+            with t_col1:
+                st.markdown("###### Rating Volume")
+                rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
+                if not rating_counts_over_time.empty:
+                    rating_stream_chart = px.area(rating_counts_over_time, x='period', y='count', color='rating', color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'})
+                    st.plotly_chart(rating_stream_chart, use_container_width=True)
+            with t_col2:
+                st.markdown("###### Sentiment Volume")
+                sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+                if not sentiment_counts_over_time.empty:
+                    sentiment_stream_chart = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'})
+                    st.plotly_chart(sentiment_stream_chart, use_container_width=True)
 
-            st.markdown(f"**Example mentions of `{selected_aspect}`**")
-            sorted_snippets = sorted(aspect_snippets, key=lambda x: x[3], reverse=True)
+            # --- Example Reviews Display ---
+            st.markdown("---")
+            st.markdown("**Example Reviews Mentioning this Aspect**")
 
-            for review_id, snippet, rating, helpful_votes in sorted_snippets[:10]:
+            # Helper function to highlight the aspect in text
+            def highlight_text(text, aspect):
+                # Use markdown to make the aspect bold and orange
+                return re.sub(r'(\b' + re.escape(aspect) + r'\b)', r'**:\orange[\1]**', text, flags=re.IGNORECASE)
+
+            # Sort and display reviews
+            sorted_aspect_df = aspect_df.sort_values(by="helpful_vote", ascending=False)
+            
+            for _, review in sorted_aspect_df.head(10).iterrows():
                 with st.container(border=True):
-                    st.caption(f"From a {rating} ⭐ review ({helpful_votes} helpful votes)")
-                    st.markdown(f"...{snippet}...")
+                    st.subheader(review['review_title'])
+                    
+                    caption_parts = []
+                    if review['verified_purchase']:
+                        caption_parts.append("✅ Verified")
+                    caption_parts.append(f"Reviewed on: {review['date']}")
+                    caption_parts.append(f"Rating: {review['rating']} ⭐")
+                    caption_parts.append(f"Helpful Votes: {review['helpful_vote']} 👍")
+                    st.caption(" | ".join(caption_parts))
+                    
+                    # Highlight the aspect in the full review text
+                    highlighted_review = highlight_text(review['text'], selected_aspect)
+                    st.markdown(f"> {highlighted_review}", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
