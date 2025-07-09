@@ -299,6 +299,8 @@ def main():
                 components.html(source_code, height=610)
             else:
                 st.warning("No significant keyword co-occurrences found with the current settings. Try lowering the minimum co-occurrence threshold.")
+        else:
+            st.warning("No review text available to build a network.")
             
 if __name__ == "__main__":
     main()
