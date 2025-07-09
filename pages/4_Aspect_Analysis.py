@@ -25,7 +25,7 @@ conn = connect_to_db(DB_PATH)
 def main():
     st.title("🔎 Aspect-Based Sentiment Analysis")
   
-    if st.button("⬅️ Back to Sentiment Overview"):
+    if st.button("Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
 
     # --- Check for Selected Product ---
