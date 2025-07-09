@@ -7,6 +7,9 @@ from wordcloud import WordCloud, STOPWORDS
 import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import CountVectorizer
 import numpy as np
+import networkx as nx
+from pyvis.network import Network
+from itertools import combinations
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
@@ -211,5 +214,70 @@ def main():
                         st.session_state.keyword_review_page += 1
                         st.rerun()
 
+        # --- NEW: Keyword Co-occurrence Network ---
+        st.markdown("---")
+        st.markdown("### 🕸️ Keyword Co-occurrence Network")
+        st.caption("This network shows which keywords frequently appear together in the same review. Stronger links indicate more frequent co-occurrence.")
+    
+        # --- UI Controls for the Network ---
+        net_col1, net_col2 = st.columns(2)
+        with net_col1:
+            top_n_keywords = st.slider("Number of Top Keywords to Analyze:", min_value=10, max_value=50, value=25, key="top_n_slider")
+        with net_col2:
+            min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=5, key="min_co_slider")
+    
+        # --- Function to build and display the graph ---
+        @st.cache_data
+        def generate_network_graph(corpus, top_n, min_occur):
+            # Use CountVectorizer to get top keywords and their frequencies
+            vec = CountVectorizer(ngram_range=(1, 1), stop_words='english').fit(corpus)
+            bag_of_words = vec.transform(corpus)
+            sum_words = bag_of_words.sum(axis=0)
+            words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
+            words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
+            top_keywords = [word for word, freq in words_freq[:top_n]]
+    
+            # Create a co-occurrence matrix
+            co_occurrence = pd.DataFrame(index=top_keywords, columns=top_keywords).fillna(0)
+    
+            for text in corpus:
+                tokens = [word for word in text.lower().split() if word in top_keywords]
+                # Use combinations to find all pairs of words in the review
+                for w1, w2 in combinations(set(tokens), 2):
+                    co_occurrence.loc[w1, w2] += 1
+                    co_occurrence.loc[w2, w1] += 1
+    
+            # Build the graph
+            G = nx.Graph()
+            for word1 in co_occurrence.index:
+                for word2 in co_occurrence.columns:
+                    weight = co_occurrence.loc[word1, word2]
+                    if weight >= min_occur:
+                        G.add_edge(word1, word2, weight=weight)
+    
+            if not G.edges:
+                return None
+    
+            # Create the pyvis network
+            net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
+            net.from_nx(G)
+    
+            # Generate the HTML file
+            html_file = net.generate_html('network.html')
+            return html_file
+    
+        # Generate and display the graph
+        with st.spinner("Building keyword network..."):
+            all_text = chart_data["text"].dropna()
+            if not all_text.empty:
+                network_html = generate_network_graph(all_text, top_n_keywords, min_cooccurrence)
+                if network_html:
+                    with open(network_html, 'r', encoding='utf-8') as f:
+                        source_code = f.read()
+                        components.html(source_code, height=610)
+                else:
+                    st.warning("No significant keyword co-occurrences found with the current settings. Try lowering the minimum co-occurrence threshold.")
+            else:
+                st.warning("No review text available to build a network.")
 if __name__ == "__main__":
     main()
