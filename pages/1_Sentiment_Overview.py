@@ -305,48 +305,92 @@ def main():
         time_df['period'] = time_df['date'].dt.date
     
     t_col1, t_col2 = st.columns(2)
-    
-# pages/1_Sentiment_Overview.py
 
     with t_col1:
-        st.markdown("#### Rating Trend Over Time") # Renamed for clarity
+        st.markdown("#### Rating Distribution Over Time")
         rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
         
-        if not rating_counts_over_time.empty:
-            # Calculate a 7-period moving average for each rating category
-            rating_counts_over_time['moving_average'] = rating_counts_over_time.groupby('rating')['count'].transform(lambda x: x.rolling(7, min_periods=1).mean())
+        # --- NEW: Calculate the average rating trend ---
+        avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
 
-            # --- UPDATED: Use Plotly Express for a cleaner line chart ---
-            fig = px.line(
-                rating_counts_over_time,
-                x='period',
-                y='moving_average',
+        if not rating_counts_over_time.empty:
+            # Base area chart for volume
+            fig = px.area(
+                rating_counts_over_time, 
+                x='period', 
+                y='count', 
                 color='rating',
-                title="7-Day Moving Average of Ratings",
-                labels={'moving_average': 'Smoothed Review Volume', 'period': 'Date', 'rating': 'Star Rating'},
+                title="Volume of Reviews and Average Rating Trend",
                 color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
                 category_orders={"rating": [5, 4, 3, 2, 1]}
             )
             
-            fig.update_traces(mode='lines+markers', line_shape='spline')
+            # --- NEW: Add the average rating line ---
+            fig.add_trace(go.Scatter(
+                x=avg_rating_trend['period'],
+                y=avg_rating_trend['rating'],
+                mode='lines',
+                name='Average Rating',
+                yaxis='y2', # Assign to the secondary y-axis
+                line=dict(color='blue', width=3, dash='dash')
+            ))
+            
+            # --- NEW: Configure layout with a secondary y-axis ---
+            fig.update_layout(
+                yaxis_title='Number of Reviews',
+                yaxis2=dict(
+                    title='Average Rating (1-5)',
+                    overlaying='y',
+                    side='right',
+                    range=[1, 5]
+                ),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
             st.plotly_chart(fig, use_container_width=True)
     
+    # pages/1_Sentiment_Overview.py
+
     with t_col2:
         st.markdown("#### Sentiment Volume Over Time")
         sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
         
+        # --- NEW: Calculate the average sentiment trend ---
+        avg_sentiment_trend = time_df.groupby('period')['text_polarity'].mean().reset_index()
+
         if not sentiment_counts_over_time.empty:
-            # --- REVERTED: Simple area chart for sentiment volume ---
-            sentiment_stream_chart = px.area(
-                sentiment_counts_over_time,
-                x='period',
-                y='count',
+            # Base area chart for volume
+            fig = px.area(
+                sentiment_counts_over_time, 
+                x='period', 
+                y='count', 
                 color='sentiment',
-                title=f"Sentiment Breakdown Per {time_granularity.replace('ly', '')}",
+                title=f"Sentiment Breakdown and Average Polarity Trend",
                 color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
                 category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
             )
-            st.plotly_chart(sentiment_stream_chart, use_container_width=True)
+
+            # --- NEW: Add the average sentiment polarity line ---
+            fig.add_trace(go.Scatter(
+                x=avg_sentiment_trend['period'],
+                y=avg_sentiment_trend['text_polarity'],
+                mode='lines',
+                name='Avg. Sentiment',
+                yaxis='y2', # Assign to the secondary y-axis
+                line=dict(color='blue', width=3, dash='dash')
+            ))
+            
+            # --- NEW: Configure layout with a secondary y-axis ---
+            fig.update_layout(
+                yaxis_title='Number of Reviews',
+                yaxis2=dict(
+                    title='Average Polarity (-1 to 1)',
+                    overlaying='y',
+                    side='right',
+                    range=[-1, 1]
+                ),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig, use_container_width=True)
             
     # --- Navigation to Review Explorer ---
     st.markdown("---")
