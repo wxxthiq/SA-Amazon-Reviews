@@ -54,16 +54,24 @@ def main():
         st.stop()
     st.info(f"Analyzing aspects from **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- AUTOMATED ASPECT EXTRACTION (WITH NOUN CHUNKING) ---
+    # --- AUTOMATED ASPECT EXTRACTION (WITH ENHANCED CLEANING) ---
     @st.cache_data
     def extract_top_aspects_with_chunks(texts, top_n=20):
-        # ** KEY CHANGE: Use noun chunks to find multi-word aspects **
         all_aspects = []
-        for doc in nlp.pipe(texts, disable=["parser", "ner"]):
+        # ** KEY CHANGE: New function to clean noun chunks **
+        def clean_chunk(chunk):
+            cleaned_tokens = []
+            for token in chunk:
+                if token.pos_ in ['NOUN', 'PROPN', 'ADJ']:
+                    cleaned_tokens.append(token.lemma_.lower())
+            return " ".join(cleaned_tokens)
+
+        for doc in nlp.pipe(texts):
             for chunk in doc.noun_chunks:
-                # Filter for more meaningful chunks
-                if len(chunk.text.split()) > 1 or chunk.root.pos_ == 'PROPN':
-                    all_aspects.append(chunk.lemma_.lower())
+                cleaned = clean_chunk(chunk)
+                # Add additional filter to remove aspects that are too generic or short
+                if cleaned and len(cleaned) > 2 and cleaned not in ['customer service']:
+                    all_aspects.append(cleaned)
         
         return [aspect for aspect, freq in Counter(all_aspects).most_common(top_n)]
 
@@ -75,7 +83,7 @@ def main():
         "Select an auto-detected aspect to analyze:",
         options=["--- Select an Aspect ---"] + top_aspects
     )
-
+    
     if selected_aspect != "--- Select an Aspect ---":
         # (The rest of the analysis and display logic is unchanged)
         # ...
