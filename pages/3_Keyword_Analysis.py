@@ -226,11 +226,11 @@ def main():
     with net_col1:
         top_n_keywords = st.slider("Number of Top Keywords to Analyze:", min_value=10, max_value=50, value=25, key="top_n_slider")
     with net_col2:
-        # --- Default value lowered to 2 to ensure a graph appears ---
         min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=2, key="min_co_slider")
 
+    # --- UPDATED: This function is now cached and only returns the graph data ---
     @st.cache_data
-    def generate_network_graph(corpus, top_n, min_occur):
+    def get_networkx_graph(corpus, top_n, min_occur):
         vec = CountVectorizer(ngram_range=(1, 1), stop_words='english').fit(corpus)
         bag_of_words = vec.transform(corpus)
         sum_words = bag_of_words.sum(axis=0)
@@ -246,66 +246,59 @@ def main():
                 co_occurrence.loc[w1, w2] += 1
                 co_occurrence.loc[w2, w1] += 1
         
-        # --- UPDATED: Build graph only from edges that meet the threshold ---
         G = nx.Graph()
         for word1 in co_occurrence.index:
             for word2 in co_occurrence.columns:
                 weight = co_occurrence.loc[word1, word2]
                 if weight >= min_occur:
-                    # Use 'value' for pyvis edge thickness scaling
                     G.add_edge(word1, word2, value=int(weight), title=f"Co-occurrences: {int(weight)}")
         
-        # Add node attributes after building the graph from edges
-        # This ensures only connected nodes are included and sized correctly
         for node in G.nodes():
-            # Use 'value' for pyvis node size scaling
             G.nodes[node]['value'] = top_keywords.get(node, 1)
             G.nodes[node]['title'] = f"Frequency: {top_keywords.get(node, 1)}"
         
-        if not G.edges:
-            return None
-
-        net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
-        net.from_nx(G)
-        
-        options = """
-        var options = {
-          "nodes": {
-            "font": { "size": 20, "face": "Tahoma", "color": "#ffffff" },
-            "scaling": { "min": 15, "max": 60 }
-          },
-          "edges": {
-            "scaling": { "min": 1, "max": 20 },
-            "smooth": { "enabled": false }
-          },
-          "physics": {
-            "enabled": true,
-            "stabilization": { "enabled": true, "iterations": 500 },
-            "barnesHut": {
-              "gravitationalConstant": -80000, "springConstant": 0.001, "springLength": 200
-            }
-          }
-        }
-        """
-        net.set_options(options)
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
-            net.save_graph(tmp_file.name)
-            with open(tmp_file.name, 'r', encoding='utf-8') as f:
-                source_code = f.read()
-        
-        return source_code
+        return G
 
     with st.spinner("Building keyword network..."):
         all_text = chart_data["text"].dropna()
         if not all_text.empty:
-            network_html_content = generate_network_graph(all_text, top_n_keywords, min_cooccurrence)
-            if network_html_content:
-                components.html(network_html_content, height=610)
+            # 1. Get the graph data from the cached function
+            G = get_networkx_graph(all_text, top_n_keywords, min_cooccurrence)
+
+            # 2. Check if the graph has edges and generate HTML outside the cache
+            if G and G.edges:
+                net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
+                net.from_nx(G)
+                
+                options = """
+                var options = {
+                  "nodes": {
+                    "font": { "size": 20, "face": "Tahoma", "color": "#ffffff" },
+                    "scaling": { "min": 15, "max": 60 }
+                  },
+                  "edges": {
+                    "scaling": { "min": 1, "max": 20 },
+                    "smooth": { "enabled": false }
+                  },
+                  "physics": {
+                    "enabled": true,
+                    "stabilization": { "enabled": true, "iterations": 500 },
+                    "barnesHut": {
+                      "gravitationalConstant": -80000, "springConstant": 0.001, "springLength": 200
+                    }
+                  }
+                }
+                """
+                net.set_options(options)
+
+                # Generate and display the HTML
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
+                    net.save_graph(tmp_file.name)
+                    with open(tmp_file.name, 'r', encoding='utf-8') as f:
+                        source_code = f.read()
+                components.html(source_code, height=610)
             else:
                 st.warning("No significant keyword co-occurrences found with the current settings. Try lowering the minimum co-occurrence threshold.")
-        else:
-            st.warning("No review text available to build a network.")
             
 if __name__ == "__main__":
     main()
