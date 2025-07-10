@@ -12,7 +12,7 @@ from datetime import datetime
 import spacy
 from textblob import TextBlob
 import re
-
+from pywaffle import Waffle
 # --- Page Configuration and Model Loading ---
 st.set_page_config(layout="wide", page_title="Advanced Product Comparison")
 DB_PATH = "amazon_reviews_top100.duckdb"
@@ -168,6 +168,49 @@ def create_differential_word_clouds(review_data_cache, asins):
             ax.axis("off")
             st.pyplot(fig)
 
+def create_waffle_chart(product_title, reviews_df, aspect):
+    """Creates a single, clean waffle chart for a given product and aspect."""
+    aspect_reviews = reviews_df[reviews_df['text'].str.contains(r'\b' + re.escape(aspect) + r'\b', case=False, na=False)]
+    
+    if aspect_reviews.empty:
+        # Return a blank figure if there's no data
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, 'No mentions', ha='center', va='center')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return fig
+
+    # Calculate sentiment percentages
+    sentiment_counts = aspect_reviews['sentiment'].value_counts()
+    total_mentions = sentiment_counts.sum()
+    
+    # Data for the waffle chart (must sum to 100)
+    data = {
+        'Positive': round(sentiment_counts.get('Positive', 0) / total_mentions * 100),
+        'Neutral': round(sentiment_counts.get('Neutral', 0) / total_mentions * 100),
+        'Negative': round(sentiment_counts.get('Negative', 0) / total_mentions * 100)
+    }
+    
+    # Adjust for rounding errors to ensure sum is 100
+    diff = 100 - sum(data.values())
+    if diff != 0:
+        # Add the difference to the largest category
+        max_key = max(data, key=data.get)
+        data[max_key] += diff
+
+    fig = plt.figure(
+        FigureClass=Waffle,
+        rows=5,
+        values=data,
+        colors=("#1a9850", "#cccccc", "#d73027"),
+        legend={'loc': 'upper left', 'bbox_to_anchor': (1, 1)},
+        title={'label': product_title[:30] + '...', 'loc': 'left'},
+        font_size=20,
+        icons='square',
+        icon_style='solid',
+        figsize=(5, 5)
+    )
+    return fig
 # --- Main App Logic ---
 def main():
     st.title("⚖️ Advanced Product Comparison")
@@ -210,56 +253,62 @@ def main():
 
     with tab1:
         st.subheader("Comparative Aspect-Based Sentiment")
-        st.caption("Click on any bar segment to see the corresponding review snippets below.")
+        st.markdown(
+            "This visualization uses **waffle charts** to show the sentiment proportions for common product features (aspects). "
+            "Each square represents 1% of the total mentions for that aspect. "
+            "Click on any waffle chart to see the corresponding review snippets below."
+        )
         
         num_aspects = st.slider(
             "Select number of aspects to compare:", 
-            min_value=3, max_value=15, value=7, 
-            on_change=lambda: st.session_state.update(aspect_selection=None) # Reset click selection on change
+            min_value=3, max_value=10, value=5, 
+            on_change=lambda: st.session_state.update(aspect_selection=None)
         )
         top_aspects = get_top_aspects(review_data_cache, num_aspects)
         
         if top_aspects:
-            chart_cols = st.columns(len(selected_asins))
-            for i, asin in enumerate(selected_asins):
-                with chart_cols[i]:
-                    product_details = get_product_details(conn, asin).iloc[0]
-                    reviews_df = review_data_cache.get(asin)
-                    if reviews_df is not None and not reviews_df.empty:
-                        fig = create_single_product_aspect_chart(product_details['product_title'], reviews_df, top_aspects)
+            # Loop through each aspect and create a row for it
+            for aspect in top_aspects:
+                st.markdown(f"---")
+                st.markdown(f"#### Comparison for Aspect: `{aspect}`")
+                chart_cols = st.columns(len(selected_asins))
+
+                for i, asin in enumerate(selected_asins):
+                    with chart_cols[i]:
+                        product_details = get_product_details(conn, asin).iloc[0]
+                        reviews_df = review_data_cache.get(asin)
                         
-                        # We now ONLY use plotly_events for clicks
-                        selected_point = plotly_events(fig, click_event=True, key=f"aspect_chart_{asin}")
-                        
-                        if selected_point:
-                            st.session_state.aspect_selection = {
-                                'asin': asin,
-                                'aspect': selected_point[0]['y'],
-                                'sentiment': fig.data[selected_point[0]['curveNumber']]['name']
-                            }
-                            st.session_state.aspect_review_page = 0
-                            st.rerun()
-                    else:
-                        st.info(f"No review data for '{product_details['product_title'][:30]}...' to analyze.")
+                        # Create a placeholder that we can make clickable
+                        waffle_placeholder = st.empty()
+
+                        if reviews_df is not None and not reviews_df.empty:
+                            # Generate the waffle chart for the current product and aspect
+                            fig = create_waffle_chart(product_details['product_title'], reviews_df, aspect)
+                            waffle_placeholder.pyplot(fig)
+
+                            # Make the placeholder clickable
+                            if waffle_placeholder.button("Click to see reviews", key=f"waffle_{asin}_{aspect}", use_container_width=True):
+                                st.session_state.aspect_selection = {
+                                    'asin': asin,
+                                    'aspect': aspect,
+                                    'product_title': product_details['product_title']
+                                }
+                                st.session_state.aspect_review_page = 0
+                                st.rerun()
+                        else:
+                            with waffle_placeholder.container():
+                                st.info(f"No review data for '{product_details['product_title'][:30]}...' to analyze.")
         else:
             st.warning("No common aspects could be found for the selected products and filters.")
-        
-        # --- Display Review Snippets on click (this logic remains the same) ---
+
+        # --- Display Review Snippets on click ---
         if st.session_state.get('aspect_selection'):
-            st.markdown("---")
             selection = st.session_state.aspect_selection
-            st.subheader(f"Reviews for '{selection['aspect']}' with '{selection['sentiment']}' sentiment")
+            st.markdown("---")
+            st.subheader(f"Reviews mentioning `{selection['aspect']}` for '{selection['product_title'][:40]}...'")
             
-            # (The rest of the review display and pagination code remains here, unchanged)
             product_reviews = review_data_cache.get(selection['asin'])
-            filtered_reviews = product_reviews[product_reviews['text'].str.contains(r'\b' + re.escape(selection['aspect']) + r'\b', case=False, na=False)]
-            
-            if selection['sentiment'] == 'Positive':
-                final_reviews = filtered_reviews[filtered_reviews['text_polarity'] > 0.1]
-            elif selection['sentiment'] == 'Negative':
-                final_reviews = filtered_reviews[filtered_reviews['text_polarity'] < -0.1]
-            else: # Neutral
-                final_reviews = filtered_reviews[(filtered_reviews['text_polarity'] >= -0.1) & (filtered_reviews['text_polarity'] <= 0.1)]
+            final_reviews = product_reviews[product_reviews['text'].str.contains(r'\b' + re.escape(selection['aspect']) + r'\b', case=False, na=False)]
 
             if not final_reviews.empty:
                 start_idx = st.session_state.aspect_review_page * REVIEWS_PER_PAGE
@@ -267,7 +316,7 @@ def main():
 
                 for _, review in reviews_to_display.iterrows():
                     with st.container(border=True):
-                        st.caption(f"Rating: {review['rating']} ⭐ | Date: {review['date']}")
+                        st.caption(f"Rating: {review['rating']} ⭐ | Sentiment: {review['sentiment']} | Date: {review['date']}")
                         highlighted_text = re.sub(f'({re.escape(selection["aspect"])})', r'<mark>\1</mark>', review['text'], flags=re.IGNORECASE)
                         st.markdown(f"> {highlighted_text}", unsafe_allow_html=True)
 
@@ -276,12 +325,13 @@ def main():
                 if total_pages > 1:
                     nav_cols = st.columns([1, 1, 1])
                     if st.session_state.aspect_review_page > 0:
-                        nav_cols[0].button("⬅️ Previous", on_click=lambda: st.session_state.update(aspect_review_page=st.session_state.aspect_review_page - 1), use_container_width=True)
+                        nav_cols[0].button("⬅️ Previous", on_click=lambda: st.session_state.update(aspect_review_page=st.session_state.aspect_review_page - 1), use_container_width=True, key=f"prev_{selection['asin']}_{selection['aspect']}")
                     nav_cols[1].write(f"Page {st.session_state.aspect_review_page + 1} of {total_pages}")
                     if (st.session_state.aspect_review_page + 1) < total_pages:
-                        nav_cols[2].button("Next ➡️", on_click=lambda: st.session_state.update(aspect_review_page=st.session_state.aspect_review_page + 1), use_container_width=True)
+                        nav_cols[2].button("Next ➡️", on_click=lambda: st.session_state.update(aspect_review_page=st.session_state.aspect_review_page + 1), use_container_width=True, key=f"next_{selection['asin']}_{selection['aspect']}")
             else:
-                st.warning("No matching reviews found.")
+                st.warning("No matching reviews found.") 
+    
     with tab2:
         st.subheader("Sentiment Trends Over Time")
         cols = st.columns(len(selected_asins))
