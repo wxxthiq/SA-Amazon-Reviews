@@ -80,7 +80,6 @@ else:
         offset=st.session_state.page * PRODUCTS_PER_PAGE
     )
 
-    st.markdown("---")
     st.header(f"Found {total_results} Products in '{st.session_state.category}'")
 
     if paginated_results.empty:
