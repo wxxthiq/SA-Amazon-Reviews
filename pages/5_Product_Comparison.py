@@ -7,6 +7,7 @@ from collections import Counter
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import TfidfVectorizer
+import altair as alt # <-- ADDED IMPORT
 
 # --- Page Configuration ---
 st.set_page_config(layout="wide", page_title="Advanced Product Comparison")
@@ -28,35 +29,46 @@ def get_review_data_for_asins(_conn, asins, verified_filter):
 def display_product_metadata_card(product_details, reviews_df):
     """Creates a detailed card for a single product with its metadata and distributions."""
     with st.container(border=True):
-        # --- Product Title and Image ---
         st.subheader(product_details['product_title'])
         image_urls_str = product_details.get('image_urls')
         image_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else "https://via.placeholder.com/200"
         st.image(image_url, use_container_width=True)
 
-        # --- Key Metrics ---
         m_col1, m_col2 = st.columns(2)
         m_col1.metric("Avg. Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
         m_col2.metric("Filtered Reviews", f"{len(reviews_df):,}")
         
         st.markdown("---")
 
-        # --- Distribution Charts ---
         if not reviews_df.empty:
-            # Rating Distribution
             st.markdown("**Rating Distribution**")
             rating_counts = reviews_df['rating'].value_counts().reindex(range(1, 6), fill_value=0)
             st.bar_chart(rating_counts, height=200)
 
-            # Sentiment Distribution
+            # --- FIX: Replaced st.bar_chart with st.altair_chart for sentiment ---
             st.markdown("**Sentiment Distribution**")
-            sentiment_counts = reviews_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
-            st.bar_chart(sentiment_counts, height=200, color=["#1a9850", "#cccccc", "#d73027"])
+            sentiment_df = reviews_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
+            sentiment_df.columns = ['sentiment', 'count']
+
+            chart = alt.Chart(sentiment_df).mark_bar().encode(
+                x=alt.X('sentiment', sort=['Positive', 'Neutral', 'Negative'], title=None, axis=alt.Axis(labels=False)),
+                y=alt.Y('count', title=None, axis=alt.Axis(labels=False)),
+                color=alt.Color('sentiment',
+                                scale=alt.Scale(
+                                    domain=['Positive', 'Neutral', 'Negative'],
+                                    range=['#1a9850', '#cccccc', '#d73027']
+                                ),
+                                legend=alt.Legend(title="Sentiment", orient="bottom")),
+                tooltip=['sentiment', 'count']
+            ).properties(height=200).configure_view(strokeWidth=0)
+            
+            st.altair_chart(chart, use_container_width=True)
+            
         else:
             st.info("No review data to display distributions.")
 
 def create_divergent_bar_chart(review_data_cache):
-    # This function remains the same as before
+    # This function remains the same
     plot_data = []
     for asin, df in review_data_cache.items():
         if not df.empty:
@@ -70,11 +82,8 @@ def create_divergent_bar_chart(review_data_cache):
             product_title = product_details['product_title']
             
             plot_data.append({
-                'product': product_title,
-                'Positive': pos_pct,
-                'Negative': -neg_pct,
-                'Neutral_Left': -neu_pct / 2,
-                'Neutral_Right': neu_pct / 2
+                'product': product_title, 'Positive': pos_pct, 'Negative': -neg_pct,
+                'Neutral_Left': -neu_pct / 2, 'Neutral_Right': neu_pct / 2
             })
 
     if not plot_data: return go.Figure()
@@ -88,10 +97,10 @@ def create_divergent_bar_chart(review_data_cache):
     return fig
 
 def create_differential_word_clouds(review_data_cache, asins):
-    # This function remains the same as before
+    # This function remains the same
     if len(asins) < 2: return
     all_texts = [review_data_cache[asin]['text'].str.cat(sep=' ') for asin in asins if not review_data_cache[asin].empty]
-    if len(all_texts) != len(asins): return
+    if len(all_texts) < len(asins): return
     vectorizer = TfidfVectorizer(stop_words='english', max_features=1000)
     tfidf_matrix = vectorizer.fit_transform(all_texts)
     feature_names = vectorizer.get_feature_names_out()
@@ -131,7 +140,6 @@ def main():
 
     review_data_cache = get_review_data_for_asins(conn, selected_asins, verified_filter)
     
-    # --- NEW: Display Metadata Cards ---
     st.header("Product Overviews")
     cols = st.columns(len(selected_asins))
     for i, asin in enumerate(selected_asins):
@@ -142,7 +150,6 @@ def main():
 
     st.markdown("---")
     
-    # --- Tabbed Interface for Advanced Visualizations ---
     tab1, tab2, tab3 = st.tabs(["📊 Divergent Sentiment Chart", "📈 Time Series", "📝 Differential Text Analysis"])
 
     with tab1:
