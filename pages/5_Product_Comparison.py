@@ -52,8 +52,9 @@ def get_top_aspects(_review_data_cache, top_n_aspects):
 
 def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     """
-    --- FINAL VERSION WITH CUSTOM HOVER SUPPORT ---
-    Creates a true, continuous divergent stacked bar chart. Default hover is disabled.
+    --- FINAL PUBLICATION-QUALITY VERSION ---
+    Creates a true divergent stacked bar chart with a clean, non-rotated,
+    native hover tooltip.
     """
     aspect_sentiments = []
     for aspect in top_aspects:
@@ -68,32 +69,32 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     summary = aspect_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
     for sent in ['Positive', 'Neutral', 'Negative']:
         if sent not in summary.columns: summary[sent] = 0
-
+    
     summary = summary.reindex(top_aspects).fillna(0)
     summary_pct = summary.div(summary.sum(axis=1), axis=0).fillna(0) * 100
 
     fig = go.Figure()
     colors = {'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}
 
-    # --- Manually build a single continuous bar for each aspect ---
+    # Traces with clean hovertemplates
     fig.add_trace(go.Bar(
         y=summary_pct.index, x=summary_pct['Positive'], name='Positive', orientation='h',
-        marker_color=colors['Positive'], base=summary_pct['Neutral'] / 2,
-        customdata=summary['Positive'], hoverinfo='none'
+        marker_color=colors['Positive'], base=summary_pct['Neutral'] / 2, customdata=summary['Positive'],
+        hovertemplate="<b>%{y}</b><br>Positive: %{x:.1f}% (%{customdata} mentions)<extra></extra>"
     ))
     fig.add_trace(go.Bar(
         y=summary_pct.index, x=summary_pct['Neutral'], name='Neutral', orientation='h',
-        marker_color=colors['Neutral'], base=-summary_pct['Neutral'] / 2,
-        customdata=summary['Neutral'], hoverinfo='none'
+        marker_color=colors['Neutral'], base=-summary_pct['Neutral'] / 2, customdata=summary['Neutral'],
+        hovertemplate="<b>%{y}</b><br>Neutral: %{customdata} mentions (%{x:.1f}%)<extra></extra>"
     ))
     fig.add_trace(go.Bar(
         y=summary_pct.index, x=summary_pct['Negative'], name='Negative', orientation='h',
-        marker_color=colors['Negative'], base=-(summary_pct['Negative'] + summary_pct['Neutral'] / 2),
-        customdata=summary['Negative'], hoverinfo='none'
+        marker_color=colors['Negative'], base=-(summary_pct['Negative'] + summary_pct['Neutral'] / 2), customdata=summary['Negative'],
+        hovertemplate="<b>%{y}</b><br>Negative: %{customdata} mentions (%{x:.1f}%)<extra></extra>"
     ))
 
     fig.update_layout(
-        barmode='overlay', # Overlay the bars based on their explicit 'base' values
+        barmode='relative',
         title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
         xaxis_title="Percentage of Mentions", yaxis_autorange='reversed',
         plot_bgcolor='white', legend=dict(orientation="h", yanchor="bottom", y=1.02, traceorder="reversed"),
@@ -101,6 +102,15 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
         xaxis=dict(
             tickvals=[-100, -75, -50, -25, 0, 25, 50, 75, 100],
             ticktext=['100%', '75%', '50%', '25%', '0', '25%', '50%', '75%', '100%']
+        ),
+        # This combination of settings provides the best hover experience
+        hovermode='y',
+        hoverlabel=dict(
+            align="left", # Force text alignment
+            bgcolor="white",
+            font_size=14,
+            font_family="sans-serif",
+            namelength=-1 # Prevent trace names from being truncated
         )
     )
     return fig
