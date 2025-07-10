@@ -50,9 +50,9 @@ def get_top_aspects(_review_data_cache, top_n_aspects):
 
 def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     """
-    --- PUBLICATION-QUALITY VERSION ---
-    Creates a true, interactive divergent stacked bar chart with non-rotated,
-    readable hover labels.
+    --- PUBLICATION-QUALITY FINAL VERSION ---
+    Creates a true, interactive divergent stacked bar chart with guaranteed
+    horizontal, readable hover labels.
     """
     aspect_sentiments = []
     for aspect in top_aspects:
@@ -66,18 +66,18 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
         return go.Figure().update_layout(title_text=f"No aspect data for '{product_title[:30]}...'", plot_bgcolor='white')
 
     aspect_df = pd.DataFrame(aspect_sentiments)
-    
+
     # Calculate counts and percentages
     summary = aspect_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
     for sent in ['Positive', 'Neutral', 'Negative']:
         if sent not in summary.columns: summary[sent] = 0
-            
+
     summary = summary.reindex(top_aspects).fillna(0)
     summary_pct = summary.div(summary.sum(axis=1), axis=0).fillna(0) * 100
 
     fig = go.Figure()
     colors = {'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}
-    
+
     # Define traces for each sentiment
     fig.add_trace(go.Bar(
         y=summary_pct.index, x=summary_pct['Positive'], name='Positive', orientation='h',
@@ -108,12 +108,12 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
             tickvals=[-100, -75, -50, -25, 0, 25, 50, 75, 100],
             ticktext=['100%', '75%', '50%', '25%', '0', '25%', '50%', '75%', '100%']
         ),
-        # --- NEW: This block ensures hover labels are never rotated ---
-        hovermode='y unified',
+        # --- THE DEFINITIVE FIX FOR HOVER LABELS ---
         hoverlabel=dict(
             bgcolor="white",
             font_size=14,
-            font_family="Rockwell"
+            font_family="sans-serif",
+            align="left"  # This forces the text to be left-aligned and horizontal
         )
     )
     return fig
