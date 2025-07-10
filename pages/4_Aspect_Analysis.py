@@ -8,7 +8,7 @@ import spacy
 from collections import Counter
 import re
 from textblob import TextBlob
-
+import plotly.graph_objects as go
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
