@@ -30,6 +30,8 @@ if 'aspect_selection' not in st.session_state:
     st.session_state.aspect_selection = None
 if 'aspect_review_page' not in st.session_state:
     st.session_state.aspect_review_page = 0
+if 'aspect_hover' not in st.session_state: # <-- ADD THIS LINE
+    st.session_state.aspect_hover = None   # <-- ADD THIS LINE
 
 # --- Helper Functions ---
 @st.cache_data
@@ -50,24 +52,19 @@ def get_top_aspects(_review_data_cache, top_n_aspects):
 
 def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     """
-    --- PUBLICATION-QUALITY FINAL VERSION ---
-    Creates a true, interactive divergent stacked bar chart with guaranteed
-    horizontal, readable hover labels.
+    --- FINAL VERSION WITH CUSTOM HOVER SUPPORT ---
+    Creates a true, continuous divergent stacked bar chart. Default hover is disabled.
     """
     aspect_sentiments = []
     for aspect in top_aspects:
-        # Find all reviews that mention the aspect
         aspect_reviews = reviews_df[reviews_df['text'].str.contains(r'\b' + re.escape(aspect) + r'\b', case=False, na=False)]
         for _, review in aspect_reviews.iterrows():
-            # Use the pre-calculated sentiment for each review
             aspect_sentiments.append({'aspect': aspect, 'sentiment': review['sentiment']})
 
     if not aspect_sentiments:
         return go.Figure().update_layout(title_text=f"No aspect data for '{product_title[:30]}...'", plot_bgcolor='white')
 
     aspect_df = pd.DataFrame(aspect_sentiments)
-
-    # Calculate counts and percentages
     summary = aspect_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
     for sent in ['Positive', 'Neutral', 'Negative']:
         if sent not in summary.columns: summary[sent] = 0
@@ -78,42 +75,32 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     fig = go.Figure()
     colors = {'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}
 
-    # Define traces for each sentiment
+    # --- Manually build a single continuous bar for each aspect ---
     fig.add_trace(go.Bar(
         y=summary_pct.index, x=summary_pct['Positive'], name='Positive', orientation='h',
-        marker_color=colors['Positive'], customdata=summary['Positive'],
-        hovertemplate="<b>%{y}</b><br>Positive: %{x:.1f}% (%{customdata} mentions)<extra></extra>"
-    ))
-    fig.add_trace(go.Bar(
-        y=summary_pct.index, x=-summary_pct['Negative'], name='Negative', orientation='h',
-        marker_color=colors['Negative'], customdata=summary['Negative'],
-        hovertemplate="<b>%{y}</b><br>Negative: %{customdata} mentions (%{x:.1f}%)<extra></extra>"
+        marker_color=colors['Positive'], base=summary_pct['Neutral'] / 2,
+        customdata=summary['Positive'], hoverinfo='none'
     ))
     fig.add_trace(go.Bar(
         y=summary_pct.index, x=summary_pct['Neutral'], name='Neutral', orientation='h',
-        marker_color=colors['Neutral'], customdata=summary['Neutral'],
-        base=-summary_pct['Neutral']/2,
-        hovertemplate="<b>%{y}</b><br>Neutral: %{customdata} mentions (%{x:.1f}%)<extra></extra>"
+        marker_color=colors['Neutral'], base=-summary_pct['Neutral'] / 2,
+        customdata=summary['Neutral'], hoverinfo='none'
+    ))
+    fig.add_trace(go.Bar(
+        y=summary_pct.index, x=summary_pct['Negative'], name='Negative', orientation='h',
+        marker_color=colors['Negative'], base=-(summary_pct['Negative'] + summary_pct['Neutral'] / 2),
+        customdata=summary['Negative'], hoverinfo='none'
     ))
 
     fig.update_layout(
-        barmode='relative',
+        barmode='overlay', # Overlay the bars based on their explicit 'base' values
         title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
-        xaxis_title="Percentage of Mentions",
-        yaxis_autorange='reversed',
-        plot_bgcolor='white',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, traceorder="reversed"),
+        xaxis_title="Percentage of Mentions", yaxis_autorange='reversed',
+        plot_bgcolor='white', legend=dict(orientation="h", yanchor="bottom", y=1.02, traceorder="reversed"),
         height=max(400, len(top_aspects) * 40),
         xaxis=dict(
             tickvals=[-100, -75, -50, -25, 0, 25, 50, 75, 100],
             ticktext=['100%', '75%', '50%', '25%', '0', '25%', '50%', '75%', '100%']
-        ),
-        # --- THE DEFINITIVE FIX FOR HOVER LABELS ---
-        hoverlabel=dict(
-            bgcolor="white",
-            font_size=14,
-            font_family="sans-serif",
-            align="left"  # This forces the text to be left-aligned and horizontal
         )
     )
     return fig
@@ -213,9 +200,20 @@ def main():
 
     with tab1:
         st.subheader("Comparative Aspect-Based Sentiment")
-        st.caption("Click on any bar segment to see the corresponding review snippets below.")
-        num_aspects = st.slider("Select number of aspects to compare:", min_value=3, max_value=15, value=7, on_change=reset_selection)
+        st.caption("Hover over a bar to see details. Click a segment to see matching reviews.")
+        
+        num_aspects = st.slider("Select number of aspects to compare:", min_value=3, max_value=15, value=7, on_change=lambda: st.session_state.update(aspect_selection=None, aspect_hover=None))
         top_aspects = get_top_aspects(review_data_cache, num_aspects)
+        
+        # --- Custom Hover Info Display Area ---
+        if st.session_state.get('aspect_hover'):
+            hover_data = st.session_state.aspect_hover
+            with st.container(border=True):
+                st.markdown(
+                    f"**Aspect:** `{hover_data['aspect']}` | "
+                    f"**Sentiment:** `{hover_data['sentiment']}` | "
+                    f"**Proportion:** `{hover_data['percentage']:.1f}%` ({hover_data['mentions']} mentions)"
+                )
         
         if top_aspects:
             chart_cols = st.columns(len(selected_asins))
@@ -225,20 +223,38 @@ def main():
                     reviews_df = review_data_cache.get(asin)
                     if reviews_df is not None and not reviews_df.empty:
                         fig = create_single_product_aspect_chart(product_details['product_title'], reviews_df, top_aspects)
-                        selected_point = plotly_events(fig, click_event=True, key=f"aspect_chart_{asin}")
-                        if selected_point:
+                        
+                        # Use plotly_events for both hover and click
+                        selected_point = plotly_events(fig, click_event=True, hover_event=True, key=f"aspect_chart_{asin}")
+                        
+                        # Handle Hover Event
+                        if selected_point and selected_point[0]['event_type'] == 'hover':
+                            hover_info = selected_point[0]
+                            st.session_state.aspect_hover = {
+                                'aspect': hover_info['y'],
+                                'sentiment': fig.data[hover_info['curveNumber']]['name'],
+                                'percentage': abs(hover_info['x']),
+                                'mentions': fig.data[hover_info['curveNumber']]['customdata'][hover_info['pointNumber']]
+                            }
+                            st.rerun()
+    
+                        # Handle Click Event
+                        if selected_point and selected_point[0]['event_type'] == 'click':
+                            click_info = selected_point[0]
                             st.session_state.aspect_selection = {
                                 'asin': asin,
-                                'aspect': selected_point[0]['y'],
-                                'sentiment': fig.data[selected_point[0]['curveNumber']]['name']
+                                'aspect': click_info['y'],
+                                'sentiment': fig.data[click_info['curveNumber']]['name']
                             }
                             st.session_state.aspect_review_page = 0
+                            st.session_state.aspect_hover = None # Clear hover on click
                             st.rerun()
+                            
                     else:
                         st.info(f"No review data for '{product_details['product_title'][:30]}...' to analyze.")
         else:
             st.warning("No common aspects could be found for the selected products and filters.")
-        
+            
         if st.session_state.aspect_selection:
             st.markdown("---")
             selection = st.session_state.aspect_selection
