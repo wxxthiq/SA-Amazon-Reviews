@@ -31,6 +31,8 @@ if 'review_count_range' not in st.session_state: st.session_state.review_count_r
 if 'products_to_compare' not in st.session_state: st.session_state.products_to_compare = []
 
 
+# app.py
+
 # --- NEW: Comparison Sidebar ---
 with st.sidebar:
     st.header("⚖️ Product Comparison")
@@ -38,9 +40,9 @@ with st.sidebar:
         st.info("Select up to 4 products from the list to compare.")
     else:
         for asin in st.session_state.products_to_compare:
-            # Simple display of ASIN. You could fetch product titles for a better UX.
             st.markdown(f"- `{asin}`")
             
+    # This is the logic that shows the button
     if len(st.session_state.products_to_compare) >= 2:
         if st.button("Compare Selected Products", use_container_width=True, type="primary"):
             st.switch_page("pages/5_Product_Comparison.py")
