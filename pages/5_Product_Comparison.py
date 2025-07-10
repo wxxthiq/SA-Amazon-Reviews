@@ -53,8 +53,8 @@ def get_top_aspects(_review_data_cache, top_n_aspects):
 
 def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     """
-    --- CORRECTED AND FINAL VERSION ---
-    Creates a correctly centered divergent bar chart for a single product's aspects.
+    --- FINAL VERSION ---
+    Creates a true divergent STACKED bar chart for a single product's aspects.
     """
     aspect_sentiments = []
     for aspect in top_aspects:
@@ -78,29 +78,34 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     total_mentions = summary.sum(axis=1)
     summary_pct = summary.div(total_mentions, axis=0) * 100
 
+    # Data prep for divergent stacked bars
+    summary_pct['Neutral_half'] = summary_pct['Neutral'] / 2
+
     fig = go.Figure()
     
-    # --- Manually construct the chart using 'base' for precise positioning ---
-    fig.add_trace(go.Bar(
-        y=summary_pct.index, x=summary_pct['Positive'], name='Positive', orientation='h',
-        marker_color='#1a9850', base=summary_pct['Neutral'] / 2
-    ))
-    fig.add_trace(go.Bar(
-        y=summary_pct.index, x=summary_pct['Neutral'], name='Neutral', orientation='h',
-        marker_color='#cccccc', base=-summary_pct['Neutral'] / 2
-    ))
-    fig.add_trace(go.Bar(
-        y=summary_pct.index, x=summary_pct['Negative'], name='Negative', orientation='h',
-        marker_color='#d73027', base=-(summary_pct['Negative'] + summary_pct['Neutral'] / 2)
-    ))
+    # --- Correctly build the divergent stacked bar ---
+    fig.add_trace(go.Bar(y=summary_pct.index, x=summary_pct['Positive'], name='Positive', orientation='h', marker_color='#1a9850'))
+    fig.add_trace(go.Bar(y=summary_pct.index, x=summary_pct['Neutral_half'], name='Neutral', orientation='h', marker_color='#cccccc'))
+    fig.add_trace(go.Bar(y=summary_pct.index, x=-summary_pct['Negative'], name='Negative', orientation='h', marker_color='#d73027'))
+    fig.add_trace(go.Bar(y=summary_pct.index, x=-summary_pct['Neutral_half'], name='Neutral', orientation='h', marker_color='#cccccc', showlegend=False))
     
     fig.update_layout(
+        barmode='relative', # This creates the stacked effect
         title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
-        xaxis_title="Percentage of Mentions", yaxis_autorange='reversed',
-        plot_bgcolor='white', legend=dict(orientation="h", yanchor="bottom", y=1.02),
-        height=max(400, len(top_aspects) * 40)
+        xaxis_title="Percentage of Mentions",
+        yaxis_autorange='reversed',
+        plot_bgcolor='white',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        height=max(400, len(top_aspects) * 40),
+        xaxis=dict(
+            tickformat='%',
+            # Custom tick labels to show positive values on both sides of zero
+            tickvals=[-100, -75, -50, -25, 0, 25, 50, 75, 100],
+            ticktext=['100', '75', '50', '25', '0', '25', '50', '75', '100']
+        )
     )
     return fig
+
 
 def display_product_header(product_details, reviews_df):
     with st.container(border=True):
