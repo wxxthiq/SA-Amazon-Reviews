@@ -108,47 +108,75 @@ def main():
         with dist_col1:
             st.markdown("**Rating Distribution**")
             if not chart_data.empty:
-                # Prepare data for Altair chart
+                # Prepare data and calculate percentages
                 rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
                 rating_counts_df.columns = ['rating', 'count']
+                rating_counts_df['percentage'] = (rating_counts_df['count'] / chart_data.shape[0]) * 100
                 rating_counts_df['rating_str'] = rating_counts_df['rating'].astype(str) + ' ⭐'
 
-                # Create the chart
-                rating_chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                # Base bar chart
+                bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(
                     x=alt.X('count:Q', title='Number of Reviews'),
                     y=alt.Y('rating_str:N', sort=alt.EncodingSortField(field="rating", order="descending"), title='Rating'),
-                    # Apply a color scale from green (5 stars) to red (1 star)
                     color=alt.Color('rating:O',
-                                    scale=alt.Scale(
-                                        domain=[5, 4, 3, 2, 1],
-                                        range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']
-                                    ),
+                                    scale=alt.Scale(domain=[5, 4, 3, 2, 1], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
                                     legend=None),
-                    tooltip=['rating_str', 'count']
-                ).properties(height=250)
-                st.altair_chart(rating_chart, use_container_width=True)
+                    tooltip=[
+                        alt.Tooltip('rating_str', title='Rating'),
+                        alt.Tooltip('count', title='Reviews'),
+                        alt.Tooltip('percentage', title='Percentage', format='.1f')
+                    ]
+                )
+                
+                # Text labels to overlay on the bars
+                text_labels = bar_chart.mark_text(
+                    align='left',
+                    baseline='middle',
+                    dx=3,  # Nudges text to the right so it's not on the edge
+                    color='white'
+                ).encode(
+                    text=alt.Text('percentage:Q', format='.1f')
+                )
+
+                # Combine chart and text
+                final_chart = (bar_chart + text_labels).properties(height=250)
+                st.altair_chart(final_chart, use_container_width=True)
 
         with dist_col2:
             st.markdown("**Sentiment Distribution**")
             if not chart_data.empty:
-                # Prepare data for Altair chart
+                # Prepare data and calculate percentages
                 sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
                 sentiment_counts_df.columns = ['sentiment', 'count']
+                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / chart_data.shape[0]) * 100
 
-                # Create the chart
-                sentiment_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
+                # Base bar chart
+                bar_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
                     x=alt.X('count:Q', title='Number of Reviews'),
                     y=alt.Y('sentiment:N', sort=['Positive', 'Neutral', 'Negative'], title='Sentiment'),
-                    # Apply your consistent sentiment colors
                     color=alt.Color('sentiment:N',
-                                    scale=alt.Scale(
-                                        domain=['Positive', 'Neutral', 'Negative'],
-                                        range=['#1a9850', '#cccccc', '#d73027']
-                                    ),
+                                    scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']),
                                     legend=None),
-                    tooltip=['sentiment', 'count']
-                ).properties(height=250)
-                st.altair_chart(sentiment_chart, use_container_width=True)    
+                    tooltip=[
+                        alt.Tooltip('sentiment', title='Sentiment'),
+                        alt.Tooltip('count', title='Reviews'),
+                        alt.Tooltip('percentage', title='Percentage', format='.1f')
+                    ]
+                )
+                
+                # Text labels to overlay on the bars
+                text_labels = bar_chart.mark_text(
+                    align='left',
+                    baseline='middle',
+                    dx=3,
+                    color='white'
+                ).encode(
+                    text=alt.Text('percentage:Q', format='.1f')
+                )
+
+                # Combine chart and text
+                final_chart = (bar_chart + text_labels).properties(height=250)
+                st.altair_chart(final_chart, use_container_width=True) 
                 
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
