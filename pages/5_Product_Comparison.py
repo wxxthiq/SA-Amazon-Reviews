@@ -19,7 +19,6 @@ conn = connect_to_db(DB_PATH)
 
 @st.cache_resource
 def load_spacy_model():
-    """Loads the spaCy model for NLP tasks."""
     return spacy.load("en_core_web_sm")
 
 nlp = load_spacy_model()
@@ -28,7 +27,6 @@ nlp = load_spacy_model()
 
 @st.cache_data
 def get_review_data_for_asins(_conn, asins, date_range, rating_filter, sentiment_filter, verified_filter):
-    """Fetches and caches review data for a list of ASINs based on universal filters."""
     review_data = {}
     for asin in asins:
         review_data[asin] = get_reviews_for_product(
@@ -38,10 +36,8 @@ def get_review_data_for_asins(_conn, asins, date_range, rating_filter, sentiment
 
 @st.cache_data
 def get_top_aspects(_review_data_cache, top_n_aspects):
-    """Finds the most common aspects across all products combined."""
     all_text_corpus = pd.concat([df['text'] for df in _review_data_cache.values() if not df.empty]).astype(str)
-    if all_text_corpus.empty:
-        return []
+    if all_text_corpus.empty: return []
 
     def clean_chunk(chunk):
         return " ".join(token.lemma_.lower() for token in chunk if token.pos_ in ['NOUN', 'PROPN', 'ADJ'])
@@ -50,19 +46,18 @@ def get_top_aspects(_review_data_cache, top_n_aspects):
     for doc in nlp.pipe(all_text_corpus):
         for chunk in doc.noun_chunks:
             cleaned = clean_chunk(chunk)
-            if cleaned and len(cleaned) > 2:
-                all_aspects.append(cleaned)
+            if cleaned and len(cleaned) > 2: all_aspects.append(cleaned)
     
-    if not all_aspects:
-        return []
-        
+    if not all_aspects: return []
     return [aspect for aspect, freq in Counter(all_aspects).most_common(top_n_aspects)]
 
 def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
-    """Creates a correctly centered divergent bar chart for a single product's aspects."""
+    """
+    --- CORRECTED AND FINAL VERSION ---
+    Creates a correctly centered divergent bar chart for a single product's aspects.
+    """
     aspect_sentiments = []
     for aspect in top_aspects:
-        # Find all mentions of the aspect in the reviews
         aspect_reviews = reviews_df[reviews_df['text'].str.contains(r'\b' + re.escape(aspect) + r'\b', case=False, na=False)]
         for text in aspect_reviews['text']:
             window = str(text).lower()[max(0, str(text).lower().find(aspect)-50):min(len(text), str(text).lower().find(aspect)+len(aspect)+50)]
@@ -71,69 +66,48 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
             aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment_cat})
     
     if not aspect_sentiments:
-        return go.Figure().update_layout(title=f"No aspects found for '{product_title[:30]}...'")
+        return go.Figure().update_layout(title_text=f"No aspect data for '{product_title[:30]}...'", plot_bgcolor='white')
     
     aspect_df = pd.DataFrame(aspect_sentiments)
     summary = aspect_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
     
-    # Ensure all sentiment columns exist
     for sent in ['Positive', 'Negative', 'Neutral']:
-        if sent not in summary.columns:
-            summary[sent] = 0
+        if sent not in summary.columns: summary[sent] = 0
             
-    summary = summary.reindex(top_aspects) # Keep the original sort order
-    
-    # Calculate percentages
+    summary = summary.reindex(top_aspects).fillna(0)
     total_mentions = summary.sum(axis=1)
     summary_pct = summary.div(total_mentions, axis=0) * 100
 
     fig = go.Figure()
     
-    # --- CORRECTED CHART LOGIC ---
-    # Add Negative bar starting from its negative value and ending at the start of the neutral bar
+    # --- Manually construct the chart using 'base' for precise positioning ---
     fig.add_trace(go.Bar(
-        y=summary_pct.index,
-        x=-summary_pct['Negative'],
-        name='Negative',
-        orientation='h',
-        marker_color='#d73027'
+        y=summary_pct.index, x=summary_pct['Positive'], name='Positive', orientation='h',
+        marker_color='#1a9850', base=summary_pct['Neutral'] / 2
     ))
-    # Add Neutral bar, centered on the zero line
     fig.add_trace(go.Bar(
-        y=summary_pct.index,
-        x=summary_pct['Neutral'],
-        base=-summary_pct['Neutral']/2, # Base calculation to center the bar
-        name='Neutral',
-        orientation='h',
-        marker_color='#cccccc'
+        y=summary_pct.index, x=summary_pct['Neutral'], name='Neutral', orientation='h',
+        marker_color='#cccccc', base=-summary_pct['Neutral'] / 2
     ))
-    # Add Positive bar, starting from the end of the neutral bar
     fig.add_trace(go.Bar(
-        y=summary_pct.index,
-        x=summary_pct['Positive'],
-        name='Positive',
-        orientation='h',
-        marker_color='#1a9850'
+        y=summary_pct.index, x=summary_pct['Negative'], name='Negative', orientation='h',
+        marker_color='#d73027', base=-(summary_pct['Negative'] + summary_pct['Neutral'] / 2)
     ))
     
     fig.update_layout(
-        barmode='stack', # Use 'stack' mode which is equivalent to 'relative'
         title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
-        xaxis_title="Percentage of Mentions",
-        yaxis_autorange='reversed',
-        plot_bgcolor='white',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
-        height=max(400, len(top_aspects) * 40) # Dynamic height
+        xaxis_title="Percentage of Mentions", yaxis_autorange='reversed',
+        plot_bgcolor='white', legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        height=max(400, len(top_aspects) * 40)
     )
     return fig
 
-# (Other helper functions like display_product_header and create_differential_word_clouds remain here)
 def display_product_header(product_details, reviews_df):
     with st.container(border=True):
         st.subheader(product_details['product_title'])
-        image_url = product_details.get('image_urls', '').split(',')[0] or "https://via.placeholder.com/200"
+        image_url = (product_details.get('image_urls') or "").split(',')[0] or "https://via.placeholder.com/200"
         st.image(image_url, use_container_width=True)
-        st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
+        st.caption(f"Category: {product_details['category']} | Store: {product_details.get('store', 'N/A')}")
         m_col1, m_col2 = st.columns(2)
         m_col1.metric("Avg. Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
         m_col2.metric("Filtered Reviews", f"{len(reviews_df):,}")
@@ -189,7 +163,7 @@ def main():
         st.switch_page("app.py")
 
     if 'products_to_compare' not in st.session_state or not st.session_state.products_to_compare:
-        st.warning("Please select 2 to 4 products from the main search page to compare.")
+        st.warning("Please select 2 to 4 products from the main page to compare.")
         st.stop()
     
     selected_asins = st.session_state.products_to_compare
@@ -228,11 +202,9 @@ def main():
         
         num_aspects = st.slider("Select number of aspects to compare:", min_value=3, max_value=15, value=7)
         
-        # Get the top N aspects across all products
         top_aspects = get_top_aspects(review_data_cache, num_aspects)
         
         if top_aspects:
-            # Display one chart per product in columns
             chart_cols = st.columns(len(selected_asins))
             for i, asin in enumerate(selected_asins):
                 with chart_cols[i]:
@@ -248,7 +220,6 @@ def main():
 
     with tab2:
         st.subheader("Sentiment Trends Over Time")
-        # This section remains the same
         cols = st.columns(len(selected_asins))
         for i, asin in enumerate(selected_asins):
             with cols[i]:
@@ -267,7 +238,6 @@ def main():
 
     with tab3:
         st.subheader("Differential Word Clouds")
-        # This section remains the same
         create_differential_word_clouds(review_data_cache, selected_asins)
 
 if __name__ == "__main__":
