@@ -223,7 +223,7 @@ def main():
 
     net_col1, net_col2, net_col3 = st.columns(3)
     with net_col1:
-        top_n_keywords = st.slider("Number of Top Terms to Analyze:", min_value=10, max_value=50, value=20, key="top_n_slider")
+        top_n_keywords = st.slider("Number of Top Terms to Analyze:", min_value=10, max_value=50, value=200, key="top_n_slider")
     with net_col2:
         min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=2, key="min_co_slider")
     with net_col3:
