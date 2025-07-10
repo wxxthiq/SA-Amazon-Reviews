@@ -264,7 +264,7 @@ def main():
                             st.session_state.aspect_review_page += 1
                             st.rerun()
 
-# --- UPDATED: Comparative Aspect Analysis using Radar Chart ---
+    # --- Comparative Aspect Analysis using Radar Chart ---
     st.markdown("---")
     st.markdown("### ⚖️ Comparative Aspect Analysis")
     st.caption("Select two or more aspects to compare their sentiment profiles using a radar chart.")
@@ -279,21 +279,19 @@ def main():
         if len(selected_for_comparison) >= 2:
             comparison_df = aspect_summary_df[aspect_summary_df['aspect'].isin(selected_for_comparison)]
             
-            # Pivot the data to get it into the right shape for the radar chart
             radar_df = comparison_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
             
-            # Ensure all sentiment categories are present
-            for sent in ['Positive', 'Negative', 'Neutral']:
-                if sent not in radar_df.columns:
-                    radar_df[sent] = 0
+            # --- FIX: Replace 0 with NaN so log scale can render correctly ---
+            radar_df.replace(0, np.nan, inplace=True)
             
-            # The categories will be the axes of our radar chart
             categories = ['Positive', 'Negative', 'Neutral']
+            for sent in categories:
+                if sent not in radar_df.columns:
+                    radar_df[sent] = np.nan
             radar_df = radar_df[categories]
 
             fig = go.Figure()
 
-            # Add a trace for each aspect
             for aspect in radar_df.index:
                 fig.add_trace(go.Scatterpolar(
                     r=radar_df.loc[aspect].values,
@@ -302,15 +300,15 @@ def main():
                     name=aspect
                 ))
 
+            # --- UPDATED: Simplified layout update ---
             fig.update_layout(
               polar=dict(
                 radialaxis=dict(
                   visible=True,
-                  type='log',  # This is the key change
-                  range=[0, np.log10(radar_df.max().max() * 1.5)] # Dynamically sets the range on a log scale
+                  type='log' # Enable log scale
                 )),
               showlegend=True,
-              title="Sentiment Profile Comparison"
+              title="Sentiment Profile Comparison (Log Scale)"
             )
 
             st.plotly_chart(fig, use_container_width=True)
