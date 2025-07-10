@@ -92,6 +92,11 @@ def main():
         if image_urls:
             with st.popover("🖼️ View Image Gallery"):
                 st.image(image_urls, use_container_width=True)
+        # --- Navigation to Review Explorer ---
+        st.subheader("📝 Browse Individual Reviews")
+        if st.button("Explore All Reviews"):
+            st.switch_page("pages/2_Review_Explorer.py")
+            
     with right_col:
         st.header(product_details['product_title'])
         st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
@@ -121,11 +126,6 @@ def main():
                     percentage = (count / total_sentiments * 100) if total_sentiments > 0 else 0
                     st.markdown(f":{sentiment_colors.get(sentiment, 'default')}[{sentiment}]: {percentage:.1f}% ({count})")
                     st.progress(int(percentage))    
-                    
-            # --- Navigation to Review Explorer ---
-            st.subheader("📝 Browse Individual Reviews")
-            if st.button("Explore All Reviews"):
-                st.switch_page("pages/2_Review_Explorer.py")
                 
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
