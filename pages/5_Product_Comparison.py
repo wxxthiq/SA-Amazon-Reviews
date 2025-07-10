@@ -210,8 +210,13 @@ def main():
 
     with tab1:
         st.subheader("Comparative Aspect-Based Sentiment")
-        st.caption("Hover over a bar to see details. Click a segment to see matching reviews.")
-        num_aspects = st.slider("Select number of aspects to compare:", min_value=3, max_value=15, value=7, on_change=reset_selection)
+        st.caption("Click on any bar segment to see the corresponding review snippets below.")
+        
+        num_aspects = st.slider(
+            "Select number of aspects to compare:", 
+            min_value=3, max_value=15, value=7, 
+            on_change=lambda: st.session_state.update(aspect_selection=None) # Reset click selection on change
+        )
         top_aspects = get_top_aspects(review_data_cache, num_aspects)
         
         if top_aspects:
@@ -223,59 +228,29 @@ def main():
                     if reviews_df is not None and not reviews_df.empty:
                         fig = create_single_product_aspect_chart(product_details['product_title'], reviews_df, top_aspects)
                         
-                        # --- THIS IS THE ROBUST EVENT HANDLING BLOCK ---
-                        selected_point = plotly_events(fig, click_event=True, hover_event=True, key=f"aspect_chart_{asin}")
+                        # We now ONLY use plotly_events for clicks
+                        selected_point = plotly_events(fig, click_event=True, key=f"aspect_chart_{asin}")
                         
                         if selected_point:
-                            # Safely get the event type. It defaults to 'hover' if the key is missing.
-                            event_type = selected_point[0].get('event_type', 'hover')
-
-                            if event_type == 'click':
-                                click_info = selected_point[0]
-                                st.session_state.aspect_selection = {
-                                    'asin': asin,
-                                    'aspect': click_info['y'],
-                                    'sentiment': fig.data[click_info['curveNumber']]['name']
-                                }
-                                st.session_state.aspect_review_page = 0
-                                st.session_state.aspect_hover = None
-                                st.rerun()
-                            
-                            # All non-click events are treated as hover events
-                            else:
-                                hover_info = selected_point[0]
-                                current_hover = {
-                                    'aspect': hover_info['y'],
-                                    'sentiment': fig.data[hover_info['curveNumber']]['name'],
-                                    'percentage': abs(hover_info['x']),
-                                    'mentions': fig.data[hover_info['curveNumber']]['customdata'][hover_info['pointNumber']]
-                                }
-                                # Rerun only if hover info has changed to avoid flickering
-                                if current_hover != st.session_state.get('aspect_hover'):
-                                    st.session_state.aspect_hover = current_hover
-                                    st.rerun()
+                            st.session_state.aspect_selection = {
+                                'asin': asin,
+                                'aspect': selected_point[0]['y'],
+                                'sentiment': fig.data[selected_point[0]['curveNumber']]['name']
+                            }
+                            st.session_state.aspect_review_page = 0
+                            st.rerun()
                     else:
                         st.info(f"No review data for '{product_details['product_title'][:30]}...' to analyze.")
         else:
             st.warning("No common aspects could be found for the selected products and filters.")
-
-        # --- Custom Hover Info Display Area ---
-        if st.session_state.get('aspect_hover') and not st.session_state.get('aspect_selection'):
-            hover_data = st.session_state.aspect_hover
-            st.markdown("---")
-            st.subheader("Hover Details")
-            st.markdown(
-                f"**Aspect:** `{hover_data['aspect']}` | "
-                f"**Sentiment:** `{hover_data['sentiment']}` | "
-                f"**Proportion:** `{hover_data['percentage']:.1f}%` ({hover_data['mentions']} mentions)"
-            )
-
-        # --- Review Snippets Display Area ---
+        
+        # --- Display Review Snippets on click (this logic remains the same) ---
         if st.session_state.get('aspect_selection'):
             st.markdown("---")
             selection = st.session_state.aspect_selection
             st.subheader(f"Reviews for '{selection['aspect']}' with '{selection['sentiment']}' sentiment")
             
+            # (The rest of the review display and pagination code remains here, unchanged)
             product_reviews = review_data_cache.get(selection['asin'])
             filtered_reviews = product_reviews[product_reviews['text'].str.contains(r'\b' + re.escape(selection['aspect']) + r'\b', case=False, na=False)]
             
@@ -283,12 +258,10 @@ def main():
                 final_reviews = filtered_reviews[filtered_reviews['text_polarity'] > 0.1]
             elif selection['sentiment'] == 'Negative':
                 final_reviews = filtered_reviews[filtered_reviews['text_polarity'] < -0.1]
-            else:
+            else: # Neutral
                 final_reviews = filtered_reviews[(filtered_reviews['text_polarity'] >= -0.1) & (filtered_reviews['text_polarity'] <= 0.1)]
 
-            if final_reviews.empty:
-                st.warning("No matching reviews found.")
-            else:
+            if not final_reviews.empty:
                 start_idx = st.session_state.aspect_review_page * REVIEWS_PER_PAGE
                 reviews_to_display = final_reviews.iloc[start_idx:end_idx]
 
@@ -307,7 +280,8 @@ def main():
                     nav_cols[1].write(f"Page {st.session_state.aspect_review_page + 1} of {total_pages}")
                     if (st.session_state.aspect_review_page + 1) < total_pages:
                         nav_cols[2].button("Next ➡️", on_click=lambda: st.session_state.update(aspect_review_page=st.session_state.aspect_review_page + 1), use_container_width=True)
-
+            else:
+                st.warning("No matching reviews found.")
     with tab2:
         st.subheader("Sentiment Trends Over Time")
         cols = st.columns(len(selected_asins))
