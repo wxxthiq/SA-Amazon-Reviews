@@ -306,6 +306,7 @@ def main():
               polar=dict(
                 radialaxis=dict(
                   visible=True,
+                  type='log',  # This is the key change
                   range=[0, np.log10(radar_df.max().max() * 1.5)] # Dynamically sets the range on a log scale
                 )),
               showlegend=True,
