@@ -267,7 +267,7 @@ def main():
     # --- Comparative Aspect Analysis using Radar Chart ---
     st.markdown("---")
     st.markdown("### ⚖️ Comparative Aspect Analysis")
-    st.caption("Select two or more aspects to compare their sentiment profiles using a radar chart.")
+    st.caption("Select two or more aspects to compare their sentiment profiles. Hover over the points for details.")
 
     if top_aspects_list:
         selected_for_comparison = st.multiselect(
@@ -281,31 +281,38 @@ def main():
             
             radar_df = comparison_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
             
-            # --- FIX: Replace 0 with NaN so log scale can render correctly ---
-            radar_df.replace(0, np.nan, inplace=True)
-            
             categories = ['Positive', 'Negative', 'Neutral']
             for sent in categories:
                 if sent not in radar_df.columns:
-                    radar_df[sent] = np.nan
+                    radar_df[sent] = 0
             radar_df = radar_df[categories]
 
             fig = go.Figure()
 
             for aspect in radar_df.index:
+                # --- NEW: Create custom hover text for each point ---
+                hover_text = [f"{count} {cat} mentions" for cat, count in zip(categories, radar_df.loc[aspect].values)]
+
                 fig.add_trace(go.Scatterpolar(
                     r=radar_df.loc[aspect].values,
                     theta=categories,
                     fill='toself',
-                    name=aspect
+                    name=aspect,
+                    hoverinfo='name+text', # Show aspect name and our custom text
+                    text=hover_text        # Assign the custom text
                 ))
+            
+            # Replace zero values with a very small number for log scale compatibility
+            radar_df.replace(0, 0.1, inplace=True)
 
-            # --- UPDATED: Simplified layout update ---
+            # --- UPDATED: Hide axis labels for a cleaner look ---
             fig.update_layout(
               polar=dict(
                 radialaxis=dict(
                   visible=True,
-                  type='log' # Enable log scale
+                  type='log',
+                  showticklabels=False, # Hide the numbers
+                  showline=False       # Hide the axis lines
                 )),
               showlegend=True,
               title="Sentiment Profile Comparison (Log Scale)"
