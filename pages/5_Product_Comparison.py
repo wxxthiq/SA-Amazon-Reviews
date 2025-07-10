@@ -50,8 +50,9 @@ def get_top_aspects(_review_data_cache, top_n_aspects):
 
 def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     """
-    --- DISSERTATION-QUALITY VERSION ---
-    Creates a true, interactive divergent STACKED bar chart.
+    --- PUBLICATION-QUALITY VERSION ---
+    Creates a true, interactive divergent stacked bar chart with non-rotated,
+    readable hover labels.
     """
     aspect_sentiments = []
     for aspect in top_aspects:
@@ -59,16 +60,11 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
         aspect_reviews = reviews_df[reviews_df['text'].str.contains(r'\b' + re.escape(aspect) + r'\b', case=False, na=False)]
         for _, review in aspect_reviews.iterrows():
             # Use the pre-calculated sentiment for each review
-            aspect_sentiments.append({
-                'aspect': aspect,
-                'sentiment': review['sentiment'],
-                'review_title': review.get('review_title', 'No Title'), # For potential future use
-                'text': review['text']
-            })
-    
+            aspect_sentiments.append({'aspect': aspect, 'sentiment': review['sentiment']})
+
     if not aspect_sentiments:
         return go.Figure().update_layout(title_text=f"No aspect data for '{product_title[:30]}...'", plot_bgcolor='white')
-    
+
     aspect_df = pd.DataFrame(aspect_sentiments)
     
     # Calculate counts and percentages
@@ -79,49 +75,49 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     summary = summary.reindex(top_aspects).fillna(0)
     summary_pct = summary.div(summary.sum(axis=1), axis=0).fillna(0) * 100
 
-    # --- This is the key logic for a true divergent stacked bar chart ---
     fig = go.Figure()
-    
     colors = {'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}
     
-    # Plot Positive sentiments
+    # Define traces for each sentiment
     fig.add_trace(go.Bar(
         y=summary_pct.index, x=summary_pct['Positive'], name='Positive', orientation='h',
         marker_color=colors['Positive'], customdata=summary['Positive'],
         hovertemplate="<b>%{y}</b><br>Positive: %{x:.1f}% (%{customdata} mentions)<extra></extra>"
     ))
-    
-    # Plot Negative sentiments (as negative values to go left)
     fig.add_trace(go.Bar(
         y=summary_pct.index, x=-summary_pct['Negative'], name='Negative', orientation='h',
         marker_color=colors['Negative'], customdata=summary['Negative'],
         hovertemplate="<b>%{y}</b><br>Negative: %{customdata} mentions (%{x:.1f}%)<extra></extra>"
     ))
-    
-    # Plot Neutral sentiments, split to center them on the zero line
     fig.add_trace(go.Bar(
         y=summary_pct.index, x=summary_pct['Neutral'], name='Neutral', orientation='h',
         marker_color=colors['Neutral'], customdata=summary['Neutral'],
-        base=-summary_pct['Neutral']/2, # Center the neutral bar
+        base=-summary_pct['Neutral']/2,
         hovertemplate="<b>%{y}</b><br>Neutral: %{customdata} mentions (%{x:.1f}%)<extra></extra>"
     ))
 
     fig.update_layout(
-        barmode='relative', # Stacks bars that are on the same side of zero
+        barmode='relative',
         title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
         xaxis_title="Percentage of Mentions",
         yaxis_autorange='reversed',
         plot_bgcolor='white',
         legend=dict(orientation="h", yanchor="bottom", y=1.02, traceorder="reversed"),
         height=max(400, len(top_aspects) * 40),
-        # Clean up the axis labels to be symmetrical
         xaxis=dict(
             tickvals=[-100, -75, -50, -25, 0, 25, 50, 75, 100],
             ticktext=['100%', '75%', '50%', '25%', '0', '25%', '50%', '75%', '100%']
+        ),
+        # --- NEW: This block ensures hover labels are never rotated ---
+        hovermode='y unified',
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=14,
+            font_family="Rockwell"
         )
     )
     return fig
-
+    
 # (Other functions like display_product_header and create_differential_word_clouds remain here)
 def display_product_header(product_details, reviews_df):
     with st.container(border=True):
