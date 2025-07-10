@@ -224,31 +224,36 @@ def main():
                     if reviews_df is not None and not reviews_df.empty:
                         fig = create_single_product_aspect_chart(product_details['product_title'], reviews_df, top_aspects)
                         
-                        # Use plotly_events for both hover and click
+                        ## Use plotly_events for both hover and click
                         selected_point = plotly_events(fig, click_event=True, hover_event=True, key=f"aspect_chart_{asin}")
                         
-                        # Handle Hover Event
-                        if selected_point and selected_point[0]['event_type'] == 'hover':
-                            hover_info = selected_point[0]
-                            st.session_state.aspect_hover = {
-                                'aspect': hover_info['y'],
-                                'sentiment': fig.data[hover_info['curveNumber']]['name'],
-                                'percentage': abs(hover_info['x']),
-                                'mentions': fig.data[hover_info['curveNumber']]['customdata'][hover_info['pointNumber']]
-                            }
-                            st.rerun()
-    
-                        # Handle Click Event
-                        if selected_point and selected_point[0]['event_type'] == 'click':
-                            click_info = selected_point[0]
-                            st.session_state.aspect_selection = {
-                                'asin': asin,
-                                'aspect': click_info['y'],
-                                'sentiment': fig.data[click_info['curveNumber']]['name']
-                            }
-                            st.session_state.aspect_review_page = 0
-                            st.session_state.aspect_hover = None # Clear hover on click
-                            st.rerun()
+                        # --- ROBUST EVENT HANDLING ---
+                        if selected_point:
+                            # Use .get() to safely access the key. It returns None if the key doesn't exist.
+                            event_type = selected_point[0].get('event_type')
+
+                            # Handle Click Event
+                            if event_type == 'click':
+                                click_info = selected_point[0]
+                                st.session_state.aspect_selection = {
+                                    'asin': asin,
+                                    'aspect': click_info['y'],
+                                    'sentiment': fig.data[click_info['curveNumber']]['name']
+                                }
+                                st.session_state.aspect_review_page = 0
+                                st.session_state.aspect_hover = None # Clear hover on click
+                                st.rerun()
+                            
+                            # Handle Hover Event (as the default if it's not a click)
+                            else:
+                                hover_info = selected_point[0]
+                                st.session_state.aspect_hover = {
+                                    'aspect': hover_info['y'],
+                                    'sentiment': fig.data[hover_info['curveNumber']]['name'],
+                                    'percentage': abs(hover_info['x']),
+                                    'mentions': fig.data[hover_info['curveNumber']]['customdata'][hover_info['pointNumber']]
+                                }
+                                st.rerun()
                             
                     else:
                         st.info(f"No review data for '{product_details['product_title'][:30]}...' to analyze.")
