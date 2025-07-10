@@ -50,70 +50,74 @@ def get_top_aspects(_review_data_cache, top_n_aspects):
 
 def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
     """
-    --- FINAL INTERACTIVE VERSION ---
-    Creates a 100% normalized stacked bar chart with improved annotations and hover text.
+    --- DISSERTATION-QUALITY VERSION ---
+    Creates a true, interactive divergent STACKED bar chart.
     """
     aspect_sentiments = []
     for aspect in top_aspects:
+        # Find all reviews that mention the aspect
         aspect_reviews = reviews_df[reviews_df['text'].str.contains(r'\b' + re.escape(aspect) + r'\b', case=False, na=False)]
         for _, review in aspect_reviews.iterrows():
-            # Use the pre-calculated sentiment for accuracy
-            aspect_sentiments.append({'aspect': aspect, 'sentiment': review['sentiment']})
+            # Use the pre-calculated sentiment for each review
+            aspect_sentiments.append({
+                'aspect': aspect,
+                'sentiment': review['sentiment'],
+                'review_title': review.get('review_title', 'No Title'), # For potential future use
+                'text': review['text']
+            })
     
     if not aspect_sentiments:
         return go.Figure().update_layout(title_text=f"No aspect data for '{product_title[:30]}...'", plot_bgcolor='white')
     
     aspect_df = pd.DataFrame(aspect_sentiments)
-    summary = aspect_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
     
+    # Calculate counts and percentages
+    summary = aspect_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
     for sent in ['Positive', 'Neutral', 'Negative']:
         if sent not in summary.columns: summary[sent] = 0
             
     summary = summary.reindex(top_aspects).fillna(0)
     summary_pct = summary.div(summary.sum(axis=1), axis=0).fillna(0) * 100
 
+    # --- This is the key logic for a true divergent stacked bar chart ---
     fig = go.Figure()
-    colors = {'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}
-
-    for sentiment in ['Positive', 'Neutral', 'Negative']:
-        # Show percentage inside the bar only if it's large enough to be readable
-        text_labels = [f"{pct:.0f}%" if pct > 7 else "" for pct in summary_pct[sentiment]]
-        
-        fig.add_trace(go.Bar(
-            y=summary_pct.index,
-            x=summary_pct[sentiment],
-            name=sentiment,
-            orientation='h',
-            marker_color=colors[sentiment],
-            text=text_labels,
-            textposition='inside',
-            insidetextanchor='middle',
-            # NEW: Improved hover template with both count and percentage
-            hovertemplate=(
-                f"<b>Aspect:</b> %{{y}}<br>"
-                f"<b>Sentiment:</b> {sentiment}<br>"
-                f"<b>Proportion:</b> %{{x:.1f}}%<br>"
-                f"<b>Mentions:</b> %{{customdata}}<extra></extra>"
-            ),
-            customdata=summary[sentiment]
-        ))
     
+    colors = {'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}
+    
+    # Plot Positive sentiments
+    fig.add_trace(go.Bar(
+        y=summary_pct.index, x=summary_pct['Positive'], name='Positive', orientation='h',
+        marker_color=colors['Positive'], customdata=summary['Positive'],
+        hovertemplate="<b>%{y}</b><br>Positive: %{x:.1f}% (%{customdata} mentions)<extra></extra>"
+    ))
+    
+    # Plot Negative sentiments (as negative values to go left)
+    fig.add_trace(go.Bar(
+        y=summary_pct.index, x=-summary_pct['Negative'], name='Negative', orientation='h',
+        marker_color=colors['Negative'], customdata=summary['Negative'],
+        hovertemplate="<b>%{y}</b><br>Negative: %{customdata} mentions (%{x:.1f}%)<extra></extra>"
+    ))
+    
+    # Plot Neutral sentiments, split to center them on the zero line
+    fig.add_trace(go.Bar(
+        y=summary_pct.index, x=summary_pct['Neutral'], name='Neutral', orientation='h',
+        marker_color=colors['Neutral'], customdata=summary['Neutral'],
+        base=-summary_pct['Neutral']/2, # Center the neutral bar
+        hovertemplate="<b>%{y}</b><br>Neutral: %{customdata} mentions (%{x:.1f}%)<extra></extra>"
+    ))
+
     fig.update_layout(
-        barmode='stack',
+        barmode='relative', # Stacks bars that are on the same side of zero
         title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
         xaxis_title="Percentage of Mentions",
         yaxis_autorange='reversed',
         plot_bgcolor='white',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, traceorder="reversed"),
         height=max(400, len(top_aspects) * 40),
-        uniformtext_minsize=8,
-        uniformtext_mode='hide', # Hide text if bar is too small
+        # Clean up the axis labels to be symmetrical
         xaxis=dict(
-            visible=False # Hide x-axis line and labels for a cleaner look
-        ),
-        yaxis=dict(
-            showline=False,
-            showgrid=False
+            tickvals=[-100, -75, -50, -25, 0, 25, 50, 75, 100],
+            ticktext=['100%', '75%', '50%', '25%', '0', '25%', '50%', '75%', '100%']
         )
     )
     return fig
