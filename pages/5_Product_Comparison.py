@@ -2,182 +2,207 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
-from utils.database_utils import (
-    connect_to_db,
-    get_product_details,
-    get_reviews_for_product
-)
-import altair as alt
-from textblob import TextBlob
+from utils.database_utils import connect_to_db, get_product_details, get_reviews_for_product
 from collections import Counter
 import re
-import spacy
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-# --- Page Configuration and Model Loading ---
-st.set_page_config(layout="wide", page_title="Product Comparison")
+# --- Page Configuration ---
+st.set_page_config(layout="wide", page_title="Advanced Product Comparison")
 DB_PATH = "amazon_reviews_top100.duckdb"
 conn = connect_to_db(DB_PATH)
 
-@st.cache_resource
-def load_spacy_model():
-    return spacy.load("en_core_web_sm")
+# --- Helper Functions for Advanced Visualizations ---
 
-nlp = load_spacy_model()
-
-# --- Helper function for Aspect Analysis ---
 @st.cache_data
-def get_aspect_summary_for_comparison(_data, num_aspects=5):
-    all_aspects = []
-    def clean_chunk(chunk):
-        return " ".join(token.lemma_.lower() for token in chunk if token.pos_ in ['NOUN', 'PROPN', 'ADJ'])
+def get_review_data_for_asins(_conn, asins, verified_filter):
+    """Fetches and caches review data for a list of ASINs."""
+    review_data = {}
+    for asin in asins:
+        review_data[asin] = get_reviews_for_product(
+            _conn, asin, date_range=(), rating_filter=(), sentiment_filter=(), verified_filter=verified_filter
+        )
+    return review_data
 
-    for doc in nlp.pipe(_data['text'].astype(str)):
-        for chunk in doc.noun_chunks:
-            cleaned = clean_chunk(chunk)
-            if cleaned and len(cleaned) > 2:
-                all_aspects.append(cleaned)
-    
-    if not all_aspects:
-        return pd.DataFrame()
-        
-    top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(num_aspects)]
-    
-    aspect_sentiments = []
-    for aspect in top_aspects:
-        for text in _data['text']:
-            if re.search(r'\b' + re.escape(aspect) + r'\b', str(text).lower()):
-                window = str(text).lower()[max(0, str(text).lower().find(aspect)-50):min(len(text), str(text).lower().find(aspect)+len(aspect)+50)]
-                polarity = TextBlob(window).sentiment.polarity
-                sentiment_cat = 'Positive' if polarity > 0.1 else 'Negative' if polarity < -0.1 else 'Neutral'
-                aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment_cat})
-    
-    if not aspect_sentiments:
-        return pd.DataFrame()
-        
-    return pd.DataFrame(aspect_sentiments)
+def create_divergent_bar_chart(review_data_cache):
+    """Creates a divergent stacked bar chart for sentiment comparison."""
+    plot_data = []
+    for asin, df in review_data_cache.items():
+        if not df.empty:
+            total = len(df)
+            counts = df['sentiment'].value_counts()
+            pos_pct = counts.get('Positive', 0) / total * 100
+            neg_pct = counts.get('Negative', 0) / total * 100
+            neu_pct = counts.get('Neutral', 0) / total * 100
+            
+            product_details = get_product_details(conn, asin).iloc[0]
+            product_title = product_details['product_title']
+            
+            plot_data.append({
+                'product': product_title,
+                'Positive': pos_pct,
+                'Negative': -neg_pct, # Negative values for divergence
+                'Neutral': neu_pct,
+                'Neutral_Left': -neu_pct / 2, # Split neutral for centering
+                'Neutral_Right': neu_pct / 2
+            })
 
+    if not plot_data:
+        return go.Figure()
+
+    plot_df = pd.DataFrame(plot_data)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Bar(y=plot_df['product'], x=plot_df['Positive'], name='Positive', orientation='h', marker_color='#1a9850'))
+    fig.add_trace(go.Bar(y=plot_df['product'], x=plot_df['Negative'], name='Negative', orientation='h', marker_color='#d73027'))
+    fig.add_trace(go.Bar(y=plot_df['product'], x=plot_df['Neutral_Right'], name='Neutral', orientation='h', marker_color='#cccccc'))
+    fig.add_trace(go.Bar(y=plot_df['product'], x=plot_df['Neutral_Left'], name='Neutral (cont.)', orientation='h', marker_color='#cccccc', showlegend=False))
+
+    fig.update_layout(
+        barmode='relative',
+        title_text='Comparative Sentiment Distribution (%)',
+        xaxis_title='Percentage of Reviews',
+        yaxis_title='Product',
+        yaxis_autorange='reversed',
+        plot_bgcolor='white',
+        legend_orientation='h',
+        legend_yanchor='bottom',
+        legend_y=1.02
+    )
+    fig.update_xaxes(
+        tickvals=[-100, -75, -50, -25, 0, 25, 50, 75, 100],
+        ticktext=['100%', '75%', '50%', '25%', '0', '25%', '50%', '75%', '100%']
+    )
+    return fig
+
+def create_differential_word_clouds(review_data_cache, asins):
+    """Calculates unique words for each product and displays them as word clouds."""
+    if len(asins) < 2:
+        st.warning("Differential analysis requires at least two products.")
+        return
+
+    # Combine all review texts into a corpus
+    all_texts = [review_data_cache[asin]['text'].str.cat(sep=' ') for asin in asins if not review_data_cache[asin].empty]
+    if len(all_texts) != len(asins):
+        st.warning("One or more selected products have no review text to analyze.")
+        return
+
+    # Use TF-IDF to find characteristic words
+    vectorizer = TfidfVectorizer(stop_words='english', max_features=1000)
+    tfidf_matrix = vectorizer.fit_transform(all_texts)
+    feature_names = vectorizer.get_feature_names_out()
+
+    cols = st.columns(len(asins))
+    for i, asin in enumerate(asins):
+        with cols[i]:
+            product_details = get_product_details(conn, asin).iloc[0]
+            st.subheader(f"Unique words for '{product_details['product_title'][:30]}...'")
+            
+            # Get the TF-IDF scores for the current product
+            scores = tfidf_matrix[i].toarray().flatten()
+            
+            # Create a dictionary of word -> score
+            word_scores = {word: score for word, score in zip(feature_names, scores)}
+            
+            # Filter out words with zero score
+            word_scores = {word: score for word, score in word_scores.items() if score > 0}
+
+            if not word_scores:
+                st.info("No unique words could be identified.")
+                continue
+
+            wordcloud = WordCloud(
+                width=800, height=400, background_color="white", colormap='viridis'
+            ).generate_from_frequencies(word_scores)
+            
+            fig, ax = plt.subplots()
+            ax.imshow(wordcloud, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
 
 # --- Main App Logic ---
 def main():
-    st.title("⚖️ Product Comparison")
+    st.title("⚖️ Advanced Product Comparison")
 
     if st.button("⬅️ Back to Search"):
         st.switch_page("app.py")
 
-    # Check if there are products selected for comparison
+    # Check for selected products
     if 'products_to_compare' not in st.session_state or not st.session_state.products_to_compare:
         st.warning("Please select 2 to 4 products from the main search page to compare.")
         st.stop()
-
-    selected_asins = st.session_state.products_to_compare
     
+    selected_asins = st.session_state.products_to_compare
     if len(selected_asins) < 2:
         st.warning("Please select at least two products to compare.")
         st.stop()
-        
-    st.info(f"Comparing **{len(selected_asins)}** products. Use the sidebar to apply universal filters to all products.")
 
-    # --- Sidebar for Universal Filters ---
-    st.sidebar.header("📊 Universal Comparison Filters")
-    # For simplicity, we'll start with just a verified purchase filter
-    # You can add date, rating, etc. here later if needed
+    st.sidebar.header("📊 Universal Filters")
     verified_filter = st.sidebar.radio(
-        "Filter by Purchase Status", 
-        ["All", "Verified Only", "Not Verified"], 
-        index=0, 
+        "Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], 
         key='comparison_verified_filter'
     )
 
-    # --- Fetch and Display Products ---
-    product_data_cache = {}
-    review_data_cache = {}
-
-    with st.spinner("Loading product data..."):
-        for asin in selected_asins:
-            product_details = get_product_details(conn, asin)
-            if not product_details.empty:
-                product_data_cache[asin] = product_details.iloc[0]
-                # Fetch all reviews initially based on the filter
-                review_data_cache[asin] = get_reviews_for_product(
-                    conn, asin, date_range=(), rating_filter=(), sentiment_filter=(), verified_filter=verified_filter
-                )
-
-    cols = st.columns(len(selected_asins))
-
-    # --- Section 1: Basic Info ---
-    st.markdown("---")
-    st.header("General Information")
-    for i, asin in enumerate(selected_asins):
-        with cols[i]:
-            if asin in product_data_cache:
-                product = product_data_cache[asin]
-                st.subheader(product['product_title'])
-                
-                image_urls_str = product.get('image_urls')
-                image_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else "https://via.placeholder.com/200"
-                st.image(image_url, use_container_width=True)
-                
-                st.metric("Average Rating", f"{product.get('average_rating', 0):.2f} ⭐")
-                st.metric("Total Reviews", f"{int(product.get('review_count', 0)):,}")
-                st.caption(f"Category: {product['category']}")
-
-    # --- Section 2: Rating & Sentiment Distribution ---
-    st.markdown("---")
-    st.header("Rating & Sentiment Distribution")
-    rating_cols = st.columns(len(selected_asins))
+    # Fetch all data at once
+    review_data_cache = get_review_data_for_asins(conn, selected_asins, verified_filter)
     
-    for i, asin in enumerate(selected_asins):
-        with rating_cols[i]:
-            if asin in review_data_cache and not review_data_cache[asin].empty:
-                reviews_df = review_data_cache[asin]
-                st.markdown("**Rating Distribution**")
-                rating_counts = reviews_df['rating'].value_counts().reindex(range(1, 6), fill_value=0)
-                st.bar_chart(rating_counts)
+    # --- Tabbed Interface ---
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Sentiment Overview", "📈 Time Series", "📝 Textual Analysis", "🌐 Advanced Text (Coming Soon)"])
 
-                st.markdown("**Sentiment Distribution**")
-                sentiment_counts = reviews_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
-                st.bar_chart(sentiment_counts)
-            else:
-                st.info("No review data for this product.")
+    with tab1:
+        st.header("High-Level Sentiment Comparison")
+        st.markdown("""
+        This chart shows the overall sentiment breakdown for each product. The bars are centered on zero to make it easy 
+        to compare the balance between positive and negative feedback.
+        """)
+        fig = create_divergent_bar_chart(review_data_cache)
+        st.plotly_chart(fig, use_container_width=True)
 
-    # --- Section 3: Aspect Sentiment Comparison ---
-    st.markdown("---")
-    st.header("Aspect Sentiment Radar")
-    st.caption("Compares sentiment towards the top 5 most common aspects for each product.")
-    
-    radar_cols = st.columns(len(selected_asins))
-    for i, asin in enumerate(selected_asins):
-        with radar_cols[i]:
-             if asin in review_data_cache and not review_data_cache[asin].empty:
-                reviews_df = review_data_cache[asin]
-                aspect_summary_df = get_aspect_summary_for_comparison(reviews_df)
-
-                if not aspect_summary_df.empty:
-                    radar_df = aspect_summary_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
-                    categories = ['Positive', 'Negative', 'Neutral']
-                    for sent in categories:
-                        if sent not in radar_df.columns:
-                            radar_df[sent] = 0
-                    radar_df = radar_df[categories]
-
-                    fig = go.Figure()
-                    for aspect in radar_df.index:
-                        fig.add_trace(go.Scatterpolar(
-                            r=radar_df.loc[aspect].values,
-                            theta=categories,
-                            fill='toself',
-                            name=aspect
-                        ))
+    with tab2:
+        st.header("Sentiment & Rating Trends Over Time")
+        st.markdown("Compare how sentiment for each product has evolved.")
+        
+        cols = st.columns(len(selected_asins))
+        for i, asin in enumerate(selected_asins):
+            with cols[i]:
+                product_details = get_product_details(conn, asin).iloc[0]
+                st.subheader(f"Trend for '{product_details['product_title'][:30]}...'")
+                
+                df = review_data_cache.get(asin)
+                if df is not None and not df.empty:
+                    df['date'] = pd.to_datetime(df['date'])
+                    df['period'] = df['date'].dt.to_period('M').dt.start_time
                     
-                    fig.update_layout(
-                        polar=dict(radialaxis=dict(visible=True, range=[0, radar_df.max().max()])),
-                        showlegend=True,
-                        title=f"Aspects for {product_data_cache[asin]['product_title'][:30]}..."
-                    )
+                    sentiment_over_time = df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+                    
+                    fig = go.Figure()
+                    for sentiment in ['Positive', 'Neutral', 'Negative']:
+                        sentiment_df = sentiment_over_time[sentiment_over_time['sentiment'] == sentiment]
+                        fig.add_trace(go.Scatter(
+                            x=sentiment_df['period'], y=sentiment_df['count'],
+                            hoverinfo='x+y',
+                            mode='lines',
+                            name=sentiment,
+                            stackgroup='one' # This creates the stacked area chart
+                        ))
                     st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.info("Not enough data for aspect analysis.")
+                    st.info("No data to display trend.")
+                    
+    with tab3:
+        st.header("Differential Textual Analysis")
+        st.markdown("""
+        These **differential word clouds** highlight words that are uniquely characteristic of each product's reviews 
+        when compared to the others. A larger word means it's more representative of that specific product.
+        """)
+        create_differential_word_clouds(review_data_cache, selected_asins)
+        
+    with tab4:
+        st.header("Deep Textual Comparison")
+        st.info("Coming soon: Butterfly charts for direct phrase comparison and side-by-side co-occurrence networks.")
+
 
 if __name__ == "__main__":
     main()
