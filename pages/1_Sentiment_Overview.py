@@ -108,24 +108,47 @@ def main():
         with dist_col1:
             st.markdown("**Rating Distribution**")
             if not chart_data.empty:
-                rating_counts = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0)
-                total_ratings = len(chart_data)
-                for rating in range(5, 0, -1):
-                    count = rating_counts.get(rating, 0)
-                    percentage = (count / total_ratings * 100) if total_ratings > 0 else 0
-                    st.text(f"{rating} ⭐: {percentage:.1f}% ({count})")
-                    st.progress(int(percentage))
+                # Prepare data for Altair chart
+                rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
+                rating_counts_df.columns = ['rating', 'count']
+                rating_counts_df['rating_str'] = rating_counts_df['rating'].astype(str) + ' ⭐'
+
+                # Create the chart
+                rating_chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                    x=alt.X('count:Q', title='Number of Reviews'),
+                    y=alt.Y('rating_str:N', sort=alt.EncodingSortField(field="rating", order="descending"), title='Rating'),
+                    # Apply a color scale from green (5 stars) to red (1 star)
+                    color=alt.Color('rating:O',
+                                    scale=alt.Scale(
+                                        domain=[5, 4, 3, 2, 1],
+                                        range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']
+                                    ),
+                                    legend=None),
+                    tooltip=['rating_str', 'count']
+                ).properties(height=250)
+                st.altair_chart(rating_chart, use_container_width=True)
+
         with dist_col2:
             st.markdown("**Sentiment Distribution**")
             if not chart_data.empty:
-                sentiment_counts = chart_data['sentiment'].value_counts()
-                total_sentiments = len(chart_data)
-                sentiment_colors = {"Positive": "green", "Neutral": "grey", "Negative": "red"}
-                for sentiment in ['Positive', 'Neutral', 'Negative']:
-                    count = sentiment_counts.get(sentiment, 0)
-                    percentage = (count / total_sentiments * 100) if total_sentiments > 0 else 0
-                    st.markdown(f":{sentiment_colors.get(sentiment, 'default')}[{sentiment}]: {percentage:.1f}% ({count})")
-                    st.progress(int(percentage))    
+                # Prepare data for Altair chart
+                sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
+                sentiment_counts_df.columns = ['sentiment', 'count']
+
+                # Create the chart
+                sentiment_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
+                    x=alt.X('count:Q', title='Number of Reviews'),
+                    y=alt.Y('sentiment:N', sort=['Positive', 'Neutral', 'Negative'], title='Sentiment'),
+                    # Apply your consistent sentiment colors
+                    color=alt.Color('sentiment:N',
+                                    scale=alt.Scale(
+                                        domain=['Positive', 'Neutral', 'Negative'],
+                                        range=['#1a9850', '#cccccc', '#d73027']
+                                    ),
+                                    legend=None),
+                    tooltip=['sentiment', 'count']
+                ).properties(height=250)
+                st.altair_chart(sentiment_chart, use_container_width=True)    
                 
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
