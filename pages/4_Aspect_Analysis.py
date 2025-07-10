@@ -263,5 +263,43 @@ def main():
                         if st.button("Next 5 Reviews ➡️"):
                             st.session_state.aspect_review_page += 1
                             st.rerun()
+
+    # --- NEW: Comparative Aspect Analysis ---
+    st.markdown("---")
+    st.markdown("### ⚖️ Comparative Aspect Analysis")
+    st.caption("Select two or more aspects to compare their sentiment distributions side-by-side.")
+
+    if top_aspects_list:
+        selected_for_comparison = st.multiselect(
+            "Select aspects to compare:",
+            options=top_aspects_list,
+            default=top_aspects_list[:2] if len(top_aspects_list) >= 2 else []
+        )
+
+        if len(selected_for_comparison) >= 2:
+            # Filter the summary dataframe for the selected aspects
+            comparison_df = aspect_summary_df[aspect_summary_df['aspect'].isin(selected_for_comparison)]
+            
+            # Group by aspect and sentiment to get counts
+            comparison_counts = comparison_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+
+            # Create the grouped bar chart
+            fig = px.bar(
+                comparison_counts,
+                x='aspect',
+                y='count',
+                color='sentiment',
+                barmode='group',
+                title='Side-by-Side Sentiment Comparison',
+                labels={'count': 'Number of Mentions', 'aspect': 'Product Aspect'},
+                color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Please select at least two aspects to generate a comparison.")
+    else:
+        st.warning("No aspects detected to compare.")
+
 if __name__ == "__main__":
     main()
