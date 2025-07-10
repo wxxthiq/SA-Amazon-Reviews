@@ -12,14 +12,13 @@ KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-reviews-duckdb-top100"
 
 # --- Page Setup ---
 st.set_page_config(layout="wide", page_title="Amazon Review Search")
-st.title("🔎 Amazon Product Search")
-st.info("This app showcases analysis on the Top 100 most-reviewed products across selected Amazon categories.")
 
-# --- Data Loading ---
+# --- Data Loading and DB Connection ---
 a_download_data_with_versioning(KAGGLE_DATASET_SLUG, DB_PATH, DB_VERSION)
 conn = connect_to_db(DB_PATH)
 
 # --- Session State Initialization ---
+# Ensure all session state variables are initialized only once
 if 'page' not in st.session_state: st.session_state.page = 0
 if 'selected_product' not in st.session_state: st.session_state.selected_product = None
 if 'category' not in st.session_state: st.session_state.category = "--- Select a Category ---"
@@ -27,19 +26,24 @@ if 'search_term' not in st.session_state: st.session_state.search_term = ""
 if 'sort_by' not in st.session_state: st.session_state.sort_by = "Popularity (Most Reviews)"
 if 'rating_range' not in st.session_state: st.session_state.rating_range = (1.0, 5.0)
 if 'review_count_range' not in st.session_state: st.session_state.review_count_range = (0, 50000)
-# --- NEW: Initialize list for product comparison ---
 if 'products_to_compare' not in st.session_state: st.session_state.products_to_compare = []
 
-
-# --- NEW: Comparison Sidebar ---
+# --- Sidebar for Product Comparison ---
 with st.sidebar:
     st.header("⚖️ Product Comparison")
     if not st.session_state.products_to_compare:
-        st.info("Select up to 4 products from the list to compare.")
+        st.info("Select 2 to 4 products from the main page to compare.")
     else:
+        # Fetch product titles for a better UX in the sidebar
         for asin in st.session_state.products_to_compare:
-            st.markdown(f"- `{asin}`")
+            details = get_product_details(conn, asin)
+            if not details.empty:
+                st.markdown(f"- **{details.iloc[0]['product_title']}**")
+            else:
+                st.markdown(f"- `{asin}`")
             
+    # This is the logic that shows the button. It will now correctly appear
+    # as soon as the second item is selected and the app reruns.
     if len(st.session_state.products_to_compare) >= 2:
         if st.button("Compare Selected Products", use_container_width=True, type="primary"):
             st.switch_page("pages/5_Product_Comparison.py")
@@ -49,6 +53,9 @@ with st.sidebar:
             st.session_state.products_to_compare = []
             st.rerun()
 
+# --- Main Page UI ---
+st.title("🔎 Amazon Product Search")
+st.info("This app showcases analysis on the Top 100 most-reviewed products across selected Amazon categories.")
 
 # --- Search and Filter UI ---
 col1, col2, col3 = st.columns(3)
@@ -56,31 +63,24 @@ with col1:
     st.session_state.search_term = st.text_input("Search by product title:", value=st.session_state.search_term)
 with col2:
     available_categories = get_all_categories(conn)
-    def on_category_change():
-        st.session_state.page = 0
-    st.session_state.category = st.selectbox("Filter by Category", available_categories, index=available_categories.index(st.session_state.category), on_change=on_category_change)
+    # Ensure category from session state is valid
+    if st.session_state.category not in available_categories:
+        st.session_state.category = "--- Select a Category ---"
+    st.session_state.category = st.selectbox(
+        "Filter by Category", 
+        available_categories, 
+        index=available_categories.index(st.session_state.category), 
+        on_change=lambda: st.session_state.update(page=0) # Reset page on change
+    )
 with col3:
     st.session_state.sort_by = st.selectbox("Sort By", ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"], index=["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"].index(st.session_state.sort_by))
 
 with st.expander("✨ Advanced Filters"):
     adv_col1, adv_col2 = st.columns(2)
     with adv_col1:
-        st.session_state.rating_range = st.slider(
-            "Filter by Average Rating:",
-            min_value=1.0,
-            max_value=5.0,
-            value=st.session_state.rating_range,
-            step=0.1
-        )
+        st.session_state.rating_range = st.slider("Filter by Average Rating:", min_value=1.0, max_value=5.0, value=st.session_state.rating_range, step=0.1)
     with adv_col2:
-        st.session_state.review_count_range = st.slider(
-            "Filter by Number of Reviews:",
-            min_value=0,
-            max_value=50000,
-            value=st.session_state.review_count_range,
-            step=100
-        )
-
+        st.session_state.review_count_range = st.slider("Filter by Number of Reviews:", min_value=0, max_value=50000, value=st.session_state.review_count_range, step=100)
 
 # --- Product Display Logic ---
 if st.session_state.category == "--- Select a Category ---":
@@ -125,13 +125,21 @@ else:
                                 st.switch_page("pages/1_Sentiment_Overview.py")
                         with b_col2:
                             is_selected = asin in st.session_state.products_to_compare
-                            if st.checkbox("Compare", value=is_selected, key=f"compare_{asin}", disabled=not is_selected and len(st.session_state.products_to_compare) >= 4):
-                                if not is_selected:
-                                    st.session_state.products_to_compare.append(asin)
-                                    st.rerun()
-                                else:
-                                    st.session_state.products_to_compare.remove(asin)
-                                    st.rerun()
+                            # Use a callback for the checkbox to handle state changes
+                            def checkbox_callback(selected_asin):
+                                if selected_asin in st.session_state.products_to_compare:
+                                    st.session_state.products_to_compare.remove(selected_asin)
+                                elif len(st.session_state.products_to_compare) < 4:
+                                    st.session_state.products_to_compare.append(selected_asin)
+
+                            st.checkbox(
+                                "Compare", 
+                                value=is_selected, 
+                                key=f"compare_{asin}", 
+                                on_change=checkbox_callback,
+                                args=(asin,),
+                                disabled=not is_selected and len(st.session_state.products_to_compare) >= 4
+                            )
 
     # --- Pagination Buttons ---
     st.markdown("---")
