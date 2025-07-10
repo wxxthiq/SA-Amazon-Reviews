@@ -264,37 +264,54 @@ def main():
                             st.session_state.aspect_review_page += 1
                             st.rerun()
 
-    # --- NEW: Comparative Aspect Analysis ---
+# --- UPDATED: Comparative Aspect Analysis using Radar Chart ---
     st.markdown("---")
     st.markdown("### ⚖️ Comparative Aspect Analysis")
-    st.caption("Select two or more aspects to compare their sentiment distributions side-by-side.")
+    st.caption("Select two or more aspects to compare their sentiment profiles using a radar chart.")
 
     if top_aspects_list:
         selected_for_comparison = st.multiselect(
             "Select aspects to compare:",
             options=top_aspects_list,
-            default=top_aspects_list[:2] if len(top_aspects_list) >= 2 else []
+            default=top_aspects_list[:3] if len(top_aspects_list) >= 3 else top_aspects_list
         )
 
         if len(selected_for_comparison) >= 2:
-            # Filter the summary dataframe for the selected aspects
             comparison_df = aspect_summary_df[aspect_summary_df['aspect'].isin(selected_for_comparison)]
             
-            # Group by aspect and sentiment to get counts
-            comparison_counts = comparison_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+            # Pivot the data to get it into the right shape for the radar chart
+            radar_df = comparison_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
+            
+            # Ensure all sentiment categories are present
+            for sent in ['Positive', 'Negative', 'Neutral']:
+                if sent not in radar_df.columns:
+                    radar_df[sent] = 0
+            
+            # The categories will be the axes of our radar chart
+            categories = ['Positive', 'Negative', 'Neutral']
+            radar_df = radar_df[categories]
 
-            # Create the grouped bar chart
-            fig = px.bar(
-                comparison_counts,
-                x='aspect',
-                y='count',
-                color='sentiment',
-                barmode='group',
-                title='Side-by-Side Sentiment Comparison',
-                labels={'count': 'Number of Mentions', 'aspect': 'Product Aspect'},
-                color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+            fig = go.Figure()
+
+            # Add a trace for each aspect
+            for aspect in radar_df.index:
+                fig.add_trace(go.Scatterpolar(
+                    r=radar_df.loc[aspect].values,
+                    theta=categories,
+                    fill='toself',
+                    name=aspect
+                ))
+
+            fig.update_layout(
+              polar=dict(
+                radialaxis=dict(
+                  visible=True,
+                  range=[0, radar_df.max().max() * 1.1] # Set range dynamically
+                )),
+              showlegend=True,
+              title="Sentiment Profile Comparison"
             )
+
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Please select at least two aspects to generate a comparison.")
