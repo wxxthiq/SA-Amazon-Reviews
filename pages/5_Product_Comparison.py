@@ -84,7 +84,7 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
         barmode='stack', title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
         xaxis_title="Percentage of Mentions", yaxis_autorange='reversed', plot_bgcolor='white',
         legend=dict(orientation="h", yanchor="bottom", y=1.02), height=max(400, len(top_aspects) * 40),
-        xaxis=dict(tickformat='.0f', ticksufix='%'), uniformtext_minsize=8, uniformtext_mode='hide'
+        xaxis=dict(tickformat='.0f', ticksuffix='%'), uniformtext_minsize=8, uniformtext_mode='hide' # <-- THE FIX IS HERE
     )
     return fig
 
@@ -195,7 +195,6 @@ def main():
                     reviews_df = review_data_cache.get(asin)
                     if reviews_df is not None and not reviews_df.empty:
                         fig = create_single_product_aspect_chart(product_details['product_title'], reviews_df, top_aspects)
-                        # Make chart interactive
                         selected_point = plotly_events(fig, click_event=True, key=f"aspect_chart_{asin}")
                         if selected_point:
                             st.session_state.aspect_selection = {
@@ -210,19 +209,14 @@ def main():
         else:
             st.warning("No common aspects could be found for the selected products and filters.")
         
-        # --- Display Review Snippets ---
         if st.session_state.aspect_selection:
             st.markdown("---")
             selection = st.session_state.aspect_selection
             st.subheader(f"Reviews for '{selection['aspect']}' with '{selection['sentiment']}' sentiment")
             
-            # Filter reviews based on selection
             product_reviews = review_data_cache.get(selection['asin'])
-            
-            # This is a simplified sentiment check; a more robust solution would re-calculate polarity
             filtered_reviews = product_reviews[product_reviews['text'].str.contains(r'\b' + re.escape(selection['aspect']) + r'\b', case=False, na=False)]
             
-            # Simple sentiment filtering for display
             if selection['sentiment'] == 'Positive':
                 final_reviews = filtered_reviews[filtered_reviews['text_polarity'] > 0.1]
             elif selection['sentiment'] == 'Negative':
@@ -240,11 +234,9 @@ def main():
                 for _, review in reviews_to_display.iterrows():
                     with st.container(border=True):
                         st.caption(f"Rating: {review['rating']} ⭐ | Date: {review['date']}")
-                        # Highlight the aspect in the text
                         highlighted_text = re.sub(f'({re.escape(selection["aspect"])})', r'<mark>\1</mark>', review['text'], flags=re.IGNORECASE)
                         st.markdown(f"> {highlighted_text}", unsafe_allow_html=True)
 
-                # Pagination
                 total_reviews = len(final_reviews)
                 total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
                 if total_pages > 1:
@@ -257,7 +249,6 @@ def main():
 
     with tab2:
         st.subheader("Sentiment Trends Over Time")
-        # Logic remains the same
         cols = st.columns(len(selected_asins))
         for i, asin in enumerate(selected_asins):
             with cols[i]:
@@ -276,7 +267,6 @@ def main():
 
     with tab3:
         st.subheader("Differential Word Clouds")
-        # Logic remains the same
         create_differential_word_clouds(review_data_cache, selected_asins)
 
 if __name__ == "__main__":
