@@ -127,9 +127,8 @@ def main():
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
     # --- ASPECT SENTIMENT SUMMARY (WITH ENHANCED EXTRACTION) ---
-    st.markdown("---")
     st.markdown("### 🔎 Aspect Sentiment Summary")
-    st.caption("A summary of sentiment towards the most common product features (aspects).")
+    st.caption("This chart automatically identifies key product features (aspects) like 'battery life' or 'screen quality' from reviews and shows the sentiment breakdown for each.")
 
     @st.cache_data
     def get_aspect_summary_with_chunks(data):
@@ -191,7 +190,7 @@ def main():
     # --- KEYWORD ANALYSIS SECTION (WITH N-GRAMS) ---
     st.markdown("---")
     st.markdown("### ☁️ Keyword & Phrase Summary")
-    st.caption("The most common terms found in positive and negative reviews. Use the options below to explore single words or multi-word phrases.")
+    st.caption("These word clouds show the most frequent terms in positive vs. negative reviews. Use the 'Term Type' selector to analyze single words (unigrams), two-word phrases (bigrams), or three-word phrases (trigrams).")
 
     col1, col2 = st.columns([1,1])
     with col1:
@@ -260,6 +259,7 @@ def main():
         st.switch_page("pages/3_Keyword_Analysis.py")
     
     st.markdown("### Rating vs. Text Discrepancy")
+    st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Points in the top-left (high rating, negative text) or bottom-right (low rating, positive text) are the most discrepant. Click a point to read the review.")
     plot_col, review_col = st.columns([2, 1])
     with plot_col:
         # ... (code omitted for brevity)
