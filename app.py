@@ -31,8 +31,6 @@ if 'review_count_range' not in st.session_state: st.session_state.review_count_r
 if 'products_to_compare' not in st.session_state: st.session_state.products_to_compare = []
 
 
-# app.py
-
 # --- NEW: Comparison Sidebar ---
 with st.sidebar:
     st.header("⚖️ Product Comparison")
@@ -42,7 +40,6 @@ with st.sidebar:
         for asin in st.session_state.products_to_compare:
             st.markdown(f"- `{asin}`")
             
-    # This is the logic that shows the button
     if len(st.session_state.products_to_compare) >= 2:
         if st.button("Compare Selected Products", use_container_width=True, type="primary"):
             st.switch_page("pages/5_Product_Comparison.py")
@@ -79,7 +76,7 @@ with st.expander("✨ Advanced Filters"):
         st.session_state.review_count_range = st.slider(
             "Filter by Number of Reviews:",
             min_value=0,
-            max_value=50000, 
+            max_value=50000,
             value=st.session_state.review_count_range,
             step=100
         )
@@ -121,14 +118,12 @@ else:
                         review_count = row.get('review_count', 0)
                         st.caption(f"Avg. Rating: {avg_rating:.2f} ⭐ ({int(review_count)} reviews)")
                         
-                        # --- MODIFIED: Button layout and logic ---
                         b_col1, b_col2 = st.columns(2)
                         with b_col1:
                             if st.button("View Details", key=f"details_{asin}"):
                                 st.session_state.selected_product = asin
                                 st.switch_page("pages/1_Sentiment_Overview.py")
                         with b_col2:
-                            # --- NEW: Checkbox for comparison ---
                             is_selected = asin in st.session_state.products_to_compare
                             if st.checkbox("Compare", value=is_selected, key=f"compare_{asin}", disabled=not is_selected and len(st.session_state.products_to_compare) >= 4):
                                 if not is_selected:
