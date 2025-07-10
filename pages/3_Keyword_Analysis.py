@@ -275,7 +275,25 @@ def main():
         # (The pyvis rendering code remains the same)
         net = Network(height="600px", width="100%", notebook=True, cdn_resources="in_line", bgcolor="#222222", font_color="white")
         net.from_nx(G)
-        options = """...""" # options string from previous step
+        options = """
+        var options = {
+          "nodes": {
+            "font": { "size": 20, "face": "Tahoma", "color": "#ffffff" },
+            "scaling": { "min": 15, "max": 60 }
+          },
+          "edges": {
+            "scaling": { "min": 1, "max": 20 },
+            "smooth": { "enabled": false }
+          },
+          "physics": {
+            "enabled": true,
+            "stabilization": { "enabled": true, "iterations": 500 },
+            "barnesHut": {
+              "gravitationalConstant": -80000, "springConstant": 0.001, "springLength": 200
+            }
+          }
+        }
+        """
         net.set_options(options)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
             net.save_graph(tmp_file.name)
