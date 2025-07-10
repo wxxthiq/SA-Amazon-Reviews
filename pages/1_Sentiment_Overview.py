@@ -93,8 +93,8 @@ def main():
             with st.popover("🖼️ View Image Gallery"):
                 st.image(image_urls, use_container_width=True)
         # --- Navigation to Review Explorer ---
-        st.subheader("📝 Browse Individual Reviews")
-        if st.button("Explore All Reviews"):
+        #st.subheader("📝 Browse Individual Reviews")
+        if st.button("📝 Explore All Reviews"):
             st.switch_page("pages/2_Review_Explorer.py")
             
     with right_col:
