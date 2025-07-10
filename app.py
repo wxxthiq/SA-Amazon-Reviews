@@ -1,7 +1,13 @@
 # app.py (Main Search Page)
 import streamlit as st
 import pandas as pd
-from utils.database_utils import connect_to_db, get_all_categories, get_filtered_products, a_download_data_with_versioning
+from utils.database_utils import (
+    connect_to_db, 
+    get_all_categories, 
+    get_filtered_products, 
+    a_download_data_with_versioning,
+    get_product_details # <-- THE FIX IS HERE
+)
 
 # --- App Configuration ---
 DB_PATH = "amazon_reviews_top100.duckdb"
