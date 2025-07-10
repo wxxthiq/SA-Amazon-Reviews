@@ -166,7 +166,7 @@ def main():
         st.switch_page("app.py")
 
     if 'products_to_compare' not in st.session_state or not st.session_state.products_to_compare:
-        st.warning("Please select 2 to 4 products from the main page to compare.")
+        st.warning("Please select 2 to 4 products from the main search page to compare.")
         st.stop()
     
     selected_asins = st.session_state.products_to_compare
@@ -201,19 +201,8 @@ def main():
     with tab1:
         st.subheader("Comparative Aspect-Based Sentiment")
         st.caption("Hover over a bar to see details. Click a segment to see matching reviews.")
-        
-        num_aspects = st.slider("Select number of aspects to compare:", min_value=3, max_value=15, value=7, on_change=lambda: st.session_state.update(aspect_selection=None, aspect_hover=None))
+        num_aspects = st.slider("Select number of aspects to compare:", min_value=3, max_value=15, value=7, on_change=reset_selection)
         top_aspects = get_top_aspects(review_data_cache, num_aspects)
-        
-        # --- Custom Hover Info Display Area ---
-        if st.session_state.get('aspect_hover'):
-            hover_data = st.session_state.aspect_hover
-            with st.container(border=True):
-                st.markdown(
-                    f"**Aspect:** `{hover_data['aspect']}` | "
-                    f"**Sentiment:** `{hover_data['sentiment']}` | "
-                    f"**Proportion:** `{hover_data['percentage']:.1f}%` ({hover_data['mentions']} mentions)"
-                )
         
         if top_aspects:
             chart_cols = st.columns(len(selected_asins))
@@ -224,15 +213,13 @@ def main():
                     if reviews_df is not None and not reviews_df.empty:
                         fig = create_single_product_aspect_chart(product_details['product_title'], reviews_df, top_aspects)
                         
-                        ## Use plotly_events for both hover and click
+                        # --- THIS IS THE ROBUST EVENT HANDLING BLOCK ---
                         selected_point = plotly_events(fig, click_event=True, hover_event=True, key=f"aspect_chart_{asin}")
                         
-                        # --- ROBUST EVENT HANDLING ---
                         if selected_point:
-                            # Use .get() to safely access the key. It returns None if the key doesn't exist.
-                            event_type = selected_point[0].get('event_type')
+                            # Safely get the event type. It defaults to 'hover' if the key is missing.
+                            event_type = selected_point[0].get('event_type', 'hover')
 
-                            # Handle Click Event
                             if event_type == 'click':
                                 click_info = selected_point[0]
                                 st.session_state.aspect_selection = {
@@ -241,26 +228,40 @@ def main():
                                     'sentiment': fig.data[click_info['curveNumber']]['name']
                                 }
                                 st.session_state.aspect_review_page = 0
-                                st.session_state.aspect_hover = None # Clear hover on click
+                                st.session_state.aspect_hover = None
                                 st.rerun()
                             
-                            # Handle Hover Event (as the default if it's not a click)
+                            # All non-click events are treated as hover events
                             else:
                                 hover_info = selected_point[0]
-                                st.session_state.aspect_hover = {
+                                current_hover = {
                                     'aspect': hover_info['y'],
                                     'sentiment': fig.data[hover_info['curveNumber']]['name'],
                                     'percentage': abs(hover_info['x']),
                                     'mentions': fig.data[hover_info['curveNumber']]['customdata'][hover_info['pointNumber']]
                                 }
-                                st.rerun()
-                            
+                                # Rerun only if hover info has changed to avoid flickering
+                                if current_hover != st.session_state.get('aspect_hover'):
+                                    st.session_state.aspect_hover = current_hover
+                                    st.rerun()
                     else:
                         st.info(f"No review data for '{product_details['product_title'][:30]}...' to analyze.")
         else:
             st.warning("No common aspects could be found for the selected products and filters.")
-            
-        if st.session_state.aspect_selection:
+
+        # --- Custom Hover Info Display Area ---
+        if st.session_state.get('aspect_hover') and not st.session_state.get('aspect_selection'):
+            hover_data = st.session_state.aspect_hover
+            st.markdown("---")
+            st.subheader("Hover Details")
+            st.markdown(
+                f"**Aspect:** `{hover_data['aspect']}` | "
+                f"**Sentiment:** `{hover_data['sentiment']}` | "
+                f"**Proportion:** `{hover_data['percentage']:.1f}%` ({hover_data['mentions']} mentions)"
+            )
+
+        # --- Review Snippets Display Area ---
+        if st.session_state.get('aspect_selection'):
             st.markdown("---")
             selection = st.session_state.aspect_selection
             st.subheader(f"Reviews for '{selection['aspect']}' with '{selection['sentiment']}' sentiment")
@@ -272,14 +273,13 @@ def main():
                 final_reviews = filtered_reviews[filtered_reviews['text_polarity'] > 0.1]
             elif selection['sentiment'] == 'Negative':
                 final_reviews = filtered_reviews[filtered_reviews['text_polarity'] < -0.1]
-            else: # Neutral
+            else:
                 final_reviews = filtered_reviews[(filtered_reviews['text_polarity'] >= -0.1) & (filtered_reviews['text_polarity'] <= 0.1)]
 
             if final_reviews.empty:
                 st.warning("No matching reviews found.")
             else:
                 start_idx = st.session_state.aspect_review_page * REVIEWS_PER_PAGE
-                end_idx = start_idx + REVIEWS_PER_PAGE
                 reviews_to_display = final_reviews.iloc[start_idx:end_idx]
 
                 for _, review in reviews_to_display.iterrows():
