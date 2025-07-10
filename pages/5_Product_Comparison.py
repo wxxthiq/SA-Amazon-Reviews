@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from streamlit_plotly_events import plotly_events
 from utils.database_utils import connect_to_db, get_product_details, get_reviews_for_product, get_product_date_range
 from collections import Counter
 from wordcloud import WordCloud
@@ -17,45 +18,38 @@ st.set_page_config(layout="wide", page_title="Advanced Product Comparison")
 DB_PATH = "amazon_reviews_top100.duckdb"
 conn = connect_to_db(DB_PATH)
 
+REVIEWS_PER_PAGE = 5
+
 @st.cache_resource
 def load_spacy_model():
     return spacy.load("en_core_web_sm")
-
 nlp = load_spacy_model()
 
-# --- Helper Functions ---
+# --- Session State Initialization for this page ---
+if 'aspect_selection' not in st.session_state:
+    st.session_state.aspect_selection = None
+if 'aspect_review_page' not in st.session_state:
+    st.session_state.aspect_review_page = 0
 
+# --- Helper Functions ---
 @st.cache_data
 def get_review_data_for_asins(_conn, asins, date_range, rating_filter, sentiment_filter, verified_filter):
     review_data = {}
     for asin in asins:
-        review_data[asin] = get_reviews_for_product(
-            _conn, asin, date_range, tuple(rating_filter), tuple(sentiment_filter), verified_filter
-        )
+        review_data[asin] = get_reviews_for_product(_conn, asin, date_range, tuple(rating_filter), tuple(sentiment_filter), verified_filter)
     return review_data
 
 @st.cache_data
 def get_top_aspects(_review_data_cache, top_n_aspects):
     all_text_corpus = pd.concat([df['text'] for df in _review_data_cache.values() if not df.empty]).astype(str)
     if all_text_corpus.empty: return []
-
-    def clean_chunk(chunk):
-        return " ".join(token.lemma_.lower() for token in chunk if token.pos_ in ['NOUN', 'PROPN', 'ADJ'])
-
-    all_aspects = []
-    for doc in nlp.pipe(all_text_corpus):
-        for chunk in doc.noun_chunks:
-            cleaned = clean_chunk(chunk)
-            if cleaned and len(cleaned) > 2: all_aspects.append(cleaned)
-    
+    def clean_chunk(chunk): return " ".join(token.lemma_.lower() for token in chunk if token.pos_ in ['NOUN', 'PROPN', 'ADJ'])
+    all_aspects = [clean_chunk(chunk) for doc in nlp.pipe(all_text_corpus) for chunk in doc.noun_chunks if clean_chunk(chunk) and len(clean_chunk(chunk)) > 2]
     if not all_aspects: return []
     return [aspect for aspect, freq in Counter(all_aspects).most_common(top_n_aspects)]
 
 def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
-    """
-    --- FINAL VERSION ---
-    Creates a true divergent STACKED bar chart for a single product's aspects.
-    """
+    """Creates a 100% normalized stacked bar chart for aspect sentiment."""
     aspect_sentiments = []
     for aspect in top_aspects:
         aspect_reviews = reviews_df[reviews_df['text'].str.contains(r'\b' + re.escape(aspect) + r'\b', case=False, na=False)]
@@ -75,38 +69,26 @@ def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
         if sent not in summary.columns: summary[sent] = 0
             
     summary = summary.reindex(top_aspects).fillna(0)
-    total_mentions = summary.sum(axis=1)
-    summary_pct = summary.div(total_mentions, axis=0) * 100
-
-    # Data prep for divergent stacked bars
-    summary_pct['Neutral_half'] = summary_pct['Neutral'] / 2
+    summary_pct = summary.div(summary.sum(axis=1), axis=0) * 100
 
     fig = go.Figure()
-    
-    # --- Correctly build the divergent stacked bar ---
-    fig.add_trace(go.Bar(y=summary_pct.index, x=summary_pct['Positive'], name='Positive', orientation='h', marker_color='#1a9850'))
-    fig.add_trace(go.Bar(y=summary_pct.index, x=summary_pct['Neutral_half'], name='Neutral', orientation='h', marker_color='#cccccc'))
-    fig.add_trace(go.Bar(y=summary_pct.index, x=-summary_pct['Negative'], name='Negative', orientation='h', marker_color='#d73027'))
-    fig.add_trace(go.Bar(y=summary_pct.index, x=-summary_pct['Neutral_half'], name='Neutral', orientation='h', marker_color='#cccccc', showlegend=False))
+    colors = {'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}
+    for sentiment in ['Positive', 'Neutral', 'Negative']:
+        fig.add_trace(go.Bar(
+            y=summary_pct.index, x=summary_pct[sentiment], name=sentiment, orientation='h',
+            marker_color=colors[sentiment], customdata=summary.index,
+            hovertemplate='<b>%{y}</b><br>Sentiment: ' + sentiment + '<br>Mentions: %{x:.1f}%<extra></extra>'
+        ))
     
     fig.update_layout(
-        barmode='relative', # This creates the stacked effect
-        title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
-        xaxis_title="Percentage of Mentions",
-        yaxis_autorange='reversed',
-        plot_bgcolor='white',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
-        height=max(400, len(top_aspects) * 40),
-        xaxis=dict(
-            tickformat='%',
-            # Custom tick labels to show positive values on both sides of zero
-            tickvals=[-100, -75, -50, -25, 0, 25, 50, 75, 100],
-            ticktext=['100', '75', '50', '25', '0', '25', '50', '75', '100']
-        )
+        barmode='stack', title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
+        xaxis_title="Percentage of Mentions", yaxis_autorange='reversed', plot_bgcolor='white',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02), height=max(400, len(top_aspects) * 40),
+        xaxis=dict(tickformat='.0f', ticksufix='%'), uniformtext_minsize=8, uniformtext_mode='hide'
     )
     return fig
 
-
+# (Other functions like display_product_header and create_differential_word_clouds remain here)
 def display_product_header(product_details, reviews_df):
     with st.container(border=True):
         st.subheader(product_details['product_title'])
@@ -159,12 +141,11 @@ def create_differential_word_clouds(review_data_cache, asins):
             ax.axis("off")
             st.pyplot(fig)
 
-
 # --- Main App Logic ---
 def main():
     st.title("⚖️ Advanced Product Comparison")
-
     if st.button("⬅️ Back to Search"):
+        st.session_state.aspect_selection = None
         st.switch_page("app.py")
 
     if 'products_to_compare' not in st.session_state or not st.session_state.products_to_compare:
@@ -182,10 +163,11 @@ def main():
         min_d, max_d = get_product_date_range(conn, asin)
         min_dates.append(min_d); max_dates.append(max_d)
     
-    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=(min(min_dates), max(max_dates)))
-    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=[1,2,3,4,5], default=[1,2,3,4,5])
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=['Positive','Negative','Neutral'], default=['Positive','Negative','Neutral'])
-    selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"])
+    def reset_selection(): st.session_state.aspect_selection = None
+    selected_date_range = st.sidebar.date_input("Filter by Date Range", value=(min(min_dates), max(max_dates)), on_change=reset_selection)
+    selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=[1,2,3,4,5], default=[1,2,3,4,5], on_change=reset_selection)
+    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=['Positive','Negative','Neutral'], default=['Positive','Negative','Neutral'], on_change=reset_selection)
+    selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], on_change=reset_selection)
 
     review_data_cache = get_review_data_for_asins(conn, selected_asins, selected_date_range, selected_ratings, selected_sentiments, selected_verified)
     
@@ -193,9 +175,7 @@ def main():
     cols = st.columns(len(selected_asins))
     for i, asin in enumerate(selected_asins):
         with cols[i]:
-            product_details = get_product_details(conn, asin).iloc[0]
-            reviews_df = review_data_cache.get(asin, pd.DataFrame())
-            display_product_header(product_details, reviews_df)
+            display_product_header(get_product_details(conn, asin).iloc[0], review_data_cache.get(asin, pd.DataFrame()))
 
     st.markdown("---")
     
@@ -203,10 +183,8 @@ def main():
 
     with tab1:
         st.subheader("Comparative Aspect-Based Sentiment")
-        st.markdown("This chart compares sentiment towards the most common features, identified across all selected products. Use the slider to change the number of features shown.")
-        
-        num_aspects = st.slider("Select number of aspects to compare:", min_value=3, max_value=15, value=7)
-        
+        st.caption("Click on any bar segment to see the corresponding review snippets below.")
+        num_aspects = st.slider("Select number of aspects to compare:", min_value=3, max_value=15, value=7, on_change=reset_selection)
         top_aspects = get_top_aspects(review_data_cache, num_aspects)
         
         if top_aspects:
@@ -217,14 +195,69 @@ def main():
                     reviews_df = review_data_cache.get(asin)
                     if reviews_df is not None and not reviews_df.empty:
                         fig = create_single_product_aspect_chart(product_details['product_title'], reviews_df, top_aspects)
-                        st.plotly_chart(fig, use_container_width=True)
+                        # Make chart interactive
+                        selected_point = plotly_events(fig, click_event=True, key=f"aspect_chart_{asin}")
+                        if selected_point:
+                            st.session_state.aspect_selection = {
+                                'asin': asin,
+                                'aspect': selected_point[0]['y'],
+                                'sentiment': fig.data[selected_point[0]['curveNumber']]['name']
+                            }
+                            st.session_state.aspect_review_page = 0
+                            st.rerun()
                     else:
                         st.info(f"No review data for '{product_details['product_title'][:30]}...' to analyze.")
         else:
             st.warning("No common aspects could be found for the selected products and filters.")
+        
+        # --- Display Review Snippets ---
+        if st.session_state.aspect_selection:
+            st.markdown("---")
+            selection = st.session_state.aspect_selection
+            st.subheader(f"Reviews for '{selection['aspect']}' with '{selection['sentiment']}' sentiment")
+            
+            # Filter reviews based on selection
+            product_reviews = review_data_cache.get(selection['asin'])
+            
+            # This is a simplified sentiment check; a more robust solution would re-calculate polarity
+            filtered_reviews = product_reviews[product_reviews['text'].str.contains(r'\b' + re.escape(selection['aspect']) + r'\b', case=False, na=False)]
+            
+            # Simple sentiment filtering for display
+            if selection['sentiment'] == 'Positive':
+                final_reviews = filtered_reviews[filtered_reviews['text_polarity'] > 0.1]
+            elif selection['sentiment'] == 'Negative':
+                final_reviews = filtered_reviews[filtered_reviews['text_polarity'] < -0.1]
+            else: # Neutral
+                final_reviews = filtered_reviews[(filtered_reviews['text_polarity'] >= -0.1) & (filtered_reviews['text_polarity'] <= 0.1)]
+
+            if final_reviews.empty:
+                st.warning("No matching reviews found.")
+            else:
+                start_idx = st.session_state.aspect_review_page * REVIEWS_PER_PAGE
+                end_idx = start_idx + REVIEWS_PER_PAGE
+                reviews_to_display = final_reviews.iloc[start_idx:end_idx]
+
+                for _, review in reviews_to_display.iterrows():
+                    with st.container(border=True):
+                        st.caption(f"Rating: {review['rating']} ⭐ | Date: {review['date']}")
+                        # Highlight the aspect in the text
+                        highlighted_text = re.sub(f'({re.escape(selection["aspect"])})', r'<mark>\1</mark>', review['text'], flags=re.IGNORECASE)
+                        st.markdown(f"> {highlighted_text}", unsafe_allow_html=True)
+
+                # Pagination
+                total_reviews = len(final_reviews)
+                total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
+                if total_pages > 1:
+                    nav_cols = st.columns([1, 1, 1])
+                    if st.session_state.aspect_review_page > 0:
+                        nav_cols[0].button("⬅️ Previous", on_click=lambda: st.session_state.update(aspect_review_page=st.session_state.aspect_review_page - 1), use_container_width=True)
+                    nav_cols[1].write(f"Page {st.session_state.aspect_review_page + 1} of {total_pages}")
+                    if (st.session_state.aspect_review_page + 1) < total_pages:
+                        nav_cols[2].button("Next ➡️", on_click=lambda: st.session_state.update(aspect_review_page=st.session_state.aspect_review_page + 1), use_container_width=True)
 
     with tab2:
         st.subheader("Sentiment Trends Over Time")
+        # Logic remains the same
         cols = st.columns(len(selected_asins))
         for i, asin in enumerate(selected_asins):
             with cols[i]:
@@ -243,6 +276,7 @@ def main():
 
     with tab3:
         st.subheader("Differential Word Clouds")
+        # Logic remains the same
         create_differential_word_clouds(review_data_cache, selected_asins)
 
 if __name__ == "__main__":
