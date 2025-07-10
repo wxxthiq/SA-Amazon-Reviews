@@ -59,42 +59,71 @@ def get_top_aspects(_review_data_cache, top_n_aspects):
     return [aspect for aspect, freq in Counter(all_aspects).most_common(top_n_aspects)]
 
 def create_single_product_aspect_chart(product_title, reviews_df, top_aspects):
-    """Creates a divergent bar chart for a single product's aspects."""
+    """Creates a correctly centered divergent bar chart for a single product's aspects."""
     aspect_sentiments = []
     for aspect in top_aspects:
-        for text in reviews_df['text']:
-            if re.search(r'\b' + re.escape(aspect) + r'\b', str(text).lower()):
-                window = str(text).lower()[max(0, str(text).lower().find(aspect)-50):min(len(text), str(text).lower().find(aspect)+len(aspect)+50)]
-                polarity = TextBlob(window).sentiment.polarity
-                sentiment_cat = 'Positive' if polarity > 0.1 else 'Negative' if polarity < -0.1 else 'Neutral'
-                aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment_cat})
+        # Find all mentions of the aspect in the reviews
+        aspect_reviews = reviews_df[reviews_df['text'].str.contains(r'\b' + re.escape(aspect) + r'\b', case=False, na=False)]
+        for text in aspect_reviews['text']:
+            window = str(text).lower()[max(0, str(text).lower().find(aspect)-50):min(len(text), str(text).lower().find(aspect)+len(aspect)+50)]
+            polarity = TextBlob(window).sentiment.polarity
+            sentiment_cat = 'Positive' if polarity > 0.1 else 'Negative' if polarity < -0.1 else 'Neutral'
+            aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment_cat})
     
     if not aspect_sentiments:
         return go.Figure().update_layout(title=f"No aspects found for '{product_title[:30]}...'")
     
     aspect_df = pd.DataFrame(aspect_sentiments)
-    summary = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
-    total_mentions = summary.groupby('aspect')['count'].transform('sum')
-    summary['percentage'] = (summary['count'] / total_mentions) * 100
-
-    pivot_df = summary.pivot_table(index='aspect', columns='sentiment', values='percentage', fill_value=0).reindex(top_aspects)
+    summary = aspect_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
     
+    # Ensure all sentiment columns exist
     for sent in ['Positive', 'Negative', 'Neutral']:
-        if sent not in pivot_df.columns: pivot_df[sent] = 0
+        if sent not in summary.columns:
+            summary[sent] = 0
             
-    pivot_df['Neutral_Left'] = -pivot_df['Neutral'] / 2
-    pivot_df['Neutral_Right'] = pivot_df['Neutral'] / 2
+    summary = summary.reindex(top_aspects) # Keep the original sort order
+    
+    # Calculate percentages
+    total_mentions = summary.sum(axis=1)
+    summary_pct = summary.div(total_mentions, axis=0) * 100
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(y=pivot_df.index, x=pivot_df['Positive'], name='Positive', orientation='h', marker_color='#1a9850'))
-    fig.add_trace(go.Bar(y=pivot_df.index, x=-pivot_df['Negative'], name='Negative', orientation='h', marker_color='#d73027'))
-    fig.add_trace(go.Bar(y=pivot_df.index, x=pivot_df['Neutral_Right'], name='Neutral', orientation='h', marker_color='#cccccc'))
-    fig.add_trace(go.Bar(y=pivot_df.index, x=pivot_df['Neutral_Left'], showlegend=False, orientation='h', marker_color='#cccccc'))
+    
+    # --- CORRECTED CHART LOGIC ---
+    # Add Negative bar starting from its negative value and ending at the start of the neutral bar
+    fig.add_trace(go.Bar(
+        y=summary_pct.index,
+        x=-summary_pct['Negative'],
+        name='Negative',
+        orientation='h',
+        marker_color='#d73027'
+    ))
+    # Add Neutral bar, centered on the zero line
+    fig.add_trace(go.Bar(
+        y=summary_pct.index,
+        x=summary_pct['Neutral'],
+        base=-summary_pct['Neutral']/2, # Base calculation to center the bar
+        name='Neutral',
+        orientation='h',
+        marker_color='#cccccc'
+    ))
+    # Add Positive bar, starting from the end of the neutral bar
+    fig.add_trace(go.Bar(
+        y=summary_pct.index,
+        x=summary_pct['Positive'],
+        name='Positive',
+        orientation='h',
+        marker_color='#1a9850'
+    ))
     
     fig.update_layout(
-        barmode='relative', title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
-        xaxis_title="Percentage of Mentions", yaxis_autorange='reversed', plot_bgcolor='white',
-        legend=dict(orientation="h", yanchor="bottom", y=1.02)
+        barmode='stack', # Use 'stack' mode which is equivalent to 'relative'
+        title_text=f"Aspect Sentiment for '{product_title[:30]}...'",
+        xaxis_title="Percentage of Mentions",
+        yaxis_autorange='reversed',
+        plot_bgcolor='white',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        height=max(400, len(top_aspects) * 40) # Dynamic height
     )
     return fig
 
