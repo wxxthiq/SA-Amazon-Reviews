@@ -13,7 +13,6 @@ KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-reviews-duckdb-top100"
 # --- Page Setup ---
 st.set_page_config(layout="wide", page_title="Amazon Review Search")
 st.title("🔎 Amazon Product Search")
-st.info("This app showcases analysis on the Top 100 most-reviewed products across selected Amazon categories.")
 st.info("ℹ️ **How to Use:** Start by selecting a product category from the dropdown menu. You can then use the search bar and advanced filters to find specific products.")
 
 # --- Data Loading ---
