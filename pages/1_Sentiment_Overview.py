@@ -120,7 +120,13 @@ def main():
                     count = sentiment_counts.get(sentiment, 0)
                     percentage = (count / total_sentiments * 100) if total_sentiments > 0 else 0
                     st.markdown(f":{sentiment_colors.get(sentiment, 'default')}[{sentiment}]: {percentage:.1f}% ({count})")
-                    st.progress(int(percentage))
+                    st.progress(int(percentage))    
+                    
+            # --- Navigation to Review Explorer ---
+            st.subheader("📝 Browse Individual Reviews")
+            if st.button("Explore All Reviews"):
+                st.switch_page("pages/2_Review_Explorer.py")
+                
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
         st.stop()
@@ -128,7 +134,7 @@ def main():
 
     # --- ASPECT SENTIMENT SUMMARY (WITH ENHANCED EXTRACTION) ---
     st.markdown("### 🔎 Aspect Sentiment Summary")
-    st.caption("This chart automatically identifies key product features (aspects) like 'battery life' or 'screen quality' from reviews and shows the sentiment breakdown for each.")
+    st.info("💡 This chart automatically identifies key product features (aspects) like 'battery life' or 'screen quality' from reviews and shows the sentiment breakdown for each.")
 
     @st.cache_data
     def get_aspect_summary_with_chunks(data):
@@ -150,7 +156,7 @@ def main():
         if not all_aspects:
             return pd.DataFrame()
             
-        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(7)]
+        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(5)]
 
         aspect_sentiments = []
         for aspect in top_aspects:
@@ -190,7 +196,7 @@ def main():
     # --- KEYWORD ANALYSIS SECTION (WITH N-GRAMS) ---
     st.markdown("---")
     st.markdown("### ☁️ Keyword & Phrase Summary")
-    st.caption("These word clouds show the most frequent terms in positive vs. negative reviews. Use the 'Term Type' selector to analyze single words (unigrams), two-word phrases (bigrams), or three-word phrases (trigrams).")
+    st.info("💡 These word clouds show the most frequent terms in positive vs. negative reviews. Use the 'Term Type' selector to analyze single words (unigrams), two-word phrases (bigrams), or three-word phrases (trigrams).")
 
     col1, col2 = st.columns([1,1])
     with col1:
@@ -380,12 +386,6 @@ def main():
                     category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                
-    # --- Navigation to Review Explorer ---
-    st.markdown("---")
-    st.subheader("📝 Browse Individual Reviews")
-    if st.button("Explore All Reviews"):
-        st.switch_page("pages/2_Review_Explorer.py")
 
 if __name__ == "__main__":
     main()
