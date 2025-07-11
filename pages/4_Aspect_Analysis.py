@@ -23,6 +23,11 @@ st.set_page_config(layout="wide", page_title="Aspect Analysis")
 def load_spacy_model():
     return spacy.load("en_core_web_sm")
 
+@st.cache_data
+def convert_df_to_csv(df):
+    """Converts a dataframe to a downloadable CSV file."""
+    return df.to_csv(index=False).encode('utf-8')
+
 nlp = load_spacy_model()
 DB_PATH = "amazon_reviews_top100.duckdb"
 conn = connect_to_db(DB_PATH)
@@ -279,7 +284,19 @@ def main():
             # --- Example Reviews Display with Sorting and Pagination ---
             st.markdown("---")
             st.markdown("**Example Reviews Mentioning this Aspect**")
-    
+            # --- NEW: Download Button ---
+            # The sorted_aspect_df is created just below this section in your existing code
+            if not aspect_df.empty:
+                csv_data = convert_df_to_csv(aspect_df)
+                st.download_button(
+                   label="📥 Download All Reviews for this Aspect",
+                   data=csv_data,
+                   file_name=f"{selected_asin}_{selected_aspect}_reviews.csv",
+                   mime="text/csv",
+                   use_container_width=True,
+                   # Add a little space before the sort dropdown
+                   help=f"Download all {len(aspect_df)} reviews that mention the aspect '{selected_aspect}'"
+                )
             sort_reviews_by = st.selectbox(
                 "Sort examples by:",
                 ("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),
