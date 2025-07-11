@@ -13,6 +13,7 @@ from itertools import combinations
 import streamlit.components.v1 as components
 import tempfile 
 import altair as alt
+import plotly.express as px
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
