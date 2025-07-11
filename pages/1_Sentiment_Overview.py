@@ -451,7 +451,7 @@ def main():
                 # DEFAULT VIEW with simple volume chart
                 fig = px.area(
                     rating_counts_over_time, x='period', y='count', color='rating',
-                    title="Rating Distribution Per {time_granularity.replace('ly', '')}",
+                    title=f"Rating Distribution Per {time_granularity.replace('ly', '')}",
                     color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
                     category_orders={"rating": [5, 4, 3, 2, 1]}
                 )
