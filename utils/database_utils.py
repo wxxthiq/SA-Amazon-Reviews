@@ -168,13 +168,18 @@ def get_product_date_range(_conn, asin):
     return min_date, max_date
 
 @st.cache_data
-def get_single_review_text(_conn, review_id):
-    """Fetches the full text of a single review by its unique ID."""
+def get_single_review_details(_conn, review_id):
+    """Fetches all details for a single review by its ID."""
     try:
-        result = _conn.execute("SELECT text FROM reviews WHERE review_id = ?", [review_id]).fetchone()
-        return result[0] if result else "Review text not found."
+        # --- MODIFIED: Added verified_purchase and helpful_vote ---
+        query = "SELECT review_title, text, date, verified_purchase, helpful_vote FROM reviews WHERE review_id = ?"
+        details_df = _conn.execute(query, [review_id]).fetchdf()
+        if not details_df.empty:
+            return details_df.iloc[0]
+        else:
+            return None
     except Exception:
-        return "Could not retrieve review text."
+        return None
 
 @st.cache_data
 def get_single_review_details(_conn, review_id):
