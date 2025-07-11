@@ -12,6 +12,7 @@ from pyvis.network import Network
 from itertools import combinations
 import streamlit.components.v1 as components
 import tempfile 
+import altair as alt
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
@@ -163,15 +164,33 @@ def main():
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**Rating Distribution**")
-            rating_dist = keyword_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).sort_index()
-            st.bar_chart(rating_dist)
+            rating_counts_df = keyword_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
+            rating_counts_df.columns = ['rating', 'count']
+            rating_counts_df['percentage'] = (rating_counts_df['count'] / len(keyword_df)) * 100
+            rating_counts_df['rating_str'] = rating_counts_df['rating'].astype(str) + ' ⭐'
+        
+            rating_chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                x=alt.X('count:Q', title='Number of Reviews'),
+                y=alt.Y('rating_str:N', sort=alt.EncodingSortField(field="rating", order="descending"), title=None),
+                color=alt.Color('rating:O', scale=alt.Scale(domain=[5,4,3,2,1], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']), legend=None),
+                tooltip=[alt.Tooltip('rating_str', title='Rating'), alt.Tooltip('count'), alt.Tooltip('percentage', format='.1f')]
+            )
+            st.altair_chart(rating_chart, use_container_width=True)
+        
         with col2:
             st.markdown("**Sentiment Distribution**")
-            sentiment_dist = keyword_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
-            st.bar_chart(sentiment_dist)
+            sentiment_counts_df = keyword_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
+            sentiment_counts_df.columns = ['sentiment', 'count']
+            sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / len(keyword_df)) * 100
         
-        # (Rest of the review display logic is unchanged)
-        # ...
+            sentiment_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
+                x=alt.X('count:Q', title='Number of Reviews'),
+                y=alt.Y('sentiment:N', sort=['Positive', 'Neutral', 'Negative'], title=None),
+                color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=None),
+                tooltip=[alt.Tooltip('sentiment'), alt.Tooltip('count'), alt.Tooltip('percentage', format='.1f')]
+            )
+            st.altair_chart(sentiment_chart, use_container_width=True)
+        
         st.markdown("**Example Reviews**")
         sort_reviews_by = st.selectbox("Sort examples by:",("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),key="keyword_review_sort",on_change=reset_keyword_page)
         if sort_reviews_by == "Most Helpful":
@@ -215,7 +234,45 @@ def main():
                     if st.button("Next 5 Reviews ➡️"):
                         st.session_state.keyword_review_page += 1
                         st.rerun()
-                        
+        st.markdown("---")
+        st.markdown("**Trends for this Term Over Time**")
+        
+        time_granularity = st.radio(
+            "Select time period:",
+            ("Monthly", "Weekly", "Daily"),
+            index=0,
+            horizontal=True,
+            key="keyword_time_granularity"
+        )
+        
+        time_df = keyword_df.copy()
+        time_df['date'] = pd.to_datetime(time_df['date'])
+        
+        if time_granularity == 'Daily':
+            time_df['period'] = time_df['date'].dt.date
+        elif time_granularity == 'Weekly':
+            time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
+        else: # Monthly
+            time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
+                
+        t_col1, t_col2 = st.columns(2)
+        with t_col1:
+            st.markdown("###### Rating Volume")
+            rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
+            fig = px.area(rating_counts_over_time, x='period', y='count', color='rating',
+                          color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
+                          category_orders={"rating": [5, 4, 3, 2, 1]})
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with t_col2:
+            st.markdown("###### Sentiment Volume")
+            sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+            fig = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                          color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                          category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
+            st.plotly_chart(fig, use_container_width=True)
+        
+                   
     # --- Keyword Co-occurrence Network ---
     st.markdown("---")
     st.markdown("### 🕸️ Keyword & Phrase Co-occurrence Network")
