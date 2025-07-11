@@ -234,7 +234,7 @@ def main():
         summary_df = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         
         # Calculate the total mentions for each aspect to find the percentage
-        summary_df['percentage'] = summary_df.groupby('aspect')['count'].transform(lambda x: (x / x.sum()) * 100)
+        summary_df['percentage'] = summary_df.groupby('aspect')['count'].transform(lambda x: (x / x.sum()))
 
         # --- Create the 100% Stacked Bar Chart ---
         chart = alt.Chart(summary_df).mark_bar().encode(
