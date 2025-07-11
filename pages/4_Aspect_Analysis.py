@@ -173,22 +173,71 @@ def main():
         if aspect_df.empty:
             st.warning(f"No mentions of '{selected_aspect}' found with the current filters.")
         else:
-            # (Distribution and Trend charts are unchanged)
-            # ...
             col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**Rating Distribution for this Aspect**")
-                rating_dist = aspect_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).sort_index()
-                st.bar_chart(rating_dist)
-            with col2:
-                st.markdown("**Sentiment Distribution for this Aspect**")
-                sentiment_dist = aspect_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0)
-                st.bar_chart(sentiment_dist)
+                with col1:
+                    st.markdown("**Rating Distribution for this Aspect**")
+                    # Prepare data and calculate percentages
+                    rating_counts_df = aspect_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
+                    rating_counts_df.columns = ['rating', 'count']
+                    rating_counts_df['percentage'] = (rating_counts_df['count'] / len(aspect_df)) * 100
+                    rating_counts_df['rating_str'] = rating_counts_df['rating'].astype(str) + ' ⭐'
+            
+                    # Base bar chart
+                    rating_bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                        x=alt.X('count:Q', title='Number of Reviews'),
+                        y=alt.Y('rating_str:N', sort=alt.EncodingSortField(field="rating", order="descending"), title=None),
+                        color=alt.Color('rating:O',
+                                        scale=alt.Scale(domain=[5, 4, 3, 2, 1], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
+                                        legend=None),
+                        tooltip=[alt.Tooltip('rating_str', title='Rating'), alt.Tooltip('count'), alt.Tooltip('percentage', format='.1f')]
+                    )
+                    # Text labels
+                    rating_text_labels = rating_bar_chart.mark_text(align='left', baseline='middle', dx=3, color='white').encode(
+                        text=alt.Text('percentage:Q', format='.1f')
+                    )
+                    st.altair_chart(rating_bar_chart + rating_text_labels, use_container_width=True)
+            
+                with col2:
+                    st.markdown("**Sentiment Distribution for this Aspect**")
+                    # Prepare data and calculate percentages
+                    sentiment_counts_df = aspect_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
+                    sentiment_counts_df.columns = ['sentiment', 'count']
+                    sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / len(aspect_df)) * 100
+            
+                    # Base bar chart
+                    sentiment_bar_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
+                        x=alt.X('count:Q', title='Number of Reviews'),
+                        y=alt.Y('sentiment:N', sort=['Positive', 'Neutral', 'Negative'], title=None),
+                        color=alt.Color('sentiment:N',
+                                        scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']),
+                                        legend=None),
+                        tooltip=[alt.Tooltip('sentiment'), alt.Tooltip('count'), alt.Tooltip('percentage', format='.1f')]
+                    )
+                    # Text labels
+                    sentiment_text_labels = sentiment_bar_chart.mark_text(align='left', baseline='middle', dx=3, color='white').encode(
+                        text=alt.Text('percentage:Q', format='.1f')
+                    )
+                    st.altair_chart(sentiment_bar_chart + sentiment_text_labels, use_container_width=True)
             st.markdown("---")
             st.markdown("**Trends for this Aspect Over Time**")
+            time_granularity = st.radio(
+            "Select time period:",
+            ("Monthly", "Weekly", "Daily"),
+            index=0,
+            horizontal=True,
+            key="aspect_time_granularity"
+            )
+            
             time_df = aspect_df.copy()
             time_df['date'] = pd.to_datetime(time_df['date'])
-            time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
+            
+            if time_granularity == 'Daily':
+                time_df['period'] = time_df['date'].dt.date
+            elif time_granularity == 'Weekly':
+                time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
+            else: # Monthly
+                time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
+                
             t_col1, t_col2 = st.columns(2)
             with t_col1:
                 st.markdown("###### Rating Volume")
