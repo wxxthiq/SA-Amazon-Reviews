@@ -28,6 +28,12 @@ DB_PATH = "amazon_reviews_top100.duckdb"
 conn = connect_to_db(DB_PATH)
 REVIEWS_PER_PAGE = 5
 
+# --- Helper function to convert DataFrame to CSV ---
+@st.cache_data
+def convert_df_to_csv(df):
+    """Converts a dataframe to a downloadable CSV file."""
+    return df.to_csv(index=False).encode('utf-8')
+    
 # --- Main App Logic ---
 def main():
     st.title("🔑 Detailed Keyword & Phrase Analysis")
@@ -260,17 +266,34 @@ def main():
         st.markdown("---")
         
         st.markdown("**Example Reviews**")
-        sort_reviews_by = st.selectbox("Sort examples by:",("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),key="keyword_review_sort",on_change=reset_keyword_page)
-        if sort_reviews_by == "Most Helpful":
-            sorted_keyword_df = keyword_df.sort_values(by="helpful_vote", ascending=False)
-        elif sort_reviews_by == "Highest Rating":
-            sorted_keyword_df = keyword_df.sort_values(by=["rating", "helpful_vote"], ascending=[False, False])
-        elif sort_reviews_by == "Lowest Rating":
-            sorted_keyword_df = keyword_df.sort_values(by=["rating", "helpful_vote"], ascending=[True, False])
-        elif sort_reviews_by == "Oldest":
-            sorted_keyword_df = keyword_df.sort_values(by="date", ascending=True)
-        else: # Newest
-            sorted_keyword_df = keyword_df.sort_values(by="date", ascending=False)
+        # --- Create columns for sorting and downloading ---
+        sort_col, download_col = st.columns([2, 1])
+
+        with sort_col:
+            sort_reviews_by = st.selectbox("Sort examples by:",("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),key="keyword_review_sort",on_change=reset_keyword_page)
+            if sort_reviews_by == "Most Helpful":
+                sorted_keyword_df = keyword_df.sort_values(by="helpful_vote", ascending=False)
+            elif sort_reviews_by == "Highest Rating":
+                sorted_keyword_df = keyword_df.sort_values(by=["rating", "helpful_vote"], ascending=[False, False])
+            elif sort_reviews_by == "Lowest Rating":
+                sorted_keyword_df = keyword_df.sort_values(by=["rating", "helpful_vote"], ascending=[True, False])
+            elif sort_reviews_by == "Oldest":
+                sorted_keyword_df = keyword_df.sort_values(by="date", ascending=True)
+            else: # Newest
+                sorted_keyword_df = keyword_df.sort_values(by="date", ascending=False)
+        with download_col:
+            # The keyword_df is created earlier in the code when a term is selected
+            if not keyword_df.empty:
+                csv_data = convert_df_to_csv(keyword_df)
+                st.download_button(
+                   label="📥 Download Reviews",
+                   data=csv_data,
+                   file_name=f"{selected_asin}_{selected_term}_reviews.csv",
+                   mime="text/csv",
+                   use_container_width=True,
+                   help=f"Download all {len(keyword_df)} reviews that mention '{selected_term}'"
+                )
+                
         if 'keyword_review_page' not in st.session_state:
             st.session_state.keyword_review_page = 0
         start_idx = st.session_state.keyword_review_page * REVIEWS_PER_PAGE
