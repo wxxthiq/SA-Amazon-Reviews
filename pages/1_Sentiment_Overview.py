@@ -420,7 +420,6 @@ def main():
     t_col1, t_col2 = st.columns(2)
 
     with t_col1:
-        st.markdown("#### Rating Distribution Over Time")
         # --- NEW: Add toggle for the trendline ---
         show_rating_trend = st.toggle('Show Average Rating Trend', key='show_rating_trend')
 
@@ -452,14 +451,13 @@ def main():
                 # DEFAULT VIEW with simple volume chart
                 fig = px.area(
                     rating_counts_over_time, x='period', y='count', color='rating',
-                    title="Volume of Reviews by Star Rating",
+                    title="Rating Distribution Per {time_granularity.replace('ly', '')}",
                     color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
                     category_orders={"rating": [5, 4, 3, 2, 1]}
                 )
                 st.plotly_chart(fig, use_container_width=True)
     
     with t_col2:
-        st.markdown("#### Sentiment Volume Over Time")
         # --- NEW: Add toggle for the trendline ---
         show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='show_sentiment_trend')
         
