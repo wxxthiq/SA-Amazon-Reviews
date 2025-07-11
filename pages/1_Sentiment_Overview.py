@@ -230,13 +230,43 @@ def main():
     aspect_summary_df = get_aspect_summary_with_chunks(chart_data)
 
     if not aspect_summary_df.empty:
-        summary_chart_data = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
-        chart = alt.Chart(summary_chart_data).mark_bar().encode(
-            x=alt.X('count:Q', title='Number of Mentions'),
-            y=alt.Y('aspect:N', sort='-x', title='Aspect'),
-            color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
-            yOffset='sentiment:N'
-        ).configure_axis(grid=False).configure_view(strokeWidth=0)
+        # --- Data Preparation for Percentage Chart ---
+        summary_df = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        
+        # Calculate the total mentions for each aspect to find the percentage
+        summary_df['percentage'] = summary_df.groupby('aspect')['count'].transform(lambda x: (x / x.sum()) * 100)
+
+        # --- Create the 100% Stacked Bar Chart ---
+        chart = alt.Chart(summary_df).mark_bar().encode(
+            # Y-axis shows the different aspects
+            y=alt.Y('aspect:N', title='Aspect', sort='-x'),
+            
+            # X-axis is normalized to 100%
+            x=alt.X('sum(percentage):Q', title='Percentage of Mentions', axis=alt.Axis(format='%')),
+            
+            # Color encodes the sentiment
+            color=alt.Color('sentiment:N',
+                            scale=alt.Scale(
+                                domain=['Positive', 'Neutral', 'Negative'],
+                                range=['#1a9850', '#cccccc', '#d73027']
+                            ),
+                            legend=alt.Legend(title="Sentiment")),
+            
+            # --- NEW: Detailed Hover Tooltip ---
+            tooltip=[
+                alt.Tooltip('aspect', title='Aspect'),
+                alt.Tooltip('sentiment', title='Sentiment'),
+                alt.Tooltip('count', title='Mentions'),
+                alt.Tooltip('percentage', title='Share', format='.1f')
+            ]
+        ).properties(
+            height=400
+        ).configure_axis(
+            grid=False
+        ).configure_view(
+            strokeWidth=0
+        )
+        
         st.altair_chart(chart, use_container_width=True)
     else:
         st.info("Not enough data to generate an aspect summary for the current filters.")
