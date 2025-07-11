@@ -126,7 +126,7 @@ def get_reviews_for_product(_conn, asin, date_range, rating_filter, sentiment_fi
     """
     Fetches and filters all reviews, now with verified purchase filter.
     """
-    query = "SELECT * FROM reviews WHERE parent_asin = ?"
+    query = "SELECT review_id, parent_asin, rating, sentiment, text_polarity, text, date, verified_purchase, review_title FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
     if date_range and len(date_range) == 2:
