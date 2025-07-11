@@ -84,7 +84,7 @@ def main():
 
     # --- Aspect Summary Chart (Unchanged) ---
     @st.cache_data
-    def get_aspect_summary(data):
+    def get_aspect_summary(data, num_aspects):
         all_aspects = []
         def clean_chunk(chunk):
             return " ".join(token.lemma_.lower() for token in chunk if token.pos_ in ['NOUN', 'PROPN', 'ADJ'])
@@ -98,7 +98,7 @@ def main():
         if not all_aspects:
             return pd.DataFrame(), []
             
-        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(5)]
+        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(num_aspects)]
         
         aspect_sentiments = []
         for aspect in top_aspects:
@@ -112,19 +112,44 @@ def main():
         return pd.DataFrame(aspect_sentiments), top_aspects
 
     st.markdown("### Aspect Sentiment Summary")
-    aspect_summary_df, top_aspects_list = get_aspect_summary(chart_data)
+    num_aspects_to_show = st.slider(
+    "Select number of top aspects to display:",
+    min_value=3, max_value=20, value=5
+    )
+    aspect_summary_df, top_aspects_list = get_aspect_summary(chart_data, num_aspects_to_show)
 
     if not aspect_summary_df.empty:
-        summary_chart_data = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
-        chart = alt.Chart(summary_chart_data).mark_bar().encode(
-            x=alt.X('count:Q', title='Number of Mentions'),
-            y=alt.Y('aspect:N', sort='-x', title='Aspect'),
-            color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
-            yOffset='sentiment:N'
-        ).configure_axis(grid=False).configure_view(strokeWidth=0)
+        # --- Data Preparation for Percentage Chart ---
+        summary_df = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        summary_df['percentage'] = summary_df.groupby('aspect')['count'].transform(lambda x: x / x.sum())
+    
+        # --- Create the 100% Stacked Bar Chart ---
+        chart = alt.Chart(summary_df).mark_bar().encode(
+            y=alt.Y('aspect:N', title='Aspect', sort='-x'),
+            x=alt.X('sum(percentage):Q', title='Percentage of Mentions', axis=alt.Axis(format='%')),
+            color=alt.Color('sentiment:N',
+                            scale=alt.Scale(
+                                domain=['Positive', 'Neutral', 'Negative'],
+                                range=['#1a9850', '#cccccc', '#d73027']
+                            ),
+                            legend=alt.Legend(title="Sentiment")),
+            tooltip=[
+                alt.Tooltip('aspect', title='Aspect'),
+                alt.Tooltip('sentiment', title='Sentiment'),
+                alt.Tooltip('count', title='Mentions'),
+                alt.Tooltip('percentage', title='Proportion', format='.0%')
+            ]
+        ).properties(
+            height=max(300, num_aspects_to_show * 30) # Dynamic height
+        ).configure_axis(
+            grid=False
+        ).configure_view(
+            strokeWidth=0
+        )
+    
         st.altair_chart(chart, use_container_width=True)
     else:
-        st.info("Not enough data to generate an aspect summary.")
+        st.info("Not enough data to generate an aspect summary for the current filters.")
 
     # --- Interactive Aspect Explorer (ENHANCED) ---
     st.markdown("---")
