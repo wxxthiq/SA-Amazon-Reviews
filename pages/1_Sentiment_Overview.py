@@ -391,18 +391,28 @@ def main():
                 review_details = get_single_review_details(conn, st.session_state.selected_review_id)
                 
                 if review_details is not None:
-                    st.subheader(review_details['review_title'])     
+                    st.subheader(review_details.get('review_title', 'No Title'))
+
+                    # --- Correctly display sentiment and score ---
                     sentiment_label = review_details.get('sentiment', 'N/A')
+                    sentiment_score = review_details.get('text_polarity', 0.0)
+                    st.markdown(f"**Sentiment: {sentiment_label}** (Score: {sentiment_score:.2f})")
+
+                    # --- Build a detailed caption with explicit verified status ---
                     caption_parts = [
-                        f"Sentiment: {sentiment_label}"
-                        f"Reviewed on: {review_details['date']}",
-                        f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"]
-                    
+                        f"Reviewed on: {review_details.get('date', 'N/A')}",
+                        f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"
+                    ]
+
+                    # Explicitly check for True/False to show verified status
                     if review_details.get('verified_purchase'):
                         caption_parts.insert(0, "✅ Verified Purchase")
+                    else:
+                        caption_parts.insert(0, "❌ Not Verified")
 
                     st.caption(" | ".join(caption_parts))
-                    st.markdown(f"> {review_details['text']}")
+                    st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
+                    
                 if st.button("Close Review", key="close_review_button"):
                     st.session_state.selected_review_id = None
                     st.rerun()
