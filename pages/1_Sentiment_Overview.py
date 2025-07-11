@@ -230,7 +230,7 @@ def main():
         # Add the interactive slider
     num_aspects_to_show = st.slider(
         "Select number of top aspects to display:",
-        min_value=3, max_value=20, value=7, key="overview_aspect_slider"
+        min_value=3, max_value=20, value=5, key="overview_aspect_slider"
     )
     
     # Call the function with the slider's value
