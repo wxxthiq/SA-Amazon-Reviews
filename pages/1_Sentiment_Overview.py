@@ -368,7 +368,6 @@ def main():
             hover_data={
                 "rating": True,
                 "sentiment": True,
-                "text_polarity": (':.2f', 'Score'), # Show score formatted to 2 decimals
                 "discrepancy": ":.2f",
                 "rating_jittered": False,
                 "text_polarity_jittered": False
