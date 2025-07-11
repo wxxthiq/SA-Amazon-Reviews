@@ -338,66 +338,7 @@ def main():
     st.markdown("---")
     if st.button("Perform Detailed Keyword Analysis 🔑"):
         st.switch_page("pages/3_Keyword_Analysis.py")
-    
-    st.markdown("### Rating vs. Text Discrepancy")
-    st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Points in the top-left (low rating, positive sentiment) or bottom-right (high rating, negative sentiment) are the most discrepant. Click a point to read the review.")
-    plot_col, review_col = st.columns([2, 1])
-    with plot_col:
-        # ... (code omitted for brevity)
-        chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
-        fig = px.scatter(
-            chart_data,
-            x="rating_jittered",
-            y="text_polarity_jittered",
-            color="discrepancy",
-            color_continuous_scale=px.colors.sequential.Viridis,
-            # --- UPDATED: Clearer labels ---
-            labels={
-                "rating_jittered": "Star Rating",
-                "text_polarity_jittered": "Sentiment Score", # Changed from Polarity
-                "discrepancy": "Discrepancy Score"
-            },
-            # --- UPDATED: Enhanced hover data ---
-            hover_name="review_title",
-            hover_data={
-                "rating": True,
-                "sentiment": True,
-                "discrepancy": ":.2f",
-                "rating_jittered": False,
-                "text_polarity_jittered": False
-            }
-        )
-        fig.update_layout(clickmode='event+select')
-        fig.update_traces(marker_size=10)
-        selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
-        if selected_points and 'pointIndex' in selected_points[0]:
-            point_index = selected_points[0]['pointIndex']
-            if point_index < len(chart_data):
-                clicked_id = chart_data.iloc[point_index]['review_id']
-                if st.session_state.selected_review_id != clicked_id:
-                    st.session_state.selected_review_id = clicked_id
-                    st.rerun()
-    with review_col:
-        # ... (code omitted for brevity)
-        if st.session_state.selected_review_id:
-            if st.session_state.selected_review_id in chart_data['review_id'].values:
-                st.markdown("#### Selected Review Details")
-                review_details = get_single_review_details(conn, st.session_state.selected_review_id)
-                
-                if review_details is not None:
-                    st.subheader(review_details.get('review_title', 'No Title'))
 
-                    # --- Build a detailed caption with explicit verified status ---
-                    caption_parts = [
-                        f"Reviewed on: {review_details.get('date', 'N/A')}",
-                        f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"
-                    ]
-                    st.caption(" | ".join(caption_parts))
-                    st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
-                    
-                if st.button("Close Review", key="close_review_button"):
-                    st.session_state.selected_review_id = None
-                    st.rerun()
     st.markdown("---")
     st.markdown("### Trends Over Time")
     time_granularity = st.radio("Select time period:", ("Monthly", "Weekly", "Daily"), index=0, horizontal=True, label_visibility="collapsed")
@@ -488,6 +429,65 @@ def main():
                     category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
                 )
                 st.plotly_chart(fig, use_container_width=True)
+    st.markdown("### Rating vs. Text Discrepancy")
+    st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Points in the top-left (low rating, positive sentiment) or bottom-right (high rating, negative sentiment) are the most discrepant. Click a point to read the review.")
+    plot_col, review_col = st.columns([2, 1])
+    with plot_col:
+        # ... (code omitted for brevity)
+        chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
+        fig = px.scatter(
+            chart_data,
+            x="rating_jittered",
+            y="text_polarity_jittered",
+            color="discrepancy",
+            color_continuous_scale=px.colors.sequential.Viridis,
+            # --- UPDATED: Clearer labels ---
+            labels={
+                "rating_jittered": "Star Rating",
+                "text_polarity_jittered": "Sentiment Score", # Changed from Polarity
+                "discrepancy": "Discrepancy Score"
+            },
+            # --- UPDATED: Enhanced hover data ---
+            hover_name="review_title",
+            hover_data={
+                "rating": True,
+                "sentiment": True,
+                "discrepancy": ":.2f",
+                "rating_jittered": False,
+                "text_polarity_jittered": False
+            }
+        )
+        fig.update_layout(clickmode='event+select')
+        fig.update_traces(marker_size=10)
+        selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
+        if selected_points and 'pointIndex' in selected_points[0]:
+            point_index = selected_points[0]['pointIndex']
+            if point_index < len(chart_data):
+                clicked_id = chart_data.iloc[point_index]['review_id']
+                if st.session_state.selected_review_id != clicked_id:
+                    st.session_state.selected_review_id = clicked_id
+                    st.rerun()
+    with review_col:
+        # ... (code omitted for brevity)
+        if st.session_state.selected_review_id:
+            if st.session_state.selected_review_id in chart_data['review_id'].values:
+                st.markdown("#### Selected Review Details")
+                review_details = get_single_review_details(conn, st.session_state.selected_review_id)
+                
+                if review_details is not None:
+                    st.subheader(review_details.get('review_title', 'No Title'))
+
+                    # --- Build a detailed caption with explicit verified status ---
+                    caption_parts = [
+                        f"Reviewed on: {review_details.get('date', 'N/A')}",
+                        f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"
+                    ]
+                    st.caption(" | ".join(caption_parts))
+                    st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
+                    
+                if st.button("Close Review", key="close_review_button"):
+                    st.session_state.selected_review_id = None
+                    st.rerun()
 
 if __name__ == "__main__":
     main()
