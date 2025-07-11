@@ -188,7 +188,7 @@ def main():
     st.info("💡 This chart automatically identifies key product features (aspects) like 'battery life' or 'screen quality' from reviews and shows the sentiment breakdown for each.")
 
     @st.cache_data
-    def get_aspect_summary_with_chunks(data):
+    def get_aspect_summary_with_chunks(data, num_aspects):
         all_aspects = []
         def clean_chunk(chunk):
             cleaned_tokens = []
@@ -207,7 +207,7 @@ def main():
         if not all_aspects:
             return pd.DataFrame()
             
-        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(5)]
+        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(num_aspects)]
 
         aspect_sentiments = []
         for aspect in top_aspects:
@@ -227,32 +227,27 @@ def main():
             
         return pd.DataFrame(aspect_sentiments)
 
-    aspect_summary_df = get_aspect_summary_with_chunks(chart_data)
+        # Add the interactive slider
+    num_aspects_to_show = st.slider(
+        "Select number of top aspects to display:",
+        min_value=3, max_value=20, value=7, key="overview_aspect_slider"
+    )
+    
+    # Call the function with the slider's value
+    aspect_summary_df = get_aspect_summary_with_chunks(chart_data, num_aspects_to_show)
 
     if not aspect_summary_df.empty:
         # --- Data Preparation for Percentage Chart ---
         summary_df = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
-        
-        # Calculate the total mentions for each aspect to find the percentage
-        summary_df['percentage'] = summary_df.groupby('aspect')['count'].transform(lambda x: (x / x.sum()))
+        summary_df['percentage'] = summary_df.groupby('aspect')['count'].transform(lambda x: x / x.sum())
 
         # --- Create the 100% Stacked Bar Chart ---
         chart = alt.Chart(summary_df).mark_bar().encode(
-            # Y-axis shows the different aspects
             y=alt.Y('aspect:N', title='Aspect', sort='-x'),
-            
-            # X-axis is normalized to 100%
             x=alt.X('sum(percentage):Q', title='Percentage of Mentions', axis=alt.Axis(format='%')),
-            
-            # Color encodes the sentiment
             color=alt.Color('sentiment:N',
-                            scale=alt.Scale(
-                                domain=['Positive', 'Neutral', 'Negative'],
-                                range=['#1a9850', '#cccccc', '#d73027']
-                            ),
+                            scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']),
                             legend=alt.Legend(title="Sentiment")),
-            
-            # --- NEW: Detailed Hover Tooltip ---
             tooltip=[
                 alt.Tooltip('aspect', title='Aspect'),
                 alt.Tooltip('sentiment', title='Sentiment'),
@@ -260,7 +255,7 @@ def main():
                 alt.Tooltip('percentage', title='Proportion', format='.0%')
             ]
         ).properties(
-            height=400
+            height=max(300, num_aspects_to_show * 35) # Dynamic height
         ).configure_axis(
             grid=False
         ).configure_view(
@@ -270,7 +265,6 @@ def main():
         st.altair_chart(chart, use_container_width=True)
     else:
         st.info("Not enough data to generate an aspect summary for the current filters.")
-
     if st.button("Perform Detailed Aspect Analysis 🔎"):
         st.switch_page("pages/4_Aspect_Analysis.py")
     
