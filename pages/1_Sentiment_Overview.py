@@ -389,9 +389,17 @@ def main():
             if st.session_state.selected_review_id in chart_data['review_id'].values:
                 st.markdown("#### Selected Review Details")
                 review_details = get_single_review_details(conn, st.session_state.selected_review_id)
+                
                 if review_details is not None:
                     st.subheader(review_details['review_title'])
-                    st.caption(f"Reviewed on: {review_details['date']}")
+                    caption_parts = [
+                        f"Reviewed on: {review_details['date']}",
+                        f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"
+                    ]
+                    if review_details.get('verified_purchase'):
+                        caption_parts.insert(0, "✅ Verified Purchase")
+
+                    st.caption(" | ".join(caption_parts))
                     st.markdown(f"> {review_details['text']}")
                 if st.button("Close Review", key="close_review_button"):
                     st.session_state.selected_review_id = None
