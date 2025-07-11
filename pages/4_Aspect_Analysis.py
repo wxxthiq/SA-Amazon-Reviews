@@ -284,25 +284,28 @@ def main():
             # --- Example Reviews Display with Sorting and Pagination ---
             st.markdown("---")
             st.markdown("**Example Reviews Mentioning this Aspect**")
-            # --- NEW: Download Button ---
-            # The sorted_aspect_df is created just below this section in your existing code
-            if not aspect_df.empty:
-                csv_data = convert_df_to_csv(aspect_df)
-                st.download_button(
-                   label="📥 Download All Reviews for this Aspect",
-                   data=csv_data,
-                   file_name=f"{selected_asin}_{selected_aspect}_reviews.csv",
-                   mime="text/csv",
-                   use_container_width=True,
-                   # Add a little space before the sort dropdown
-                   help=f"Download all {len(aspect_df)} reviews that mention the aspect '{selected_aspect}'"
+            # --- Create columns for sorting and downloading ---
+            sort_col, download_col = st.columns([2, 1]) # Give more space to the sort dropdown
+
+            with sort_col:
+                sort_reviews_by = st.selectbox(
+                    "Sort examples by:",
+                    ("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),
+                    key="aspect_review_sort",
+                    on_change=reset_aspect_page_number
                 )
-            sort_reviews_by = st.selectbox(
-                "Sort examples by:",
-                ("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),
-                key="aspect_review_sort",
-                on_change=reset_aspect_page_number # Reset pagination if sort changes
-            )
+            
+            with download_col:
+                if not aspect_df.empty:
+                    csv_data = convert_df_to_csv(aspect_df)
+                    st.download_button(
+                       label="📥 Download Reviews",
+                       data=csv_data,
+                       file_name=f"{selected_asin}_{selected_aspect}_reviews.csv",
+                       mime="text/csv",
+                       use_container_width=True,
+                       help=f"Download all {len(aspect_df)} reviews that mention '{selected_aspect}'"
+                    )
     
             if sort_reviews_by == "Most Helpful":
                 sorted_aspect_df = aspect_df.sort_values(by="helpful_vote", ascending=False)
