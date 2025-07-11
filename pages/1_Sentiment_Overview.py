@@ -257,7 +257,7 @@ def main():
                 alt.Tooltip('aspect', title='Aspect'),
                 alt.Tooltip('sentiment', title='Sentiment'),
                 alt.Tooltip('count', title='Mentions'),
-                alt.Tooltip('percentage', title='Share', format='.1f')
+                alt.Tooltip('percentage', title='Proportion', format='.0%')
             ]
         ).properties(
             height=400
