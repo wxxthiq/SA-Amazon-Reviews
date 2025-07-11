@@ -191,6 +191,43 @@ def main():
                 tooltip=[alt.Tooltip('sentiment'), alt.Tooltip('count'), alt.Tooltip('percentage', format='.1f')]
             )
             st.altair_chart(sentiment_chart, use_container_width=True)
+
+        st.markdown("**Trends for this Term Over Time**")
+        
+        time_granularity = st.radio(
+            "Select time period:",
+            ("Monthly", "Weekly", "Daily"),
+            index=0,
+            horizontal=True,
+            key="keyword_time_granularity"
+        )
+        
+        time_df = keyword_df.copy()
+        time_df['date'] = pd.to_datetime(time_df['date'])
+        
+        if time_granularity == 'Daily':
+            time_df['period'] = time_df['date'].dt.date
+        elif time_granularity == 'Weekly':
+            time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
+        else: # Monthly
+            time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
+                
+        t_col1, t_col2 = st.columns(2)
+        with t_col1:
+            st.markdown("###### Rating Volume")
+            rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
+            fig = px.area(rating_counts_over_time, x='period', y='count', color='rating',
+                          color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
+                          category_orders={"rating": [5, 4, 3, 2, 1]})
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with t_col2:
+            st.markdown("###### Sentiment Volume")
+            sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+            fig = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                          color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                          category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
+            st.plotly_chart(fig, use_container_width=True)
         
         st.markdown("**Example Reviews**")
         sort_reviews_by = st.selectbox("Sort examples by:",("Most Helpful", "Newest", "Oldest", "Highest Rating", "Lowest Rating"),key="keyword_review_sort",on_change=reset_keyword_page)
@@ -235,45 +272,7 @@ def main():
                     if st.button("Next 5 Reviews ➡️"):
                         st.session_state.keyword_review_page += 1
                         st.rerun()
-        st.markdown("---")
-        st.markdown("**Trends for this Term Over Time**")
-        
-        time_granularity = st.radio(
-            "Select time period:",
-            ("Monthly", "Weekly", "Daily"),
-            index=0,
-            horizontal=True,
-            key="keyword_time_granularity"
-        )
-        
-        time_df = keyword_df.copy()
-        time_df['date'] = pd.to_datetime(time_df['date'])
-        
-        if time_granularity == 'Daily':
-            time_df['period'] = time_df['date'].dt.date
-        elif time_granularity == 'Weekly':
-            time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
-        else: # Monthly
-            time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
-                
-        t_col1, t_col2 = st.columns(2)
-        with t_col1:
-            st.markdown("###### Rating Volume")
-            rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
-            fig = px.area(rating_counts_over_time, x='period', y='count', color='rating',
-                          color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
-                          category_orders={"rating": [5, 4, 3, 2, 1]})
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with t_col2:
-            st.markdown("###### Sentiment Volume")
-            sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
-            fig = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment',
-                          color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                          category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
-            st.plotly_chart(fig, use_container_width=True)
-        
-                   
+
     # --- Keyword Co-occurrence Network ---
     st.markdown("---")
     st.markdown("### 🕸️ Keyword & Phrase Co-occurrence Network")
@@ -281,7 +280,7 @@ def main():
 
     net_col1, net_col2, net_col3 = st.columns(3)
     with net_col1:
-        top_n_keywords = st.slider("Number of Top Terms to Analyze:", min_value=10, max_value=50, value=200, key="top_n_slider")
+        top_n_keywords = st.slider("Number of Top Terms to Analyze:", min_value=10, max_value=50, value=5, key="top_n_slider")
     with net_col2:
         min_cooccurrence = st.slider("Minimum Co-occurrence:", min_value=2, max_value=20, value=2, key="min_co_slider")
     with net_col3:
