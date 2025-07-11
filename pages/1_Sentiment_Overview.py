@@ -351,7 +351,28 @@ def main():
     with plot_col:
         # ... (code omitted for brevity)
         chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
-        fig = px.scatter(chart_data, x="rating_jittered", y="text_polarity_jittered", color="discrepancy", color_continuous_scale=px.colors.sequential.Viridis, hover_name='review_title')
+        fig = px.scatter(
+            chart_data,
+            x="rating_jittered",
+            y="text_polarity_jittered",
+            color="discrepancy",
+            color_continuous_scale=px.colors.sequential.Viridis,
+            # --- NEW: Add clear labels for axes and color bar ---
+            labels={
+                "rating_jittered": "Star Rating",
+                "text_polarity_jittered": "Text Sentiment Polarity",
+                "discrepancy": "Discrepancy Score"
+            },
+            # --- NEW: Customize the data shown on hover ---
+            hover_name="review_title",
+            hover_data={
+                "rating": True,  # Show the original, non-jittered rating
+                "sentiment": True, # Show the sentiment category (Positive, etc.)
+                "discrepancy": ":.2f", # Show the score formatted to 2 decimal places
+                "rating_jittered": False, # Hide the confusing jittered value
+                "text_polarity_jittered": False # Hide the confusing jittered value
+            }
+        )
         fig.update_layout(clickmode='event+select')
         fig.update_traces(marker_size=10)
         selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
