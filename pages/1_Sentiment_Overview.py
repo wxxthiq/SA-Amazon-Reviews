@@ -357,20 +357,21 @@ def main():
             y="text_polarity_jittered",
             color="discrepancy",
             color_continuous_scale=px.colors.sequential.Viridis,
-            # --- NEW: Add clear labels for axes and color bar ---
+            # --- UPDATED: Clearer labels ---
             labels={
                 "rating_jittered": "Star Rating",
-                "text_polarity_jittered": "Text Sentiment Polarity",
+                "text_polarity_jittered": "Sentiment Score", # Changed from Polarity
                 "discrepancy": "Discrepancy Score"
             },
-            # --- NEW: Customize the data shown on hover ---
+            # --- UPDATED: Enhanced hover data ---
             hover_name="review_title",
             hover_data={
-                "rating": True,  # Show the original, non-jittered rating
-                "sentiment": True, # Show the sentiment category (Positive, etc.)
-                "discrepancy": ":.2f", # Show the score formatted to 2 decimal places
-                "rating_jittered": False, # Hide the confusing jittered value
-                "text_polarity_jittered": False # Hide the confusing jittered value
+                "rating": True,
+                "sentiment": True,
+                "text_polarity": (':.2f', 'Score'), # Show score formatted to 2 decimals
+                "discrepancy": ":.2f",
+                "rating_jittered": False,
+                "text_polarity_jittered": False
             }
         )
         fig.update_layout(clickmode='event+select')
@@ -391,11 +392,13 @@ def main():
                 review_details = get_single_review_details(conn, st.session_state.selected_review_id)
                 
                 if review_details is not None:
-                    st.subheader(review_details['review_title'])
+                    st.subheader(review_details['review_title'])     
+                    sentiment_label = review_details.get('sentiment', 'N/A')
                     caption_parts = [
+                        f"Sentiment: {sentiment_label}"
                         f"Reviewed on: {review_details['date']}",
-                        f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"
-                    ]
+                        f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"]
+                    
                     if review_details.get('verified_purchase'):
                         caption_parts.insert(0, "✅ Verified Purchase")
 
