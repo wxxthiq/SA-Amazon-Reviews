@@ -171,8 +171,7 @@ def get_product_date_range(_conn, asin):
 def get_single_review_details(_conn, review_id):
     """Fetches all details for a single review by its ID."""
     try:
-        # --- MODIFIED: Added verified_purchase and helpful_vote ---
-        query = "SELECT review_title, text, date, verified_purchase, helpful_vote FROM reviews WHERE review_id = ?"
+        query = "SELECT review_title, text, date, verified_purchase, helpful_vote, sentiment, text_polarity FROM reviews WHERE review_id = ?"
         details_df = _conn.execute(query, [review_id]).fetchdf()
         if not details_df.empty:
             return details_df.iloc[0]
