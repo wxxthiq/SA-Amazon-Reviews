@@ -346,7 +346,7 @@ def main():
         st.switch_page("pages/3_Keyword_Analysis.py")
     
     st.markdown("### Rating vs. Text Discrepancy")
-    st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Points in the top-left (high rating, negative text) or bottom-right (low rating, positive text) are the most discrepant. Click a point to read the review.")
+    st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Points in the top-left (low rating, positive sentiment) or bottom-right (high rating, negative sentiment) are the most discrepant. Click a point to read the review.")
     plot_col, review_col = st.columns([2, 1])
     with plot_col:
         # ... (code omitted for brevity)
