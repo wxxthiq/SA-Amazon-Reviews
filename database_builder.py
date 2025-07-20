@@ -1,31 +1,33 @@
-# database_builder.py (Final, Interactive, Future-Proof Version)
-# This script creates all tables with the necessary columns and IDs to support a
-# fast, stable, and highly interactive Streamlit dashboard with rich filtering.
+# database_builder.py (DuckDB Version - Top 100 Products)
+# This script creates a DuckDB database with the top 100 most popular products
+# from each category to enable rapid experimentation and development.
 
 import pandas as pd
-import sqlite3
-from textblob import TextBlob
-import spacy
-import time
-import os
+import duckdb
 import json
+import os
+import time
+from textblob import TextBlob
 
 # --- Configuration ---
-KAGGLE_INPUT_DIR = 'mcauley-jsonl'
+KAGGLE_INPUT_DIR = '/kaggle/input/mcauley-jsonl'
 OUTPUT_FOLDER = '/kaggle/working/'
-OUTPUT_DB_PATH = os.path.join(OUTPUT_FOLDER, 'amazon_reviews_v5.db')
+# Use a .duckdb extension for the new database file
+OUTPUT_DB_PATH = os.path.join(OUTPUT_FOLDER, 'amazon_reviews_top100.duckdb')
 
+# Define the categories to process
 CATEGORIES_TO_PROCESS = {
     'Amazon Fashion': ('Amazon_Fashion.jsonl', 'meta_Amazon_Fashion.jsonl'),
     'All Beauty': ('All_Beauty.jsonl', 'meta_All_Beauty.jsonl'),
     'Appliances': ('Appliances.jsonl', 'meta_Appliances.jsonl')
 }
-CHUNK_SIZE = 150000
+# The number of top products to select from each category
+TOP_N_PRODUCTS = 100
 
 # --- Helper Functions ---
 def parse_jsonl_to_df(path):
-    """Reads a plain text JSON-lines (.jsonl) file."""
-    print(f"  Reading metadata from: {path}")
+    """Reads a JSON-lines (.jsonl) file into a pandas DataFrame."""
+    print(f"  Reading data from: {os.path.basename(path)}")
     data = []
     try:
         with open(path, 'r', encoding='utf-8') as f:
@@ -37,149 +39,155 @@ def parse_jsonl_to_df(path):
         return None
 
 def extract_and_join_image_urls(image_data):
-    """Safely extracts all available URLs and joins them into a comma-separated string."""
+    """Safely extracts all available image URLs and joins them into a comma-separated string."""
     if not isinstance(image_data, list) or not image_data: return None
     urls = [img.get('hi_res') or img.get('large') for img in image_data if isinstance(img, dict) and (img.get('hi_res') or img.get('large'))]
     return ",".join(urls) if urls else None
 
-# --- Modular Build Functions ---
+# --- Main Build Process ---
+def main():
+    start_time = time.time()
+    print(f"--- Starting Database Build: {OUTPUT_DB_PATH} ---")
 
-def stage_raw_data(conn, full_input_path):
-    """
-    Reads all source JSONL files, enriches them with a unique review_id and all
-    necessary fields for filtering, and stages them into a single 'raw_reviews' table.
-    """
-    print("\n--- STAGE 1: Staging Raw Data with Unique IDs and All Filterable Fields ---")
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='raw_reviews'")
-    if cursor.fetchone():
-        print("✅ 'raw_reviews' table already exists. Skipping.")
-        return
+    # Use duckdb.connect() which creates or opens the database file
+    conn = duckdb.connect(database=OUTPUT_DB_PATH, read_only=False)
 
-    is_first_write = True
+    all_processed_reviews = []
+
+    # --- STAGE 1: Identify Top Products and Process Their Reviews ---
     for category_name, (review_file, meta_file) in CATEGORIES_TO_PROCESS.items():
         phase_start_time = time.time()
         print(f"\n--- Processing Category: {category_name} ---")
-        
-        review_file_path = os.path.join(full_input_path, review_file, review_file)
-        meta_file_path = os.path.join(full_input_path, meta_file, meta_file)
 
+        review_file_path = os.path.join(KAGGLE_INPUT_DIR, review_file, review_file)
+        meta_file_path = os.path.join(KAGGLE_INPUT_DIR, meta_file, meta_file)
+
+        # 1. Load all reviews for the category to find the most popular products
+        print(f"  - Loading all reviews to identify top {TOP_N_PRODUCTS} products...")
+        reviews_df = parse_jsonl_to_df(review_file_path)
+        if reviews_df is None or reviews_df.empty:
+            continue
+
+        # Find the top N products by review count
+        top_products = reviews_df['parent_asin'].value_counts().nlargest(TOP_N_PRODUCTS).index.tolist()
+        print(f"  - Identified top {len(top_products)} products.")
+
+        # Filter the reviews to only include those for the top products
+        reviews_df = reviews_df[reviews_df['parent_asin'].isin(top_products)]
+
+        # 2. Load and prepare metadata
         meta_df = parse_jsonl_to_df(meta_file_path)
         if meta_df is None: continue
 
+        # Rename columns for clarity and select only the necessary ones
         meta_df = meta_df.rename(columns={'title': 'product_title', 'images': 'image_list'})
         meta_df['image_urls'] = meta_df['image_list'].apply(extract_and_join_image_urls)
-        meta_df = meta_df[['parent_asin', 'product_title', 'image_urls']].dropna(subset=['parent_asin'])
+        meta_df_filtered = meta_df[['parent_asin', 'product_title', 'image_urls', 'store']].dropna(subset=['parent_asin'])
 
-        chunk_num = 1
-        for reviews_chunk_df in pd.read_json(review_file_path, lines=True, chunksize=CHUNK_SIZE):
-            print(f"  - Processing chunk {chunk_num}...")
-            
-            merged_chunk_df = pd.merge(reviews_chunk_df, meta_df, on='parent_asin', how='left')
-            merged_chunk_df['category'] = category_name
-            merged_chunk_df['rating'] = pd.to_numeric(merged_chunk_df['rating'], errors='coerce')
-            merged_chunk_df.dropna(subset=['rating', 'text', 'parent_asin'], inplace=True)
-            
-            # --- KEY MODIFICATION: Create a unique review_id ---
-            merged_chunk_df.reset_index(inplace=True)
-            merged_chunk_df['review_id'] = merged_chunk_df['parent_asin'] + '-' + merged_chunk_df['index'].astype(str) + '-' + str(chunk_num)
-            
-            sentiments = merged_chunk_df['text'].astype(str).apply(lambda text: TextBlob(text).sentiment)
-            merged_chunk_df['sentiment'] = sentiments.apply(lambda s: 'Positive' if s.polarity > 0.1 else ('Negative' if s.polarity < -0.1 else 'Neutral'))
-            merged_chunk_df['text_polarity'] = sentiments.apply(lambda s: s.polarity)
-            merged_chunk_df['date'] = pd.to_datetime(merged_chunk_df['timestamp'], unit='s', errors='coerce').dt.strftime('%Y-%m-%d')
+        # 3. Merge reviews with metadata
+        print("  - Merging reviews with product metadata...")
+        merged_df = pd.merge(reviews_df, meta_df_filtered, on='parent_asin', how='left')
 
-            final_columns = ['review_id', 'parent_asin', 'product_title', 'category', 'image_urls', 'rating', 'text', 'sentiment', 'text_polarity', 'date']
-            
-            write_mode = 'replace' if is_first_write and chunk_num == 1 else 'append'
-            merged_chunk_df[final_columns].to_sql('raw_reviews', conn, if_exists=write_mode, index=False)
-            
-            is_first_write = False
-            chunk_num += 1
-        print(f"✅ Finished staging '{category_name}' in {time.time() - phase_start_time:.2f} seconds.")
-    print("✅ Raw data staging complete.")
+        # 4. Enrich the data (Sentiment, IDs, etc.)
+        print("  - Enriching data with sentiment, IDs, and cleaning...")
+        merged_df['category'] = category_name
+        merged_df['rating'] = pd.to_numeric(merged_df['rating'], errors='coerce')
+        # Drop rows with essential missing data
+        merged_df.dropna(subset=['rating', 'text', 'parent_asin'], inplace=True)
 
+        # Create a stable, unique review_id
+        merged_df.reset_index(drop=True, inplace=True)
+        merged_df['review_id'] = merged_df['parent_asin'] + '-' + merged_df.index.astype(str)
 
-def create_final_tables(conn):
-    """
-    Creates all the final, optimized tables from the 'raw_reviews' staging table.
-    """
-    print("\n--- STAGE 2: Creating Final, Optimized Tables ---")
-    cursor = conn.cursor()
+        # Perform sentiment analysis
+        sentiments = merged_df['text'].astype(str).apply(lambda text: TextBlob(text).sentiment)
+        merged_df['sentiment'] = sentiments.apply(lambda s: 'Positive' if s.polarity > 0.1 else ('Negative' if s.polarity < -0.1 else 'Neutral'))
+        merged_df['text_polarity'] = sentiments.apply(lambda s: s.polarity)
+        merged_df['date'] = pd.to_datetime(merged_df['timestamp'], unit='ms', errors='coerce').dt.date
+        merged_df['helpful_vote'] = pd.to_numeric(merged_df['helpful_vote'], errors='coerce').fillna(0).astype(int)
+        
+        # Rename the 'title' from the review file to 'review_title'
+        merged_df.rename(columns={'title': 'review_title'}, inplace=True)
+
+        # Select the final columns to keep
+        final_columns = [
+            'review_id', 'parent_asin', 'product_title', 'category', 'store', 'image_urls',
+            'rating', 'review_title', 'text', 'sentiment', 'text_polarity', 'date',
+            'helpful_vote', 'verified_purchase'
+        ]
+        
+        # Ensure all columns exist, fill missing with None
+        for col in final_columns:
+            if col not in merged_df:
+                merged_df[col] = None
+
+        all_processed_reviews.append(merged_df[final_columns])
+        print(f"✅ Finished '{category_name}' in {time.time() - phase_start_time:.2f} seconds.")
+
+    if not all_processed_reviews:
+        print("❌ No reviews were processed. Exiting.")
+        return
+
+    # Combine all processed data into a single DataFrame
+    final_df = pd.concat(all_processed_reviews, ignore_index=True)
+
+    # --- STAGE 2: Create Final Tables in DuckDB ---
+    print("\n--- STAGE 2: Building Final Tables in DuckDB ---")
+
+    # Register the final DataFrame as a "virtual table" in DuckDB
+    conn.register('raw_reviews_view', final_df)
 
     # Products Table
     print("-> Building 'products' table...")
-    cursor.execute("DROP TABLE IF EXISTS products")
-    cursor.execute("""
-        CREATE TABLE products AS SELECT parent_asin,
-            FIRST_VALUE(product_title) OVER (PARTITION BY parent_asin ORDER BY rowid) as product_title,
-            FIRST_VALUE(image_urls) OVER (PARTITION BY parent_asin ORDER BY rowid) as image_urls,
-            FIRST_VALUE(category) OVER (PARTITION BY parent_asin ORDER BY rowid) as category,
-            AVG(rating) as average_rating, COUNT(rating) as review_count
-        FROM raw_reviews GROUP BY parent_asin;
+    conn.execute("""
+        CREATE OR REPLACE TABLE products AS
+        SELECT
+            parent_asin,
+            FIRST(product_title) as product_title,
+            FIRST(category) as category,
+            FIRST(store) as store,
+            FIRST(image_urls) as image_urls,
+            AVG(rating) as average_rating,
+            COUNT(review_id) as review_count
+        FROM raw_reviews_view
+        GROUP BY parent_asin;
     """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_parent_asin ON products (parent_asin);")
 
-    # Reviews Table (for drill-down and pagination)
+    # Reviews Table
     print("-> Building 'reviews' table...")
-    cursor.execute("DROP TABLE IF EXISTS reviews")
-    cursor.execute("""
-        CREATE TABLE reviews AS
-        SELECT review_id, parent_asin, rating, sentiment, text, date FROM raw_reviews;
+    conn.execute("""
+        CREATE OR REPLACE TABLE reviews AS
+        SELECT
+            review_id,
+            parent_asin,
+            rating,
+            review_title,
+            text,
+            sentiment,
+            text_polarity,
+            date,
+            helpful_vote,
+            verified_purchase
+        FROM raw_reviews_view;
     """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_reviews_review_id ON reviews (review_id);")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_reviews_parent_asin ON reviews (parent_asin);")
-    
-    # Discrepancy Table (now with all data needed for filtering and drill-down)
-    print("-> Building 'discrepancy_data' table...")
-    cursor.execute("DROP TABLE IF EXISTS discrepancy_data")
-    cursor.execute("""
-        CREATE TABLE discrepancy_data AS
-        SELECT review_id, parent_asin, rating, text_polarity, sentiment, date FROM raw_reviews;
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_discrepancy_parent_asin ON discrepancy_data (parent_asin);")
-    
-    # Rating Distribution Table
-    print("-> Building 'rating_distribution' table...")
-    cursor.execute("DROP TABLE IF EXISTS rating_distribution")
-    cursor.execute("""
-        CREATE TABLE rating_distribution AS SELECT parent_asin,
-            COUNT(CASE WHEN rating = 1.0 THEN 1 END) as '1_star',
-            COUNT(CASE WHEN rating = 2.0 THEN 1 END) as '2_star',
-            COUNT(CASE WHEN rating = 3.0 THEN 1 END) as '3_star',
-            COUNT(CASE WHEN rating = 4.0 THEN 1 END) as '4_star',
-            COUNT(CASE WHEN rating = 5.0 THEN 1 END) as '5_star'
-        FROM raw_reviews GROUP BY parent_asin;
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rating_dist_parent_asin ON rating_distribution (parent_asin);")
 
-    conn.commit()
-    print("✅ Core tables created successfully.")
+    # We don't need a separate discrepancy table anymore,
+    # as the 'reviews' table now contains all necessary columns.
 
-# --- Main Execution Controller ---
-def main():
-    start_time = time.time()
-    conn = sqlite3.connect(OUTPUT_DB_PATH)
-    
-    # Run the staging process
-    stage_raw_data(conn, '/kaggle/input/' + KAGGLE_INPUT_DIR)
-    
-    # Create all final tables from the staged data
-    create_final_tables(conn)
-    
-    # NOTE: Aspect analysis is not included in this build for speed,
-    # but can be added later as a new modular function.
-    
-    # Final cleanup
-    print("\n--- Finalizing Database ---")
-    conn.execute("DROP TABLE IF EXISTS raw_reviews;")
-    conn.execute("VACUUM;")
-    conn.commit()
-    print("✅ Cleanup complete.")
-    
+    conn.unregister('raw_reviews_view') # Clean up the virtual table
+    print("✅ All tables created successfully.")
+
     conn.close()
     end_time = time.time()
-    print(f"\n✅ Database build complete in {end_time - start_time:.2f} seconds.")
+    print(f"\n✅✅ Database build complete in {end_time - start_time:.2f} seconds.")
+    print(f"Database file created at: {OUTPUT_DB_PATH}")
 
 if __name__ == '__main__':
-    main()
+    # NOTE: This script assumes the Kaggle dataset is in a directory named 'mcauley-jsonl'
+    # in the same root directory as the script.
+    # Adjust the KAGGLE_INPUT_DIR path if your structure is different.
+    if not os.path.exists(KAGGLE_INPUT_DIR):
+        print(f"Error: Input directory '{KAGGLE_INPUT_DIR}' not found.")
+        print("Please ensure the dataset is downloaded and placed in the correct directory.")
+    else:
+        main()
