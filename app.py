@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 from utils.database_utils import connect_to_db, get_all_categories, get_filtered_products, a_download_data_with_versioning
-from utilities.data_access import download_database_if_needed
+from utils.duckdb_connector import download_database_if_needed
 
 # --- App Configuration ---
 DB_PATH = "amazon_reviews_final.duckdb"
