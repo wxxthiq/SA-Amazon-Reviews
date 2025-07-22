@@ -2,11 +2,31 @@
 import streamlit as st
 import duckdb
 import pandas as pd
+import requests
+import os
 
-# Define the path to the database file.
-# This can be centralized here for easy updates.
-DB_FILE = "amazon_reviews.duckdb"
+DB_URL = "https://www.kaggle.com/datasets/wathiqsoualhi/amazon-aspect" # Replace with your actual URL
+DB_PATH = "amazon_reviews_final.duckdb" # The local path to save the file
 
+@st.cache_resource(show_spinner="Connecting to the database...")
+def download_database_if_needed():
+    """
+    Checks if the DuckDB database file exists. If not, it downloads it from
+    the specified URL (e.g., from Kaggle Datasets).
+    """
+    if not os.path.exists(DB_PATH):
+        st.info(f"Downloading database from Kaggle... This may take a moment.")
+        try:
+            with requests.get(DB_URL, stream=True) as r:
+                r.raise_for_status()
+                with open(DB_PATH, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            st.success("Database download complete!")
+        except Exception as e:
+            st.error(f"Failed to download database: {e}")
+            st.stop()
+            
 @st.cache_resource
 def get_db_connection():
     """
