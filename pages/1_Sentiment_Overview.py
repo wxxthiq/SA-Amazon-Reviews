@@ -183,52 +183,89 @@ def main():
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- ASPECT SENTIMENT SUMMARY (WITH ENHANCED EXTRACTION) ---
-    # ADD a new section:
-    st.markdown("### 🔎 Topic Sentiment Summary")
-    st.info("💡 These topics are discovered automatically from all reviews. The chart shows the average sentiment for each topic.")
+    # --- NEW: DYNAMIC & FILTERABLE ASPECT SENTIMENT ANALYSIS ---
+    st.markdown("### 🔎 Key Aspect Sentiment Distribution")
+    st.info("This chart displays the sentiment breakdown for the most frequently discussed product aspects, based on your current filters. Use the slider to see more or fewer aspects.")
+    
+    # Add the interactive slider to control the number of aspects shown
+    num_aspects_to_show = st.slider(
+        "Select number of top aspects to display:",
+        min_value=3, max_value=15, value=5, key="overview_aspect_slider"
+    )
     
     @st.cache_data
-    def get_topic_summary(_conn, asin):
-        # This query joins reviews and topics to get the topics relevant to the selected product
-        query = """
-        SELECT
-            t.topic_id,
-            t.topic_name,
-            t.keywords,
-            t.avg_sentiment_score,
-            COUNT(r.review_id) as num_reviews
-        FROM topics t
-        JOIN document_topic_mapping dtm ON t.topic_id = dtm.topic_id
-        JOIN reviews r ON dtm.review_id = r.review_id
-        WHERE r.parent_asin = ?
-        GROUP BY t.topic_id, t.topic_name, t.keywords, t.avg_sentiment_score
-        ORDER BY num_reviews DESC
-        LIMIT 10;
+    def get_filtered_aspect_distribution(_conn, filtered_review_ids):
         """
-        return _conn.execute(query, [asin]).fetchdf()
+        Fetches the sentiment distribution for topics based on a list of
+        review_ids that have already been filtered by the main dashboard controls.
+        """
+        if not filtered_review_ids:
+            return pd.DataFrame()
     
-    topic_summary_df = get_topic_summary(conn, selected_asin)
+        # Create a string of placeholders for the SQL query
+        placeholders = ', '.join(['?'] * len(filtered_review_ids))
     
-    if not topic_summary_df.empty:
-        chart = alt.Chart(topic_summary_df).mark_bar().encode(
-            x=alt.X('avg_sentiment_score:Q', title='Average Sentiment Score (-1 to 1)', scale=alt.Scale(domain=[-1, 1])),
-            y=alt.Y('topic_name:N', title='Topic', sort='-x'),
-            color=alt.Color('avg_sentiment_score:Q',
-                            scale=alt.Scale(scheme='redyellowgreen', domain=[-1, 1]),
-                            legend=None),
-            tooltip=['topic_name', 'keywords', alt.Tooltip('avg_sentiment_score:Q', format='.2f'), 'num_reviews']
+        query = f"""
+        SELECT
+            t.topic_name,
+            r.sentiment,
+            COUNT(r.review_id) as sentiment_count
+        FROM reviews r
+        JOIN document_topic_mapping dtm ON r.review_id = dtm.review_id
+        JOIN topics t ON dtm.topic_id = t.topic_id
+        WHERE r.review_id IN ({placeholders})
+        GROUP BY ALL
+        """
+        # The list of review_ids is passed as parameters to the query
+        return _conn.execute(query, filtered_review_ids).fetchdf()
+    
+    # Get the list of review IDs from the main filtered DataFrame
+    filtered_ids = chart_data['review_id'].tolist()
+    aspect_dist_df = get_filtered_aspect_distribution(conn, filtered_ids)
+    
+    if not aspect_dist_df.empty:
+        # --- Data Processing to find the Top N Aspects ---
+        # Calculate total mentions for each topic to find the most discussed ones
+        aspect_totals = aspect_dist_df.groupby('topic_name')['sentiment_count'].sum().reset_index()
+        top_aspects = aspect_totals.nlargest(num_aspects_to_show, 'sentiment_count')['topic_name'].tolist()
+    
+        # Filter the main distribution data to only include the top aspects
+        top_aspects_df = aspect_dist_df[aspect_dist_df['topic_name'].isin(top_aspects)]
+        top_aspects_df['topic_name'] = top_aspects_df['topic_name'].str.title()
+    
+        # --- Create the 100% Stacked Bar Chart ---
+        chart = alt.Chart(top_aspects_df).mark_bar().encode(
+            # Y-axis shows the aspects, sorted by total mentions
+            y=alt.Y('topic_name:N', title='Product Aspect', sort=alt.EncodingSortField(field="sentiment_count", op="sum", order="descending")),
+            
+            # X-axis is the percentage, making it a 100% stacked bar
+            x=alt.X('sum(sentiment_count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
+            
+            # Color is determined by the sentiment category
+            color=alt.Color('sentiment:N',
+                            scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
+                                            range=['#1a9850', '#cccccc', '#d73027']),
+                            legend=alt.Legend(title="Sentiment")),
+            
+            # Tooltip provides detailed information on hover
+            tooltip=[
+                alt.Tooltip('topic_name', title='Aspect'),
+                alt.Tooltip('sentiment', title='Sentiment'),
+                alt.Tooltip('sum(sentiment_count):Q', title='Review Count')
+            ]
         ).properties(
-            title="Top 10 Topics by Mention Count"
+            # Dynamic height based on the number of aspects shown
+            height=alt.Step(max(30, 300 // num_aspects_to_show))
         )
+        
         st.altair_chart(chart, use_container_width=True)
     else:
-        st.info("Not enough data to generate a topic summary for this product.")
-
-        
-   
-    if st.button("Perform Detailed Aspect Analysis 🔎"):
+        st.info("No aspects to display for the current filter selection.")
+    
+    # Add the button to navigate to the detailed analysis page
+    if st.button("Perform Detailed Aspect Analysis 🔎", use_container_width=True):
         st.switch_page("pages/4_Aspect_Analysis.py")
+   
     
     # --- KEYWORD ANALYSIS SECTION (WITH N-GRAMS) ---
     st.markdown("---")
