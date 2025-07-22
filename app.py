@@ -2,13 +2,14 @@
 import streamlit as st
 import pandas as pd
 from utils.database_utils import connect_to_db, get_all_categories, get_filtered_products, a_download_data_with_versioning
+from utilities.data_access import download_database_if_needed
 
 # --- App Configuration ---
-DB_PATH = "amazon_reviews_top100.duckdb"
+DB_PATH = "amazon_reviews_final.duckdb"
 DB_VERSION = 1
 PRODUCTS_PER_PAGE = 16
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
-KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-reviews-duckdb-top100"
+KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-aspect"
 
 # --- Page Setup ---
 st.set_page_config(layout="wide", page_title="Amazon Review Search")
@@ -16,7 +17,7 @@ st.title("🔎 Amazon Product Search")
 st.info("ℹ️ **How to Use:** Start by selecting a product category from the dropdown menu. You can then use the search bar and advanced filters to find specific products.")
 
 # --- Data Loading ---
-a_download_data_with_versioning(KAGGLE_DATASET_SLUG, DB_PATH, DB_VERSION)
+#a_download_data_with_versioning(KAGGLE_DATASET_SLUG, DB_PATH, DB_VERSION)
 conn = connect_to_db(DB_PATH)
 
 # --- Session State Initialization ---
