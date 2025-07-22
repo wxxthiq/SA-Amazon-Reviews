@@ -38,7 +38,7 @@ if 'selected_review_id' not in st.session_state:
 def main():
     st.title("📊 Sentiment Overview")
     
-    DB_PATH = "amazon_reviews_top100.duckdb"
+    DB_PATH = "amazon_reviews_final.duckdb"
     conn = connect_to_db(DB_PATH)
     
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
@@ -183,50 +183,46 @@ def main():
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- ASPECT SENTIMENT SUMMARY (WITH ENHANCED EXTRACTION) ---
-    st.markdown("### 🔎 Aspect Sentiment Summary")
-    st.info("💡 This chart automatically identifies key product features (aspects) like 'battery life' or 'screen quality' from reviews and shows the sentiment breakdown for each.")
-
+    # ADD a new section:
+    st.markdown("### 🔎 Topic Sentiment Summary")
+    st.info("💡 These topics are discovered automatically from all reviews. The chart shows the average sentiment for each topic.")
+    
     @st.cache_data
-    def get_aspect_summary_with_chunks(data, num_aspects):
-        all_aspects = []
-        def clean_chunk(chunk):
-            cleaned_tokens = []
-            for token in chunk:
-                # Keep nouns, proper nouns, and adjectives; remove determiners and pronouns
-                if token.pos_ in ['NOUN', 'PROPN', 'ADJ']:
-                    cleaned_tokens.append(token.lemma_.lower())
-            return " ".join(cleaned_tokens)
-
-        for doc in nlp.pipe(data['text'].astype(str)):
-            for chunk in doc.noun_chunks:
-                cleaned = clean_chunk(chunk)
-                if cleaned and len(cleaned) > 2: # Ensure the cleaned chunk is not empty
-                    all_aspects.append(cleaned)
-        
-        if not all_aspects:
-            return pd.DataFrame()
-            
-        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(num_aspects)]
-
-        aspect_sentiments = []
-        for aspect in top_aspects:
-            # Find reviews that contain any word from the aspect phrase
-            search_regex = r'\b(' + '|'.join(re.escape(word) for word in aspect.split()) + r')\b'
-            # In the get_aspect_summary_with_chunks function...
-            aspect_reviews = data[data['text'].str.contains(search_regex, case=False, na=False, regex=True)]
-            
-            for text in aspect_reviews['text']:
-                window = str(text).lower()[max(0, str(text).lower().find(aspect)-50):min(len(text), str(text).lower().find(aspect)+len(aspect)+50)]
-                polarity = TextBlob(window).sentiment.polarity
-                sentiment_cat = 'Positive' if polarity > 0.1 else 'Negative' if polarity < -0.1 else 'Neutral'
-                aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment_cat})
-        
-        if not aspect_sentiments:
-            return pd.DataFrame()
-            
-        return pd.DataFrame(aspect_sentiments)
-
+    def get_topic_summary(_conn, asin):
+        # This query joins reviews and topics to get the topics relevant to the selected product
+        query = """
+        SELECT
+            t.topic_id,
+            t.topic_name,
+            t.keywords,
+            t.avg_sentiment_score,
+            COUNT(r.review_id) as num_reviews
+        FROM topics t
+        JOIN document_topic_mapping dtm ON t.topic_id = dtm.topic_id
+        JOIN reviews r ON dtm.review_id = r.review_id
+        WHERE r.parent_asin = ?
+        GROUP BY t.topic_id, t.topic_name, t.keywords, t.avg_sentiment_score
+        ORDER BY num_reviews DESC
+        LIMIT 10;
+        """
+        return _conn.execute(query, [asin]).fetchdf()
+    
+    topic_summary_df = get_topic_summary(conn, selected_asin)
+    
+    if not topic_summary_df.empty:
+        chart = alt.Chart(topic_summary_df).mark_bar().encode(
+            x=alt.X('avg_sentiment_score:Q', title='Average Sentiment Score (-1 to 1)', scale=alt.Scale(domain=[-1, 1])),
+            y=alt.Y('topic_name:N', title='Topic', sort='-x'),
+            color=alt.Color('avg_sentiment_score:Q',
+                            scale=alt.Scale(scheme='redyellowgreen', domain=[-1, 1]),
+                            legend=None),
+            tooltip=['topic_name', 'keywords', alt.Tooltip('avg_sentiment_score:Q', format='.2f'), 'num_reviews']
+        ).properties(
+            title="Top 10 Topics by Mention Count"
+        )
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.info("Not enough data to generate a topic summary for this product.")
         # Add the interactive slider
     num_aspects_to_show = st.slider(
         "Select number of top aspects to display:",
