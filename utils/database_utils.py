@@ -155,7 +155,12 @@ def get_reviews_for_product(_conn, asin, date_range, rating_filter, sentiment_fi
     if not df.empty:
         rng = np.random.default_rng(seed=42)
         df['rating_jittered'] = df['rating'] + rng.uniform(-0.1, 0.1, size=len(df))
-        df['text_polarity_jittered'] = df['text_polarity'] + rng.uniform(-0.02, 0.02, size=len(df))
+                # --- FIX IS HERE ---
+        # Use the correct column name 'sentiment_score' from the new database
+        df['text_polarity_jittered'] = df['sentiment_score'] + rng.uniform(-0.02, 0.02, size=len(df))
+        
+        # Also, create an alias for 'text_polarity' if other parts of the app still use it
+        df['text_polarity'] = df['sentiment_score'] 
 
     return df
     
