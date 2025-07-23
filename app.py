@@ -8,7 +8,7 @@ DB_PATH = "amazon_reviews_final.duckdb"
 DB_VERSION = 1
 PRODUCTS_PER_PAGE = 16
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
-KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-duckdb"
+KAGGLE_DATASET_SLUG = "wathiqsoualhi/aspect-llm"
 
 # --- Page Setup ---
 st.set_page_config(layout="wide", page_title="Amazon Review Search")
