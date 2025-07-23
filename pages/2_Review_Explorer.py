@@ -10,7 +10,7 @@ import re
 
 # --- Page Configuration and Constants ---
 st.set_page_config(layout="wide", page_title="Review Explorer")
-DB_PATH = "amazon_reviews_top100.duckdb"
+DB_PATH = "amazon_reviews_final.duckdb"
 REVIEWS_PER_PAGE = 10
 conn = connect_to_db(DB_PATH)
 
