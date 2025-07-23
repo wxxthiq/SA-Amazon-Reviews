@@ -183,11 +183,10 @@ def main():
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- NEW: DYNAMIC & FILTERABLE ASPECT SENTIMENT ANALYSIS ---
-    st.markdown("### 🔎 Key Aspect Sentiment Distribution")
-    st.info("This chart displays the sentiment breakdown for the most frequently discussed product aspects, based on your current filters. Use the slider to see more or fewer aspects.")
+    # --- NEW: DYNAMIC & FILTERABLE ASPECT SENTIMENT ANALYSIS (Diverging Chart) ---
+    st.markdown("### 🔎 Key Aspect Sentiment Analysis")
+    st.info("This chart shows the sentiment breakdown for the most discussed product aspects. Strengths are shown in green (right) and weaknesses in red (left).")
     
-    # Add the interactive slider to control the number of aspects shown
     num_aspects_to_show = st.slider(
         "Select number of top aspects to display:",
         min_value=3, max_value=15, value=5, key="overview_aspect_slider"
@@ -195,74 +194,58 @@ def main():
     
     @st.cache_data
     def get_filtered_aspect_distribution(_conn, filtered_review_ids):
-        """
-        Fetches the sentiment distribution for topics based on a list of
-        review_ids that have already been filtered by the main dashboard controls.
-        """
+        # ... (This function remains the same as the previous version)
         if not filtered_review_ids:
             return pd.DataFrame()
-    
-        # Create a string of placeholders for the SQL query
         placeholders = ', '.join(['?'] * len(filtered_review_ids))
-    
         query = f"""
-        SELECT
-            t.topic_name,
-            r.sentiment,
-            COUNT(r.review_id) as sentiment_count
+        SELECT t.topic_name, r.sentiment, COUNT(r.review_id) as sentiment_count
         FROM reviews r
         JOIN document_topic_mapping dtm ON r.review_id = dtm.review_id
         JOIN topics t ON dtm.topic_id = t.topic_id
         WHERE r.review_id IN ({placeholders})
         GROUP BY ALL
         """
-        # The list of review_ids is passed as parameters to the query
         return _conn.execute(query, filtered_review_ids).fetchdf()
     
-    # Get the list of review IDs from the main filtered DataFrame
     filtered_ids = chart_data['review_id'].tolist()
     aspect_dist_df = get_filtered_aspect_distribution(conn, filtered_ids)
     
     if not aspect_dist_df.empty:
-        # --- Data Processing to find the Top N Aspects ---
-        # Calculate total mentions for each topic to find the most discussed ones
         aspect_totals = aspect_dist_df.groupby('topic_name')['sentiment_count'].sum().reset_index()
         top_aspects = aspect_totals.nlargest(num_aspects_to_show, 'sentiment_count')['topic_name'].tolist()
+        
+        top_aspects_df = aspect_dist_df[aspect_dist_df['topic_name'].isin(top_aspects)].copy()
+        
+        # --- Logic for Diverging Chart ---
+        # Calculate the total mentions for normalization
+        top_aspects_df['total_mentions'] = top_aspects_df.groupby('topic_name')['sentiment_count'].transform('sum')
+        # Calculate percentage
+        top_aspects_df['percentage'] = top_aspects_df['sentiment_count'] / top_aspects_df['total_mentions']
+        # Make negative sentiment percentages negative for the diverging effect
+        top_aspects_df.loc[top_aspects_df['sentiment'] == 'Negative', 'percentage'] *= -1
     
-        # Filter the main distribution data to only include the top aspects
-        top_aspects_df = aspect_dist_df[aspect_dist_df['topic_name'].isin(top_aspects)]
-        top_aspects_df['topic_name'] = top_aspects_df['topic_name'].str.title()
-    
-        # --- Create the 100% Stacked Bar Chart ---
+        # --- Create the Diverging Stacked Bar Chart ---
         chart = alt.Chart(top_aspects_df).mark_bar().encode(
-            # Y-axis shows the aspects, sorted by total mentions
-            y=alt.Y('topic_name:N', title='Product Aspect', sort=alt.EncodingSortField(field="sentiment_count", op="sum", order="descending")),
-            
-            # X-axis is the percentage, making it a 100% stacked bar
-            x=alt.X('sum(sentiment_count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
-            
-            # Color is determined by the sentiment category
+            y=alt.Y('topic_name:N', title='Product Aspect', sort='-color'),
+            x=alt.X('percentage:Q', title='Sentiment Distribution', axis=alt.Axis(format='%', labelExpr="datum.value < 0 ? -datum.value : datum.value")),
             color=alt.Color('sentiment:N',
                             scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
                                             range=['#1a9850', '#cccccc', '#d73027']),
                             legend=alt.Legend(title="Sentiment")),
-            
-            # Tooltip provides detailed information on hover
             tooltip=[
                 alt.Tooltip('topic_name', title='Aspect'),
                 alt.Tooltip('sentiment', title='Sentiment'),
-                alt.Tooltip('sum(sentiment_count):Q', title='Review Count')
+                alt.Tooltip('sentiment_count:Q', title='Review Count')
             ]
         ).properties(
-            # Dynamic height based on the number of aspects shown
-            height=alt.Step(max(30, 300 // num_aspects_to_show))
+            title=f"Sentiment Analysis of Top {num_aspects_to_show} Aspects"
         )
-        
+    
         st.altair_chart(chart, use_container_width=True)
     else:
         st.info("No aspects to display for the current filter selection.")
     
-    # Add the button to navigate to the detailed analysis page
     if st.button("Perform Detailed Aspect Analysis 🔎", use_container_width=True):
         st.switch_page("pages/4_Aspect_Analysis.py")
    
