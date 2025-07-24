@@ -191,15 +191,15 @@ def main():
     @st.cache_data
     def extract_aspects_with_sentiment(dataf):
         """
-        Uses a definitive, multi-layered automated filtering approach to extract 
-        high-quality, meaningful aspects from review text.
+        Uses a definitive, fully automated filtering approach to extract
+        high-quality, multi-word aspects without any manual lists.
         """
         aspect_sentiments = []
-    
+        
         for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
             for chunk in doc.noun_chunks:
                 
-                # --- Start Advanced Automated Filtering ---
+                # --- Start Definitive Automated Filtering ---
                 
                 # Rule 1: Clean the chunk by removing leading/trailing stop words & determiners
                 tokens = [token for token in chunk]
@@ -211,12 +211,15 @@ def main():
                 if not tokens:
                     continue
     
-                # Rule 2: Final aspect creation
+                # Rule 2: Create the final aspect from the lemmatized form of the remaining tokens
                 final_aspect = " ".join(token.lemma_.lower() for token in tokens)
     
-                # Rule 3: Final quality check for length and relevance
-                # Ensures we don't end up with single-letter words or pronouns
-                if len(final_aspect) > 2 and final_aspect not in nlp.Defaults.stop_words:
+                # Rule 3: Final Quality Check
+                # Ensure the aspect is a meaningful multi-word phrase and not a stop word.
+                if (
+                    " " in final_aspect and  # MUST be a multi-word phrase
+                    final_aspect not in nlp.Defaults.stop_words
+                ):
                     aspect_sentiments.append({
                         'aspect': final_aspect,
                         'sentiment': sentiment
