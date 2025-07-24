@@ -84,6 +84,7 @@ def main():
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
         st.session_state.selected_review_id = None
+        extract_aspects_with_sentiment.clear()
         st.switch_page("app.py")
     left_col, right_col = st.columns([1, 2])
     with left_col:
@@ -235,9 +236,7 @@ def main():
     
         return pd.DataFrame(aspect_sentiments)
     
-    # --- Update the function call to pass in product_details ---
     aspect_df = extract_aspects_with_sentiment(chart_data, product_details)
-    
     if not aspect_df.empty:
         # --- Data Processing to find the Top N Aspects ---
         aspect_totals = aspect_df['aspect'].value_counts().reset_index()
