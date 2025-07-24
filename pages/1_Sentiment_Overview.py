@@ -200,7 +200,7 @@ def main():
         """
         aspect_sentiments = []
         # Process reviews using spaCy's efficient nlp.pipe
-        for doc, sentiment in zip(nlp.pipe(dataf['text'], disable=["parser", "ner"]), dataf['sentiment']):
+        for doc, sentiment in zip(nlp.pipe(dataf['text'], disable=["ner"]), dataf['sentiment']):
             for chunk in doc.noun_chunks:
                 # Filter for meaningful aspects (not just pronouns like 'it' or 'i')
                 if chunk.root.pos_ in ['NOUN', 'PROPN']:
