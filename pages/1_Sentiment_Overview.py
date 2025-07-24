@@ -195,16 +195,30 @@ def main():
     @st.cache_data
     def extract_aspects_with_sentiment(dataf):
         """
-        Uses spaCy to extract noun chunks (aspects) and their sentiment
-        from a DataFrame of reviews.
+        Uses spaCy to extract noun chunks (aspects) and their sentiment,
+        while filtering out generic and unhelpful terms.
         """
         aspect_sentiments = []
-        # Process reviews using spaCy's efficient nlp.pipe
+        
+        # --- NEW: Define a stop list of generic terms to ignore ---
+        stop_aspects = [
+            'this product', 'the product', 'my eyebrow', 'my eyebrows', 'the color',
+            'the dye', 'the skin', 'i', 'it', 'its', 'product', 'eyebrow', 'eyebrows'
+        ]
+    
         for doc, sentiment in zip(nlp.pipe(dataf['text'], disable=["ner"]), dataf['sentiment']):
             for chunk in doc.noun_chunks:
-                # Filter for meaningful aspects (not just pronouns like 'it' or 'i')
-                if chunk.root.pos_ in ['NOUN', 'PROPN']:
-                    aspect_sentiments.append({'aspect': chunk.lemma_.lower(), 'sentiment': sentiment})
+                # Clean and lemmatize the aspect text
+                aspect_text = chunk.lemma_.lower()
+                
+                # --- NEW: Apply filtering logic ---
+                # 1. Ignore aspects in the stop list
+                # 2. Ignore aspects that are too short (less than 3 characters)
+                if aspect_text not in stop_aspects and len(aspect_text) > 2:
+                    aspect_sentiments.append({
+                        'aspect': aspect_text,
+                        'sentiment': sentiment
+                    })
         
         if not aspect_sentiments:
             return pd.DataFrame()
