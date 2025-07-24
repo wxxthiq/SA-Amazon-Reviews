@@ -183,65 +183,65 @@ def main():
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- NEW: DYNAMIC & FILTERABLE ASPECT SENTIMENT ANALYSIS (Diverging Chart) ---
+    # --- KEY ASPECT SENTIMENT ANALYSIS (spaCy Real-Time) ---
     st.markdown("### 🔎 Key Aspect Sentiment Analysis")
-    st.info("This chart shows the sentiment breakdown for the most discussed product aspects. Strengths are shown in green (right) and weaknesses in red (left).")
+    st.info("This chart extracts key product features (aspects) directly from the filtered reviews and shows their sentiment breakdown.")
     
     num_aspects_to_show = st.slider(
         "Select number of top aspects to display:",
-        min_value=3, max_value=15, value=5, key="overview_aspect_slider"
+        min_value=3, max_value=10, value=5, key="overview_aspect_slider"
     )
     
     @st.cache_data
-    def get_filtered_aspect_distribution(_conn, filtered_review_ids):
-        # ... (This function remains the same as the previous version)
-        if not filtered_review_ids:
-            return pd.DataFrame()
-        placeholders = ', '.join(['?'] * len(filtered_review_ids))
-        query = f"""
-        SELECT t.topic_name, r.sentiment, COUNT(r.review_id) as sentiment_count
-        FROM reviews r
-        JOIN document_topic_mapping dtm ON r.review_id = dtm.review_id
-        JOIN topics t ON dtm.topic_id = t.topic_id
-        WHERE r.review_id IN ({placeholders})
-        GROUP BY ALL
+    def extract_aspects_with_sentiment(dataf):
         """
-        return _conn.execute(query, filtered_review_ids).fetchdf()
-    
-    filtered_ids = chart_data['review_id'].tolist()
-    aspect_dist_df = get_filtered_aspect_distribution(conn, filtered_ids)
-    
-    if not aspect_dist_df.empty:
-        aspect_totals = aspect_dist_df.groupby('topic_name')['sentiment_count'].sum().reset_index()
-        top_aspects = aspect_totals.nlargest(num_aspects_to_show, 'sentiment_count')['topic_name'].tolist()
+        Uses spaCy to extract noun chunks (aspects) and their sentiment
+        from a DataFrame of reviews.
+        """
+        aspect_sentiments = []
+        # Process reviews using spaCy's efficient nlp.pipe
+        for doc, sentiment in zip(nlp.pipe(dataf['text'], disable=["parser", "ner"]), dataf['sentiment']):
+            for chunk in doc.noun_chunks:
+                # Filter for meaningful aspects (not just pronouns like 'it' or 'i')
+                if chunk.root.pos_ in ['NOUN', 'PROPN']:
+                    aspect_sentiments.append({'aspect': chunk.lemma_.lower(), 'sentiment': sentiment})
         
-        top_aspects_df = aspect_dist_df[aspect_dist_df['topic_name'].isin(top_aspects)].copy()
-        
-        # --- Logic for Diverging Chart ---
-        # Calculate the total mentions for normalization
-        top_aspects_df['total_mentions'] = top_aspects_df.groupby('topic_name')['sentiment_count'].transform('sum')
-        # Calculate percentage
-        top_aspects_df['percentage'] = top_aspects_df['sentiment_count'] / top_aspects_df['total_mentions']
-        # Make negative sentiment percentages negative for the diverging effect
-        top_aspects_df.loc[top_aspects_df['sentiment'] == 'Negative', 'percentage'] *= -1
+        if not aspect_sentiments:
+            return pd.DataFrame()
+            
+        return pd.DataFrame(aspect_sentiments)
     
-        # --- Create the Diverging Stacked Bar Chart ---
-        chart = alt.Chart(top_aspects_df).mark_bar().encode(
-            y=alt.Y('topic_name:N', title='Product Aspect', sort='-color'),
-            x=alt.X('percentage:Q', title='Sentiment Distribution', axis=alt.Axis(format='%', labelExpr="datum.value < 0 ? -datum.value : datum.value")),
+    # Extract aspects from the already-filtered chart_data
+    aspect_df = extract_aspects_with_sentiment(chart_data)
+    
+    if not aspect_df.empty:
+        # --- Data Processing to find the Top N Aspects ---
+        aspect_totals = aspect_df['aspect'].value_counts().reset_index()
+        aspect_totals.columns = ['aspect', 'mention_count']
+        top_aspects = aspect_totals.nlargest(num_aspects_to_show, 'mention_count')['aspect'].tolist()
+        
+        # Filter the main distribution data to only include the top aspects
+        top_aspects_df = aspect_df[aspect_df['aspect'].isin(top_aspects)]
+    
+        # --- Create the 100% Stacked Bar Chart ---
+        sentiment_counts = top_aspects_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        
+        chart = alt.Chart(sentiment_counts).mark_bar().encode(
+            y=alt.Y('aspect:N', title='Product Aspect', sort=alt.EncodingSortField(field="count", op="sum", order="descending")),
+            x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
             color=alt.Color('sentiment:N',
                             scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
                                             range=['#1a9850', '#cccccc', '#d73027']),
                             legend=alt.Legend(title="Sentiment")),
             tooltip=[
-                alt.Tooltip('topic_name', title='Aspect'),
+                alt.Tooltip('aspect', title='Aspect'),
                 alt.Tooltip('sentiment', title='Sentiment'),
-                alt.Tooltip('sentiment_count:Q', title='Review Count')
+                alt.Tooltip('sum(count):Q', title='Review Count')
             ]
         ).properties(
             title=f"Sentiment Analysis of Top {num_aspects_to_show} Aspects"
         )
-    
+        
         st.altair_chart(chart, use_container_width=True)
     else:
         st.info("No aspects to display for the current filter selection.")
