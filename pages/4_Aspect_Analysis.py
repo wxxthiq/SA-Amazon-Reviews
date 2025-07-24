@@ -29,7 +29,7 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8')
 
 nlp = load_spacy_model()
-DB_PATH = "amazon_reviews_top100.duckdb"
+DB_PATH = "amazon_reviews_final.duckdb"
 conn = connect_to_db(DB_PATH)
 REVIEWS_PER_PAGE = 5
 
