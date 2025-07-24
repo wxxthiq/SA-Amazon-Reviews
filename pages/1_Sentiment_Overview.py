@@ -34,7 +34,7 @@ nlp = load_spacy_model()
 
 # In pages/1_Sentiment_Overview.py
 @st.cache_data
-def extract_aspects_with_sentiment(dataf):
+def extract_aspects_with_sentiment(dataf, product_details):
     """
     Uses a definitive, multi-layered automated filtering approach to extract 
     high-quality, 1-4 word aspects without any manual lists.
