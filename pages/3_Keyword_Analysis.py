@@ -24,7 +24,7 @@ from utils.database_utils import (
 
 # --- Page Configuration ---
 st.set_page_config(layout="wide", page_title="Keyword Analysis")
-DB_PATH = "amazon_reviews_top100.duckdb"
+DB_PATH = "amazon_reviews_final.duckdb"
 conn = connect_to_db(DB_PATH)
 REVIEWS_PER_PAGE = 5
 
