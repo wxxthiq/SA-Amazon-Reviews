@@ -191,7 +191,6 @@ def main():
         "Select number of top aspects to display:",
         min_value=3, max_value=10, value=5, key="overview_aspect_slider"
     )
-    # In pages/1_Sentiment_Overview.py
 
     @st.cache_data
     def extract_aspects_with_sentiment(dataf):
@@ -200,54 +199,42 @@ def main():
         and their associated sentiment.
         """
         aspect_sentiments = []
-        all_aspects = []
-    
+        
         # Get the set of stop words from spaCy
         stop_words = nlp.Defaults.stop_words
     
         for doc, sentiment in zip(nlp.pipe(dataf['text'], disable=["ner"]), dataf['sentiment']):
             for chunk in doc.noun_chunks:
-                # --- Advanced Filtering Logic ---
                 
-                # 1. Start with the lemmatized, lowercase version of the chunk
-                cleaned_chunk = chunk.lemma_.lower()
+                # --- CORRECTED Filtering Logic ---
+                
+                # Start with the tokens in the chunk
+                tokens = [token for token in chunk]
+                
+                # 1. Remove determiners (the, this, my) and stop words from the beginning
+                while len(tokens) > 1 and (tokens[0].is_det or tokens[0].is_stop):
+                    tokens.pop(0)
     
-                # 2. Split into words to check the ends
-                words = cleaned_chunk.split()
+                # 2. Remove stop words from the end
+                while len(tokens) > 1 and tokens[-1].is_stop:
+                    tokens.pop(-1)
     
-                # 3. Remove determiners (the, this, my) and stop words from the beginning and end
-                if len(words) > 1:
-                    # Remove from start
-                    if words[0] in stop_words or nlp.vocab[words[0]].is_det:
-                        words = words[1:]
-                    # Remove from end
-                    if len(words) > 1 and (words[-1] in stop_words or nlp.vocab[words[-1]].is_det):
-                        words = words[:-1]
-    
-                final_aspect = " ".join(words)
-    
-                # 4. Final check for quality: must not be a stop word and must be long enough
-                if final_aspect not in stop_words and len(final_aspect) > 2:
+                # 3. Create the final aspect from the lemmatized form of the remaining tokens
+                final_aspect = " ".join(token.lemma_.lower() for token in tokens)
+                
+                # 4. Final check for quality
+                if final_aspect and not final_aspect.isspace() and final_aspect not in stop_words and len(final_aspect) > 2:
                     aspect_sentiments.append({
                         'aspect': final_aspect,
                         'sentiment': sentiment
                     })
-                    all_aspects.append(final_aspect)
         
         if not aspect_sentiments:
             return pd.DataFrame()
         
-        # --- Automated Frequency Filtering (as before) ---
-        top_n_to_remove = 3
-        if len(all_aspects) > 0:
-            most_common_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(top_n_to_remove) if freq > 1]
-        else:
-            most_common_aspects = []
-    
-        aspects_df = pd.DataFrame(aspect_sentiments)
-        filtered_aspects_df = aspects_df[~aspects_df['aspect'].isin(most_common_aspects)]
-            
-        return filtered_aspects_df
+        # Return a DataFrame without the automated frequency filter for now
+        # to ensure all high-quality aspects are shown.
+        return pd.DataFrame(aspect_sentiments)
     
     # Extract aspects from the already-filtered chart_data
     aspect_df = extract_aspects_with_sentiment(chart_data)
