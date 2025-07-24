@@ -189,44 +189,46 @@ def main():
     )
 
     @st.cache_data
-    def extract_aspects_with_sentiment(dataf):
+    def extract_aspects_with_sentiment(_reviews_df, _product_details):
         """
-        Uses a definitive, fully automated filtering approach to extract 
-        high-quality aspects using spaCy's built-in stop word list.
+        Performs metadata-guided Aspect-Based Sentiment Analysis (ABSA).
+        It extracts seed aspects from product metadata and finds mentions in reviews.
         """
-        aspect_sentiments = []
+        # --- Step 1: Extract Seed Aspects from Metadata ---
+        seed_aspects = set()
         
-        # Get the well-established set of stop words from spaCy
-        stop_words = nlp.Defaults.stop_words
+        # Extract from the product title
+        if pd.notna(_product_details.get('product_title')):
+            for token in nlp(_product_details['product_title']):
+                if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
+                    seed_aspects.add(token.lemma_.lower())
     
-        for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
-            for chunk in doc.noun_chunks:
-                
-                # --- Start Definitive Automated Filtering ---
-                
-                # Rule 1: Clean the chunk by removing leading/trailing stop words & determiners.
-                tokens = [token for token in chunk]
-                while len(tokens) > 0 and (tokens[0].is_stop or tokens[0].pos_ == 'DET'):
-                    tokens.pop(0)
-                while len(tokens) > 0 and tokens[-1].is_stop:
-                    tokens.pop(-1)
+        # Extract from the 'features' list (bullet points)
+        if isinstance(_product_details.get('features'), list):
+            for feature in _product_details['features']:
+                for token in nlp(feature):
+                    if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
+                        seed_aspects.add(token.lemma_.lower())
     
-                if not tokens:
-                    continue
+        if not seed_aspects:
+            return pd.DataFrame()
     
-                # Rule 2: Create the final aspect.
-                final_aspect = " ".join(token.lemma_.lower() for token in tokens)
-    
-                # Rule 3: Final quality check using spaCy's built-in stop list.
-                if len(final_aspect) > 3 and final_aspect not in stop_words:
-                    aspect_sentiments.append({
-                        'aspect': final_aspect,
-                        'sentiment': sentiment
-                    })
+        # --- Step 2: Find Mentions of Seed Aspects in Reviews ---
+        aspect_sentiments = []
+        for review_text, sentiment in zip(_reviews_df['text'], _reviews_df['sentiment']):
+            mentioned_aspects_in_review = set()
+            doc = nlp(review_text)
+            for aspect in seed_aspects:
+                # Find mentions of the aspect (as a whole word)
+                if re.search(r'\b' + re.escape(aspect) + r'\b', doc.text, re.IGNORECASE):
+                    # Avoid adding the same aspect multiple times from one review
+                    if aspect not in mentioned_aspects_in_review:
+                        aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment})
+                        mentioned_aspects_in_review.add(aspect)
     
         if not aspect_sentiments:
             return pd.DataFrame()
-            
+    
         return pd.DataFrame(aspect_sentiments)
     
     # Extract aspects from the already-filtered chart_data
