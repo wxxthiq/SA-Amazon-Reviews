@@ -188,40 +188,43 @@ def main():
     min_value=3, max_value=15, value=5, key="overview_aspect_slider"
     )
 
-    @st.cache_data
+   @st.cache_data
     def extract_aspects_with_sentiment(_reviews_df, _product_details):
         """
         Performs metadata-guided Aspect-Based Sentiment Analysis (ABSA).
         It extracts seed aspects from product metadata and finds mentions in reviews.
         """
-        # --- Step 1: Extract Seed Aspects from Metadata ---
         seed_aspects = set()
         
-        # Extract from the product title
-        if pd.notna(_product_details.get('product_title')):
-            for token in nlp(_product_details['product_title']):
+        # Safely get product title
+        title = _product_details.get('product_title')
+        if title and isinstance(title, str):
+            for token in nlp(title):
                 if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
                     seed_aspects.add(token.lemma_.lower())
     
-        # Extract from the 'features' list (bullet points)
-        if isinstance(_product_details.get('features'), list):
-            for feature in _product_details['features']:
-                for token in nlp(feature):
-                    if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
-                        seed_aspects.add(token.lemma_.lower())
+        # Safely get and parse features
+        features_json = _product_details.get('features')
+        if features_json and isinstance(features_json, str):
+            try:
+                features_list = json.loads(features_json)
+                if isinstance(features_list, list):
+                    for feature_item in features_list:
+                        for token in nlp(str(feature_item)):
+                            if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
+                                seed_aspects.add(token.lemma_.lower())
+            except json.JSONDecodeError:
+                print("Could not decode features JSON")
     
         if not seed_aspects:
             return pd.DataFrame()
     
-        # --- Step 2: Find Mentions of Seed Aspects in Reviews ---
         aspect_sentiments = []
         for review_text, sentiment in zip(_reviews_df['text'], _reviews_df['sentiment']):
             mentioned_aspects_in_review = set()
             doc = nlp(review_text)
             for aspect in seed_aspects:
-                # Find mentions of the aspect (as a whole word)
                 if re.search(r'\b' + re.escape(aspect) + r'\b', doc.text, re.IGNORECASE):
-                    # Avoid adding the same aspect multiple times from one review
                     if aspect not in mentioned_aspects_in_review:
                         aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment})
                         mentioned_aspects_in_review.add(aspect)
@@ -231,8 +234,8 @@ def main():
     
         return pd.DataFrame(aspect_sentiments)
     
-    # Extract aspects from the already-filtered chart_data
-    aspect_df = extract_aspects_with_sentiment(chart_data)
+    # --- Update the function call to pass in product_details ---
+    aspect_df = extract_aspects_with_sentiment(chart_data, product_details)
     
     if not aspect_df.empty:
         # --- Data Processing to find the Top N Aspects ---
