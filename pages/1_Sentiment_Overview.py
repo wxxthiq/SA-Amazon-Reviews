@@ -190,35 +190,39 @@ def main():
     @st.cache_data
     def extract_aspects_with_sentiment(dataf):
         """
-        Uses spaCy to extract, clean, and filter for high-quality aspects
-        and their associated sentiment.
+        Uses a fully automated, multi-layered filtering approach to extract 
+        high-quality, meaningful aspects from review text without manual stop lists.
         """
         aspect_sentiments = []
         
         for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
             for chunk in doc.noun_chunks:
                 
-                tokens = [token for token in chunk]
+                # --- Start Fully Automated Filtering ---
                 
-                # --- CORRECTED Filtering Logic ---
-                # 1. Remove determiners (the, this, my) and stop words from the beginning
-                while len(tokens) > 1 and (tokens[0].pos_ == 'DET' or tokens[0].is_stop):
-                    tokens.pop(0)
+                # Rule 1: Discard chunks that are only pronouns (e.g., "you", "it", "this")
+                if all(token.pos_ == 'PRON' for token in chunk):
+                    continue
     
-                # 2. Remove stop words from the end
-                while len(tokens) > 1 and tokens[-1].is_stop:
+                # Rule 2: Clean the chunk by removing leading/trailing stop words & determiners
+                tokens = [token for token in chunk]
+                while len(tokens) > 0 and (tokens[0].is_stop or tokens[0].pos_ == 'DET'):
+                    tokens.pop(0)
+                while len(tokens) > 0 and tokens[-1].is_stop:
                     tokens.pop(-1)
     
-                # 3. Create the final aspect from the lemmatized form of the remaining tokens
+                if not tokens:
+                    continue
+    
+                # Rule 3: Final aspect creation and quality check
                 final_aspect = " ".join(token.lemma_.lower() for token in tokens)
-                
-                # 4. Final check for quality
-                if final_aspect and not final_aspect.isspace() and len(final_aspect) > 2:
+    
+                if len(final_aspect) > 2:
                     aspect_sentiments.append({
                         'aspect': final_aspect,
                         'sentiment': sentiment
                     })
-        
+    
         if not aspect_sentiments:
             return pd.DataFrame()
             
