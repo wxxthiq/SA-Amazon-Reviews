@@ -34,7 +34,7 @@ nlp = load_spacy_model()
 
 # In pages/1_Sentiment_Overview.py
 @st.cache_data
-def extract_aspects_with_sentiment(dataf, product_details):
+def extract_aspects_with_sentiment(dataf):
     """
     Uses a definitive, multi-layered automated filtering approach to extract 
     high-quality, 1-4 word aspects without any manual lists.
@@ -64,12 +64,10 @@ def extract_aspects_with_sentiment(dataf, product_details):
             final_aspect = " ".join(token.lemma_.lower() for token in tokens)
 
             # Keep aspects that are 1-4 words long and not generic.
-            # This check removes generic words like "product" by ensuring that if an aspect
-            # is a single word, its root is not one of the most common words in the dataset.
             if (
                 len(final_aspect.split()) <= 4 and
                 len(final_aspect) > 3 and
-                final_aspect not in ["product", "i", "it", "this", "you", "he", "she", "they"]
+                final_aspect not in nlp.Defaults.stop_words
             ):
                 aspect_sentiments.append({
                     'aspect': final_aspect,
