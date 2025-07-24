@@ -189,7 +189,7 @@ def main():
     min_value=3, max_value=15, value=5, key="overview_aspect_slider"
     )
 
-   
+    @st.cache_data
     def extract_aspects_with_sentiment(_reviews_df, _product_details):
         """
         Performs metadata-guided Aspect-Based Sentiment Analysis (ABSA).
