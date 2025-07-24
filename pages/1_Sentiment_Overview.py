@@ -203,7 +203,7 @@ def main():
         # Get the set of stop words from spaCy
         stop_words = nlp.Defaults.stop_words
     
-        for doc, sentiment in zip(nlp.pipe(dataf['text'], disable=["ner"]), dataf['sentiment']):
+        for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
             for chunk in doc.noun_chunks:
                 
                 # --- CORRECTED Filtering Logic ---
