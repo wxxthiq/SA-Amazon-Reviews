@@ -196,34 +196,41 @@ def main():
     def extract_aspects_with_sentiment(dataf):
         """
         Uses spaCy to extract noun chunks (aspects) and their sentiment,
-        while filtering out generic and unhelpful terms.
+        while programmatically filtering out generic and unhelpful terms.
         """
         aspect_sentiments = []
-        
-        # --- NEW: Define a stop list of generic terms to ignore ---
-        stop_aspects = [
-            'this product', 'the product', 'my eyebrow', 'my eyebrows', 'the color',
-            'the dye', 'the skin', 'i', 'it', 'its', 'product', 'eyebrow', 'eyebrows'
-        ]
+        all_aspects = []
     
+        # First pass: Extract all potential aspects
         for doc, sentiment in zip(nlp.pipe(dataf['text'], disable=["ner"]), dataf['sentiment']):
             for chunk in doc.noun_chunks:
-                # Clean and lemmatize the aspect text
-                aspect_text = chunk.lemma_.lower()
-                
-                # --- NEW: Apply filtering logic ---
-                # 1. Ignore aspects in the stop list
-                # 2. Ignore aspects that are too short (less than 3 characters)
-                if aspect_text not in stop_aspects and len(aspect_text) > 2:
-                    aspect_sentiments.append({
-                        'aspect': aspect_text,
-                        'sentiment': sentiment
-                    })
+                # Grammatical Filter: Ensure the aspect contains a noun, not just pronouns
+                if any(token.pos_ in ['NOUN', 'PROPN'] for token in chunk):
+                    aspect_text = chunk.lemma_.lower()
+                    if len(aspect_text) > 2: # Basic length filter
+                        aspect_sentiments.append({
+                            'aspect': aspect_text,
+                            'sentiment': sentiment
+                        })
+                        all_aspects.append(aspect_text)
         
         if not aspect_sentiments:
             return pd.DataFrame()
+        
+        # --- NEW: Automated Frequency Filtering ---
+        # Determine the most common phrases and treat them as stop words
+        # We'll automatically remove the top 3 most common aspects
+        top_n_to_remove = 3
+        if len(all_aspects) > 0:
+            most_common_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(top_n_to_remove)]
+        else:
+            most_common_aspects = []
+    
+        # Final pass: Create a DataFrame and filter out the most common (generic) aspects
+        aspects_df = pd.DataFrame(aspect_sentiments)
+        filtered_aspects_df = aspects_df[~aspects_df['aspect'].isin(most_common_aspects)]
             
-        return pd.DataFrame(aspect_sentiments)
+        return filtered_aspects_df
     
     # Extract aspects from the already-filtered chart_data
     aspect_df = extract_aspects_with_sentiment(chart_data)
