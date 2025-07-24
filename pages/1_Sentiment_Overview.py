@@ -183,15 +183,6 @@ def main():
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- KEY ASPECT SENTIMENT ANALYSIS (spaCy Real-Time) ---
-    st.markdown("### 🔎 Key Aspect Sentiment Analysis")
-    st.info("This chart extracts key product features (aspects) directly from the filtered reviews and shows their sentiment breakdown.")
-    
-    num_aspects_to_show = st.slider(
-        "Select number of top aspects to display:",
-        min_value=3, max_value=10, value=5, key="overview_aspect_slider"
-    )
-
     @st.cache_data
     def extract_aspects_with_sentiment(dataf):
         """
@@ -200,19 +191,14 @@ def main():
         """
         aspect_sentiments = []
         
-        # Get the set of stop words from spaCy
-        stop_words = nlp.Defaults.stop_words
-    
         for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
             for chunk in doc.noun_chunks:
                 
-                # --- CORRECTED Filtering Logic ---
-                
-                # Start with the tokens in the chunk
                 tokens = [token for token in chunk]
                 
+                # --- CORRECTED Filtering Logic ---
                 # 1. Remove determiners (the, this, my) and stop words from the beginning
-                while len(tokens) > 1 and (tokens[0].is_det or tokens[0].is_stop):
+                while len(tokens) > 1 and (tokens[0].pos_ == 'DET' or tokens[0].is_stop):
                     tokens.pop(0)
     
                 # 2. Remove stop words from the end
@@ -223,7 +209,7 @@ def main():
                 final_aspect = " ".join(token.lemma_.lower() for token in tokens)
                 
                 # 4. Final check for quality
-                if final_aspect and not final_aspect.isspace() and final_aspect not in stop_words and len(final_aspect) > 2:
+                if final_aspect and not final_aspect.isspace() and len(final_aspect) > 2:
                     aspect_sentiments.append({
                         'aspect': final_aspect,
                         'sentiment': sentiment
@@ -231,9 +217,7 @@ def main():
         
         if not aspect_sentiments:
             return pd.DataFrame()
-        
-        # Return a DataFrame without the automated frequency filter for now
-        # to ensure all high-quality aspects are shown.
+            
         return pd.DataFrame(aspect_sentiments)
     
     # Extract aspects from the already-filtered chart_data
