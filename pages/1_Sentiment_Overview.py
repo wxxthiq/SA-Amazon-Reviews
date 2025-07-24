@@ -187,46 +187,47 @@ def main():
     "Select number of top aspects to display:",
     min_value=3, max_value=15, value=5, key="overview_aspect_slider"
     )
+    # In pages/1_Sentiment_overview.py
+
     @st.cache_data
     def extract_aspects_with_sentiment(dataf):
         """
-        Uses a fully automated, multi-layered filtering approach to extract 
-        high-quality, meaningful aspects from review text without manual stop lists.
+        Uses spaCy to extract noun chunks (aspects) and their sentiment,
+        while programmatically filtering out generic and unhelpful terms.
         """
         aspect_sentiments = []
-        
-        for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
+        all_aspects = []
+    
+        # First pass: Extract all potential aspects
+        for doc, sentiment in zip(nlp.pipe(dataf['text'], disable=["ner"]), dataf['sentiment']):
             for chunk in doc.noun_chunks:
-                
-                # --- Start Fully Automated Filtering ---
-                
-                # Rule 1: Discard chunks that are only pronouns (e.g., "you", "it", "this")
-                if all(token.pos_ == 'PRON' for token in chunk):
-                    continue
-    
-                # Rule 2: Clean the chunk by removing leading/trailing stop words & determiners
-                tokens = [token for token in chunk]
-                while len(tokens) > 0 and (tokens[0].is_stop or tokens[0].pos_ == 'DET'):
-                    tokens.pop(0)
-                while len(tokens) > 0 and tokens[-1].is_stop:
-                    tokens.pop(-1)
-    
-                if not tokens:
-                    continue
-    
-                # Rule 3: Final aspect creation and quality check
-                final_aspect = " ".join(token.lemma_.lower() for token in tokens)
-    
-                if len(final_aspect) > 2:
-                    aspect_sentiments.append({
-                        'aspect': final_aspect,
-                        'sentiment': sentiment
-                    })
-    
+                # Grammatical Filter: Ensure the aspect contains a noun, not just pronouns
+                if any(token.pos_ in ['NOUN', 'PROPN'] for token in chunk):
+                    aspect_text = chunk.lemma_.lower()
+                    if len(aspect_text) > 2: # Basic length filter
+                        aspect_sentiments.append({
+                            'aspect': aspect_text,
+                            'sentiment': sentiment
+                        })
+                        all_aspects.append(aspect_text)
+        
         if not aspect_sentiments:
             return pd.DataFrame()
+        
+        # --- NEW: Automated Frequency Filtering ---
+        # Determine the most common phrases and treat them as stop words
+        # We'll automatically remove the top 3 most common aspects
+        top_n_to_remove = 3
+        if len(all_aspects) > 0:
+            most_common_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(top_n_to_remove)]
+        else:
+            most_common_aspects = []
+    
+        # Final pass: Create a DataFrame and filter out the most common (generic) aspects
+        aspects_df = pd.DataFrame(aspect_sentiments)
+        filtered_aspects_df = aspects_df[~aspects_df['aspect'].isin(most_common_aspects)]
             
-        return pd.DataFrame(aspect_sentiments)
+        return filtered_aspects_df
     
     # Extract aspects from the already-filtered chart_data
     aspect_df = extract_aspects_with_sentiment(chart_data)
