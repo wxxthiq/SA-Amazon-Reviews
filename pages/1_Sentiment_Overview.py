@@ -32,22 +32,21 @@ def load_spacy_model():
 
 nlp = load_spacy_model()
 
+# In pages/1_Sentiment_Overview.py
+
 @st.cache_data
 def extract_aspects_with_sentiment(_reviews_df, _product_details):
     """
-    Performs metadata-guided Aspect-Based Sentiment Analysis (ABSA).
-    It extracts seed aspects from product metadata and finds mentions in reviews.
+    Performs a hybrid, metadata-guided ABSA to find rich, multi-word aspects.
     """
+    # --- Step 1: Extract Seed Nouns from Metadata ---
     seed_aspects = set()
-    
-    # Safely get product title
     title = _product_details.get('product_title')
     if title and isinstance(title, str):
         for token in nlp(title):
-            if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
+            if token.pos_ == 'NOUN' and not token.is_stop:
                 seed_aspects.add(token.lemma_.lower())
 
-    # Safely get and parse features
     features_json = _product_details.get('features')
     if features_json and isinstance(features_json, str):
         try:
@@ -55,7 +54,7 @@ def extract_aspects_with_sentiment(_reviews_df, _product_details):
             if isinstance(features_list, list):
                 for feature_item in features_list:
                     for token in nlp(str(feature_item)):
-                        if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
+                        if token.pos_ == 'NOUN' and not token.is_stop:
                             seed_aspects.add(token.lemma_.lower())
         except json.JSONDecodeError:
             print("Could not decode features JSON")
@@ -63,15 +62,21 @@ def extract_aspects_with_sentiment(_reviews_df, _product_details):
     if not seed_aspects:
         return pd.DataFrame()
 
+    # --- Step 2: Find and Validate Richer Aspects in Reviews ---
     aspect_sentiments = []
-    for review_text, sentiment in zip(_reviews_df['text'], _reviews_df['sentiment']):
+    for doc, sentiment in zip(nlp.pipe(_reviews_df['text']), _reviews_df['sentiment']):
         mentioned_aspects_in_review = set()
-        doc = nlp(review_text)
-        for aspect in seed_aspects:
-            if re.search(r'\b' + re.escape(aspect) + r'\b', doc.text, re.IGNORECASE):
-                if aspect not in mentioned_aspects_in_review:
-                    aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment})
-                    mentioned_aspects_in_review.add(aspect)
+        for chunk in doc.noun_chunks:
+            # Clean the noun chunk
+            final_aspect = chunk.lemma_.lower()
+            
+            # Validate: Check if the chunk contains any of our seed aspects
+            if any(seed in final_aspect for seed in seed_aspects):
+                # Quality check: Ensure it's a meaningful phrase
+                if len(final_aspect) > 3 and final_aspect not in nlp.Defaults.stop_words:
+                    if final_aspect not in mentioned_aspects_in_review:
+                        aspect_sentiments.append({'aspect': final_aspect, 'sentiment': sentiment})
+                        mentioned_aspects_in_review.add(final_aspect)
 
     if not aspect_sentiments:
         return pd.DataFrame()
