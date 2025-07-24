@@ -14,6 +14,7 @@ from collections import Counter
 from textblob import TextBlob
 import re
 import plotly.graph_objects as go 
+importjson
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
