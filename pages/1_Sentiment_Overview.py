@@ -191,17 +191,20 @@ def main():
     @st.cache_data
     def extract_aspects_with_sentiment(dataf):
         """
-        Uses a definitive, fully automated filtering approach to extract
-        high-quality, multi-word aspects without any manual lists.
+        Uses a definitive, fully automated filtering approach to extract 
+        high-quality aspects using spaCy's built-in stop word list.
         """
         aspect_sentiments = []
         
+        # Get the well-established set of stop words from spaCy
+        stop_words = nlp.Defaults.stop_words
+    
         for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
             for chunk in doc.noun_chunks:
                 
                 # --- Start Definitive Automated Filtering ---
                 
-                # Rule 1: Clean the chunk by removing leading/trailing stop words & determiners
+                # Rule 1: Clean the chunk by removing leading/trailing stop words & determiners.
                 tokens = [token for token in chunk]
                 while len(tokens) > 0 and (tokens[0].is_stop or tokens[0].pos_ == 'DET'):
                     tokens.pop(0)
@@ -211,15 +214,11 @@ def main():
                 if not tokens:
                     continue
     
-                # Rule 2: Create the final aspect from the lemmatized form of the remaining tokens
+                # Rule 2: Create the final aspect.
                 final_aspect = " ".join(token.lemma_.lower() for token in tokens)
     
-                # Rule 3: Final Quality Check
-                # Ensure the aspect is a meaningful multi-word phrase and not a stop word.
-                if (
-                    " " in final_aspect and  # MUST be a multi-word phrase
-                    final_aspect not in nlp.Defaults.stop_words
-                ):
+                # Rule 3: Final quality check using spaCy's built-in stop list.
+                if len(final_aspect) > 3 and final_aspect not in stop_words:
                     aspect_sentiments.append({
                         'aspect': final_aspect,
                         'sentiment': sentiment
