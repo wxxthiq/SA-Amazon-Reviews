@@ -34,49 +34,42 @@ nlp = load_spacy_model()
 
 # In pages/1_Sentiment_Overview.py
 @st.cache_data
-def extract_aspects_with_sentiment(dataf, product_details):
+def extract_aspects_with_sentiment(_reviews_df, _product_details):
     """
-    Uses a definitive, multi-layered automated filtering approach to extract 
-    high-quality, 1-4 word aspects without any manual lists.
+    Performs metadata-guided Aspect-Based Sentiment Analysis (ABSA).
+    It extracts seed aspects from product metadata and finds mentions in reviews.
     """
+    # ... (function content remains the same)
+    seed_aspects = set()
+    title = _product_details.get('product_title')
+    if title and isinstance(title, str):
+        for token in nlp(title):
+            if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
+                seed_aspects.add(token.lemma_.lower())
+    features_json = _product_details.get('features')
+    if features_json and isinstance(features_json, str):
+        try:
+            features_list = json.loads(features_json)
+            if isinstance(features_list, list):
+                for feature_item in features_list:
+                    for token in nlp(str(feature_item)):
+                        if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
+                            seed_aspects.add(token.lemma_.lower())
+        except json.JSONDecodeError:
+            print("Could not decode features JSON")
+    if not seed_aspects:
+        return pd.DataFrame()
     aspect_sentiments = []
-    
-    for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
-        for chunk in doc.noun_chunks:
-            
-            # --- Start Definitive Automated Filtering ---
-            
-            # Rule 1: Ensure the core of the chunk is a meaningful noun, not a pronoun.
-            if chunk.root.pos_ != 'NOUN' and chunk.root.pos_ != 'PROPN':
-                continue
-
-            # Rule 2: Clean the chunk by removing leading/trailing stop words & determiners.
-            tokens = [token for token in chunk]
-            while len(tokens) > 0 and (tokens[0].is_stop or tokens[0].pos_ == 'DET'):
-                tokens.pop(0)
-            while len(tokens) > 0 and tokens[-1].is_stop:
-                tokens.pop(-1)
-
-            if not tokens:
-                continue
-
-            # Rule 3: Create the final aspect and perform quality checks.
-            final_aspect = " ".join(token.lemma_.lower() for token in tokens)
-
-            # Keep aspects that are 1-4 words long and not generic.
-            if (
-                len(final_aspect.split()) <= 4 and
-                len(final_aspect) > 3 and
-                final_aspect not in nlp.Defaults.stop_words
-            ):
-                aspect_sentiments.append({
-                    'aspect': final_aspect,
-                    'sentiment': sentiment
-                })
-
+    for review_text, sentiment in zip(_reviews_df['text'], _reviews_df['sentiment']):
+        mentioned_aspects_in_review = set()
+        doc = nlp(review_text)
+        for aspect in seed_aspects:
+            if re.search(r'\b' + re.escape(aspect) + r'\b', doc.text, re.IGNORECASE):
+                if aspect not in mentioned_aspects_in_review:
+                    aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment})
+                    mentioned_aspects_in_review.add(aspect)
     if not aspect_sentiments:
         return pd.DataFrame()
-        
     return pd.DataFrame(aspect_sentiments)
     
 if 'selected_review_id' not in st.session_state:
