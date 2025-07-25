@@ -96,9 +96,17 @@ def main():
         
     # In pages/5_Product_Comparison.py
 
-    st.markdown("---")
+        st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
     st.info("These charts directly compare the proportion of sentiments and star ratings for each product. Hover over the bars to see the raw counts.")
+
+    # --- Helper function to truncate long text ---
+    def truncate_text(text, max_length=10):
+        return text if len(text) <= max_length else text[:max_length] + "..."
+
+    # Get the (potentially truncated) product titles for the legend
+    product_a_title = truncate_text(product_a_details['product_title'])
+    product_b_title = truncate_text(product_b_details['product_title'])
 
     # --- Create a two-column layout for the charts ---
     col1, col2 = st.columns(2)
@@ -107,14 +115,13 @@ def main():
     with col1:
         st.markdown("**Sentiment Distribution**")
         
-        # --- FIX: Calculate both raw counts and proportions ---
         counts_a = product_a_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-        dist_a = counts_a / counts_a.sum()
+        dist_a = counts_a / counts_a.sum() if counts_a.sum() > 0 else counts_a
         counts_b = product_b_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-        dist_b = counts_b / counts_b.sum()
+        dist_b = counts_b / counts_b.sum() if counts_b.sum() > 0 else counts_b
         
-        df_a = pd.DataFrame({'Proportion': dist_a, 'Count': counts_a}).reset_index(); df_a.columns = ['Sentiment', 'Proportion', 'Count']; df_a['Product'] = 'Product A'
-        df_b = pd.DataFrame({'Proportion': dist_b, 'Count': counts_b}).reset_index(); df_b.columns = ['Sentiment', 'Proportion', 'Count']; df_b['Product'] = 'Product B'
+        df_a = pd.DataFrame({'Proportion': dist_a, 'Count': counts_a}).reset_index(); df_a.columns = ['Sentiment', 'Proportion', 'Count']; df_a['Product'] = product_a_title
+        df_b = pd.DataFrame({'Proportion': dist_b, 'Count': counts_b}).reset_index(); df_b.columns = ['Sentiment', 'Proportion', 'Count']; df_b['Product'] = product_b_title
         plot_df = pd.concat([df_a, df_b])
 
         sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
@@ -122,10 +129,8 @@ def main():
             y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
             color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])),
             xOffset='Product:N',
-            # --- FIX: Add tooltip to show the raw count ---
             tooltip=[
-                alt.Tooltip('Product:N'),
-                alt.Tooltip('Sentiment:N'),
+                alt.Tooltip('Product:N'), alt.Tooltip('Sentiment:N'),
                 alt.Tooltip('Count:Q', title='Review Count'),
                 alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')
             ]
@@ -136,14 +141,13 @@ def main():
     with col2:
         st.markdown("**Rating Distribution**")
 
-        # --- FIX: Calculate both raw counts and proportions ---
         rating_counts_a = product_a_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
-        rating_dist_a = rating_counts_a / rating_counts_a.sum()
+        rating_dist_a = rating_counts_a / rating_counts_a.sum() if rating_counts_a.sum() > 0 else rating_counts_a
         rating_counts_b = product_b_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
-        rating_dist_b = rating_counts_b / rating_counts_b.sum()
+        rating_dist_b = rating_counts_b / rating_counts_b.sum() if rating_counts_b.sum() > 0 else rating_counts_b
         
-        df_a_ratings = pd.DataFrame({'Proportion': rating_dist_a, 'Count': rating_counts_a}).reset_index(); df_a_ratings.columns = ['Rating', 'Proportion', 'Count']; df_a_ratings['Product'] = 'Product A'
-        df_b_ratings = pd.DataFrame({'Proportion': rating_dist_b, 'Count': rating_counts_b}).reset_index(); df_b_ratings.columns = ['Rating', 'Proportion', 'Count']; df_b_ratings['Product'] = 'Product B'
+        df_a_ratings = pd.DataFrame({'Proportion': rating_dist_a, 'Count': rating_counts_a}).reset_index(); df_a_ratings.columns = ['Rating', 'Proportion', 'Count']; df_a_ratings['Product'] = product_a_title
+        df_b_ratings = pd.DataFrame({'Proportion': rating_dist_b, 'Count': rating_counts_b}).reset_index(); df_b_ratings.columns = ['Rating', 'Proportion', 'Count']; df_b_ratings['Product'] = product_b_title
         plot_df_ratings = pd.concat([df_a_ratings, df_b_ratings])
 
         rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
@@ -151,10 +155,8 @@ def main():
             y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
             color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])),
             xOffset='Product:N',
-            # --- FIX: Add tooltip to show the raw count ---
             tooltip=[
-                alt.Tooltip('Product:N'),
-                alt.Tooltip('Rating:O'),
+                alt.Tooltip('Product:N'), alt.Tooltip('Rating:O'),
                 alt.Tooltip('Count:Q', title='Review Count'),
                 alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')
             ]
