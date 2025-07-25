@@ -116,84 +116,170 @@ def main():
         
         return pd.DataFrame(aspect_sentiments), top_aspects
 
-    aspect_df = extract_aspects_with_sentiment(get_aspect_summary)
-
-    if aspect_df.empty:
-        st.warning("No distinct aspects could be extracted from the filtered reviews.")
-        st.stop()
-    # --- Aspect Summary Chart ---
     st.markdown("### Aspect Sentiment Summary")
-    aspect_totals = aspect_df['aspect'].value_counts().reset_index()
-    aspect_totals.columns = ['aspect', 'mention_count']
-    top_aspects = aspect_totals['aspect'].tolist()
-
     num_aspects_to_show = st.slider(
-        "Select number of top aspects to display:",
-        min_value=3, max_value=min(20, len(top_aspects)), value=min(10, len(top_aspects)), key="detailed_aspect_slider"
+    "Select number of top aspects to display:",
+    min_value=3, max_value=20, value=5
     )
-    
-    top_aspects_df = aspect_df[aspect_df['aspect'].isin(top_aspects[:num_aspects_to_show])]
-    sentiment_counts = top_aspects_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
-    
-    chart = alt.Chart(sentiment_counts).mark_bar().encode(
-        y=alt.Y('aspect:N', title='Product Aspect', sort=alt.EncodingSortField(field="count", op="sum", order="descending")),
-        x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
-        color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
-        tooltip=[alt.Tooltip('aspect', title='Aspect'), alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('sum(count):Q', title='Review Count')]
-    ).properties(title=f"Sentiment Analysis of Top {num_aspects_to_show} Aspects")
-    st.altair_chart(chart, use_container_width=True)
+    aspect_summary_df, top_aspects_list = get_aspect_summary(chart_data, num_aspects_to_show)
 
-    # --- Interactive Aspect Explorer ---
+    if not aspect_summary_df.empty:
+        # --- Data Preparation for Percentage Chart ---
+        summary_df = aspect_summary_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        summary_df['percentage'] = summary_df.groupby('aspect')['count'].transform(lambda x: x / x.sum())
+    
+        # --- Create the 100% Stacked Bar Chart ---
+        chart = alt.Chart(summary_df).mark_bar().encode(
+            y=alt.Y('aspect:N', title='Aspect', sort='-x'),
+            x=alt.X('sum(percentage):Q', title='Percentage of Mentions', axis=alt.Axis(format='%')),
+            color=alt.Color('sentiment:N',
+                            scale=alt.Scale(
+                                domain=['Positive', 'Neutral', 'Negative'],
+                                range=['#1a9850', '#cccccc', '#d73027']
+                            ),
+                            legend=alt.Legend(title="Sentiment")),
+            tooltip=[
+                alt.Tooltip('aspect', title='Aspect'),
+                alt.Tooltip('sentiment', title='Sentiment'),
+                alt.Tooltip('count', title='Mentions'),
+                alt.Tooltip('percentage', title='Proportion', format='.0%')
+            ]
+        ).properties(
+            height=max(300, num_aspects_to_show * 30) # Dynamic height
+        ).configure_axis(
+            grid=False
+        ).configure_view(
+            strokeWidth=0
+        )
+    
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.info("Not enough data to generate an aspect summary for the current filters.")
+
+    # --- Interactive Aspect Explorer (ENHANCED) ---
     st.markdown("---")
     st.markdown("### 🔬 Interactive Aspect Explorer")
-    selected_aspect = st.selectbox("Select an aspect to analyze in detail:", options=top_aspects)
-
-    aspect_specific_df = filtered_reviews_df[filtered_reviews_df['text'].str.contains(r'\b' + re.escape(selected_aspect) + r'\b', case=False, na=False)].copy()
-
-    # --- TRENDS FOR SELECTED ASPECT ---
-    st.markdown(f"#### Trends for Aspect: `{selected_aspect}`")
-    time_granularity = st.radio("Select time period:", ("Monthly", "Weekly", "Daily"), index=0, horizontal=True, key="aspect_time_granularity")
-
-    time_df = aspect_specific_df.copy()
-    time_df['date'] = pd.to_datetime(time_df['date'])
-    if time_granularity == 'Monthly':
-        time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
-    elif time_granularity == 'Weekly':
-        time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
-    else: # Daily
-        time_df['period'] = time_df['date'].dt.date
-
-    rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
-    sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
-
-    tab1, tab2 = st.tabs(["📈 Line Chart View", "📊 Area Chart View"])
+    # Callback to reset the page number for the reviews
+    def reset_aspect_page_number():
+        st.session_state.aspect_review_page = 0
     
-    with tab1:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("###### Rating Trend")
-            if not rating_counts_over_time.empty:
-                fig = px.line(rating_counts_over_time, x='period', y='count', color='rating', title="Volume by Rating", labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'}, color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: 'orange', 1: '#d73027'}, category_orders={"rating": [5, 4, 3, 2, 1]})
-                fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                st.plotly_chart(fig, use_container_width=True)
-        with col2:
-            st.markdown("###### Sentiment Trend")
-            if not sentiment_counts_over_time.empty:
-                fig = px.line(sentiment_counts_over_time, x='period', y='count', color='sentiment', title="Volume by Sentiment", labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'}, color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
-                fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                st.plotly_chart(fig, use_container_width=True)
-    with tab2:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("###### Rating Distribution")
-            if not rating_counts_over_time.empty:
-                fig = px.area(rating_counts_over_time, x='period', y='count', color='rating', title="Distribution by Rating", labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'}, color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: 'orange', 1: '#d73027'}, category_orders={"rating": [5, 4, 3, 2, 1]})
-                st.plotly_chart(fig, use_container_width=True)
-        with col2:
-            st.markdown("###### Sentiment Distribution")
-            if not sentiment_counts_over_time.empty:
-                fig = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', title="Distribution by Sentiment", labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'}, color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
-                st.plotly_chart(fig, use_container_width=True)
+    selected_aspect = st.selectbox(
+        "Select an auto-detected aspect to analyze in detail:",
+        options=["--- Select an Aspect ---"] + top_aspects_list,
+        on_change=reset_aspect_page_number # Reset pagination if aspect changes
+    )
+    
+    if selected_aspect != "--- Select an Aspect ---":
+        aspect_df = chart_data[chart_data['text'].str.contains(r'\b' + re.escape(selected_aspect) + r'\b', case=False, na=False)].copy()
+        
+        st.markdown(f"---")
+        st.markdown(f"#### Analysis for aspect: `{selected_aspect}` ({len(aspect_df)} mentions)")
+        
+        if aspect_df.empty:
+            st.warning(f"No mentions of '{selected_aspect}' found with the current filters.")
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Rating Distribution for this Aspect**")
+                # Prepare data and calculate percentages
+                rating_counts_df = aspect_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
+                rating_counts_df.columns = ['rating', 'count']
+                rating_counts_df['percentage'] = (rating_counts_df['count'] / len(aspect_df)) * 100
+                rating_counts_df['rating_str'] = rating_counts_df['rating'].astype(str) + ' ⭐'
+        
+                # Base bar chart
+                rating_bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                    x=alt.X('count:Q', title='Number of Reviews'),
+                    y=alt.Y('rating_str:N', sort=alt.EncodingSortField(field="rating", order="descending"), title=None),
+                    color=alt.Color('rating:O',
+                                    scale=alt.Scale(domain=[5, 4, 3, 2, 1], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
+                                    legend=None),
+                    tooltip=[alt.Tooltip('rating_str', title='Rating'), alt.Tooltip('count'), alt.Tooltip('percentage', format='.1f')]
+                )
+                # Text labels
+                rating_text_labels = rating_bar_chart.mark_text(align='left', baseline='middle', dx=3, color='white').encode(
+                    text=alt.Text('percentage:Q', format='.1f')
+                )
+                st.altair_chart(rating_bar_chart + rating_text_labels, use_container_width=True)
+        
+            with col2:
+                st.markdown("**Sentiment Distribution for this Aspect**")
+                # Prepare data and calculate percentages
+                sentiment_counts_df = aspect_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
+                sentiment_counts_df.columns = ['sentiment', 'count']
+                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / len(aspect_df)) * 100
+        
+                # Base bar chart
+                sentiment_bar_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
+                    x=alt.X('count:Q', title='Number of Reviews'),
+                    y=alt.Y('sentiment:N', sort=['Positive', 'Neutral', 'Negative'], title=None),
+                    color=alt.Color('sentiment:N',
+                                    scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']),
+                                    legend=None),
+                    tooltip=[alt.Tooltip('sentiment'), alt.Tooltip('count'), alt.Tooltip('percentage', format='.1f')]
+                )
+                # Text labels
+                sentiment_text_labels = sentiment_bar_chart.mark_text(align='left', baseline='middle', dx=3, color='white').encode(
+                    text=alt.Text('percentage:Q', format='.1f')
+                )
+                st.altair_chart(sentiment_bar_chart + sentiment_text_labels, use_container_width=True)
+            st.markdown("---")
+            st.markdown("**Trends for this Aspect Over Time**")
+            time_granularity = st.radio(
+            "Select time period:",
+            ("Monthly", "Weekly", "Daily"),
+            index=0,
+            horizontal=True,
+            key="aspect_time_granularity"
+            )
+            
+            time_df = aspect_df.copy()
+            time_df['date'] = pd.to_datetime(time_df['date'])
+            
+            if time_granularity == 'Daily':
+                time_df['period'] = time_df['date'].dt.date
+            elif time_granularity == 'Weekly':
+                time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
+            else: # Monthly
+                time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
+                
+            t_col1, t_col2 = st.columns(2)
+            with t_col1:
+                st.markdown("###### Rating Volume")
+                
+                show_rating_trend = st.toggle('Show Average Rating Trend', key='aspect_rating_trend_toggle')
+                rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
+                
+                if not rating_counts_over_time.empty:
+                    if show_rating_trend:
+                        # ADVANCED VIEW
+                        avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
+                        fig = px.area(rating_counts_over_time, x='period', y='count', color='rating', color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}, category_orders={"rating": [5, 4, 3, 2, 1]})
+                        fig.add_trace(go.Scatter(x=avg_rating_trend['period'], y=avg_rating_trend['rating'], mode='lines', name='Average Rating', yaxis='y2', line=dict(color='cyan', width=3, dash='dash')))
+                        fig.update_layout(yaxis2=dict(title='Average Rating', overlaying='y', side='right', range=[1, 5]), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        # DEFAULT VIEW
+                        fig = px.area(rating_counts_over_time, x='period', y='count', color='rating', color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}, category_orders={"rating": [5, 4, 3, 2, 1]})
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+            with t_col2:
+                st.markdown("###### Sentiment Volume")
+                show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='aspect_sentiment_trend_toggle')
+                sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+                
+                if not sentiment_counts_over_time.empty:
+                    if show_sentiment_trend:
+                        # ADVANCED VIEW
+                        avg_sentiment_trend = time_df.groupby('period')['text_polarity'].mean().reset_index()
+                        fig = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
+                        fig.add_trace(go.Scatter(x=avg_sentiment_trend['period'], y=avg_sentiment_trend['text_polarity'], mode='lines', name='Avg. Sentiment', yaxis='y2', line=dict(color='cyan', width=3, dash='dash')))
+                        fig.update_layout(yaxis2=dict(title='Average Polarity', overlaying='y', side='right', range=[-1, 1]), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        # DEFAULT VIEW
+                        fig = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment', color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}, category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
+                        st.plotly_chart(fig, use_container_width=True)
     
             # --- Example Reviews Display with Sorting and Pagination ---
             st.markdown("---")
