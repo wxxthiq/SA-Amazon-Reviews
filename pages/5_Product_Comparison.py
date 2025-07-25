@@ -194,7 +194,7 @@ def main():
                 "Select number of top aspects to display:",
                 min_value=3, 
                 max_value=min(20, len(total_counts)),
-                value=min(7, len(total_counts)),
+                value=min(5, len(total_counts)),
                 key="radar_aspect_slider"
             )
             
@@ -217,6 +217,7 @@ def main():
                 theta=avg_sent_a.index, 
                 fill='toself',
                 name=product_a_title,
+                marker_color='#4c78a8', # Professional Blue
                 opacity=0.7
             ))
             fig.add_trace(go.Scatterpolar(
@@ -224,6 +225,7 @@ def main():
                 theta=avg_sent_b.index,
                 fill='toself',
                 name=product_b_title,
+                marker_color='#f58518', # Professional Orange
                 opacity=0.7
             ))
             
