@@ -260,8 +260,9 @@ def main():
         with control_col2:
             ngram_level = st.radio("Term Type:", ("Single Words", "Bigrams", "Trigrams"), index=0, horizontal=True, key="ngram_radio")
 
-        # Helper function to generate n-grams
+        # Helper function to generate n-grams (remains the same)
         def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
+            # ... function content is unchanged
             vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
             bag_of_words = vec.transform(corpus)
             sum_words = bag_of_words.sum(axis=0) 
@@ -271,39 +272,42 @@ def main():
 
         ngram_range = {"Single Words": (1,1), "Bigrams": (2,2), "Trigrams": (3,3)}.get(ngram_level, (1,1))
 
-        # Positive Word Cloud
-        st.markdown("#### Positive Reviews")
-        pos_text = chart_data[chart_data["sentiment"]=="Positive"]["text"].dropna()
-        if not pos_text.empty:
-            top_pos_grams = get_top_ngrams(pos_text, n=max_words, ngram_range=ngram_range)
-            if top_pos_grams:
-                pos_freq_dict = dict(top_pos_grams)
-                wordcloud_pos = WordCloud(stopwords=STOPWORDS, background_color="white", colormap='Greens').generate_from_frequencies(pos_freq_dict)
-                fig, ax = plt.subplots()
-                ax.imshow(wordcloud_pos, interpolation='bilinear')
-                ax.axis("off")
-                st.pyplot(fig)
-            else:
-                st.caption("No terms found.")
-        else:
-            st.caption("No positive reviews.")
+        # --- FIX: Create a nested two-column layout for the word clouds ---
+        wc_col1, wc_col2 = st.columns(2)
 
-        # Negative Word Cloud
-        st.markdown("#### Negative Reviews")
-        neg_text = chart_data[chart_data["sentiment"]=="Negative"]["text"].dropna()
-        if not neg_text.empty:
-            top_neg_grams = get_top_ngrams(neg_text, n=max_words, ngram_range=ngram_range)
-            if top_neg_grams:
-                neg_freq_dict = dict(top_neg_grams)
-                wordcloud_neg = WordCloud(stopwords=STOPWORDS, background_color="white", colormap='Reds').generate_from_frequencies(neg_freq_dict)
-                fig, ax = plt.subplots()
-                ax.imshow(wordcloud_neg, interpolation='bilinear')
-                ax.axis("off")
-                st.pyplot(fig)
+        with wc_col1:
+            st.markdown("#### Positive Reviews")
+            pos_text = chart_data[chart_data["sentiment"]=="Positive"]["text"].dropna()
+            if not pos_text.empty:
+                top_pos_grams = get_top_ngrams(pos_text, n=max_words, ngram_range=ngram_range)
+                if top_pos_grams:
+                    pos_freq_dict = dict(top_pos_grams)
+                    wordcloud_pos = WordCloud(stopwords=STOPWORDS, background_color="white", colormap='Greens').generate_from_frequencies(pos_freq_dict)
+                    fig, ax = plt.subplots()
+                    ax.imshow(wordcloud_pos, interpolation='bilinear')
+                    ax.axis("off")
+                    st.pyplot(fig)
+                else:
+                    st.caption("No terms found.")
             else:
-                st.caption("No terms found.")
-        else:
-            st.caption("No negative reviews.")
+                st.caption("No positive reviews.")
+        
+        with wc_col2:
+            st.markdown("#### Negative Reviews")
+            neg_text = chart_data[chart_data["sentiment"]=="Negative"]["text"].dropna()
+            if not neg_text.empty:
+                top_neg_grams = get_top_ngrams(neg_text, n=max_words, ngram_range=ngram_range)
+                if top_neg_grams:
+                    neg_freq_dict = dict(top_neg_grams)
+                    wordcloud_neg = WordCloud(stopwords=STOPWORDS, background_color="white", colormap='Reds').generate_from_frequencies(neg_freq_dict)
+                    fig, ax = plt.subplots()
+                    ax.imshow(wordcloud_neg, interpolation='bilinear')
+                    ax.axis("off")
+                    st.pyplot(fig)
+                else:
+                    st.caption("No terms found.")
+            else:
+                st.caption("No negative reviews.")
 
     # --- Column 2: Aspect Sentiment Analysis ---
     with col2:
