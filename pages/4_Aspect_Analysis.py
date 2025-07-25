@@ -433,65 +433,6 @@ def main():
                             st.session_state.aspect_review_page += 1
                             st.rerun()
 
-    # --- Comparative Aspect Analysis using Radar Chart ---
-    st.markdown("---")
-    st.markdown("### ⚖️ Comparative Aspect Analysis")
-    st.caption("Select two or more aspects to compare their sentiment profiles. Hover over the points for details.")
-
-    if top_aspects_sorted:
-        selected_for_comparison = st.multiselect(
-            "Select aspects to compare:",
-            options=top_aspects_sorted,
-            default=top_aspects_sorted[:3] if len(top_aspects_sorted) >= 3 else sorted
-        )
-
-        if len(selected_for_comparison) >= 2:
-            comparison_df = sentiment_counts[sentiment_counts['aspect'].isin(selected_for_comparison)] # <--- CORRECTED VARIABLE
-            
-            radar_df = comparison_df.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
-            
-            categories = ['Positive', 'Negative', 'Neutral']
-            for sent in categories:
-                if sent not in radar_df.columns:
-                    radar_df[sent] = 0
-            radar_df = radar_df[categories]
-
-            fig = go.Figure()
-
-            for aspect in radar_df.index:
-                # --- NEW: Create custom hover text for each point ---
-                hover_text = [f"{count} {cat} mentions" for cat, count in zip(categories, radar_df.loc[aspect].values)]
-
-                fig.add_trace(go.Scatterpolar(
-                    r=radar_df.loc[aspect].values,
-                    theta=categories,
-                    fill='toself',
-                    name=aspect,
-                    hoverinfo='name+text', # Show aspect name and our custom text
-                    text=hover_text        # Assign the custom text
-                ))
-            
-            # Replace zero values with a very small number for log scale compatibility
-            radar_df.replace(0, 0.1, inplace=True)
-
-            # --- UPDATED: Hide axis labels for a cleaner look ---
-            fig.update_layout(
-              polar=dict(
-                radialaxis=dict(
-                  visible=True,
-                  type='log',
-                  showticklabels=False, # Hide the numbers
-                  showline=False       # Hide the axis lines
-                )),
-              showlegend=True,
-              title="Sentiment Profile Comparison (Log Scale)"
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Please select at least two aspects to generate a comparison.")
-    else:
-        st.warning("No aspects detected to compare.")
 
 if __name__ == "__main__":
     main()
