@@ -166,7 +166,6 @@ def main():
 
     # --- Column 1: Grouped Sentiment Bar Chart ---
     with col1:
-        st.markdown("**Sentiment Distribution**")
         
         counts_a = product_a_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
         dist_a = counts_a / counts_a.sum() if counts_a.sum() > 0 else counts_a
@@ -192,7 +191,6 @@ def main():
 
     # --- Column 2: Grouped Rating Bar Chart ---
     with col2:
-        st.markdown("**Rating Distribution**")
 
         rating_counts_a = product_a_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
         rating_dist_a = rating_counts_a / rating_counts_a.sum() if rating_counts_a.sum() > 0 else rating_counts_a
