@@ -116,6 +116,11 @@ def main():
         
         return pd.DataFrame(aspect_sentiments), top_aspects
 
+    aspect_df = extract_aspects_with_sentiment(get_aspect_summary)
+
+    if aspect_df.empty:
+        st.warning("No distinct aspects could be extracted from the filtered reviews.")
+        st.stop()
     # --- Aspect Summary Chart ---
     st.markdown("### Aspect Sentiment Summary")
     aspect_totals = aspect_df['aspect'].value_counts().reset_index()
