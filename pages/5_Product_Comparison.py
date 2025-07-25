@@ -94,6 +94,8 @@ def main():
         st.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
 
     st.markdown("---")
+
+    st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
     st.info("These charts directly compare the proportion of sentiments and star ratings for each product.")
 
@@ -107,21 +109,17 @@ def main():
         dist_a = product_a_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
         dist_b = product_b_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
         
-        fig_sent = go.Figure(data=[
-            go.Bar(name='Product A', x=dist_a.index, y=dist_a.values),
-            go.Bar(name='Product B', x=dist_b.index, y=dist_b.values)
-        ])
-        
-        fig_sent.update_layout(
-            barmode='group',
-            xaxis_title="Sentiment",
-            yaxis_title="Proportion of Reviews",
-            yaxis=dict(tickformat='.0%'),
-            height=300,
-            margin=dict(l=20, r=20, t=40, b=20),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        st.plotly_chart(fig_sent, use_container_width=True)
+        # Combine data for easier plotting
+        plot_df = pd.DataFrame({'Product A': dist_a, 'Product B': dist_b}).reset_index().rename(columns={'index': 'Sentiment'})
+        plot_df = plot_df.melt(id_vars='Sentiment', var_name='Product', value_name='Proportion')
+
+        sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
+            x=alt.X('Sentiment:N', sort=['Positive', 'Neutral', 'Negative']),
+            y=alt.Y('Proportion:Q', axis=alt.Axis(format='%')),
+            color=alt.Color('Product:N'),
+            xOffset='Product:N'
+        ).properties(title="Sentiment Comparison")
+        st.altair_chart(sentiment_chart, use_container_width=True)
 
     # --- Column 2: Grouped Rating Bar Chart ---
     with col2:
@@ -130,21 +128,17 @@ def main():
         rating_dist_a = product_a_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
         rating_dist_b = product_b_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
         
-        fig_rate = go.Figure(data=[
-            go.Bar(name='Product A', x=rating_dist_a.index, y=rating_dist_a.values),
-            go.Bar(name='Product B', x=rating_dist_b.index, y=rating_dist_b.values)
-        ])
-        
-        fig_rate.update_layout(
-            barmode='group',
-            xaxis_title="Star Rating",
-            yaxis_title="Proportion of Reviews",
-            yaxis=dict(tickformat='.0%'),
-            height=300,
-            margin=dict(l=20, r=20, t=40, b=20),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        st.plotly_chart(fig_rate, use_container_width=True)
+        # Combine data for easier plotting
+        plot_df_ratings = pd.DataFrame({'Product A': rating_dist_a, 'Product B': rating_dist_b}).reset_index().rename(columns={'index': 'Rating'})
+        plot_df_ratings = plot_df_ratings.melt(id_vars='Rating', var_name='Product', value_name='Proportion')
+
+        rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
+            x=alt.X('Rating:O', title="Star Rating", sort=alt.EncodingSortField(field="Rating", order="descending")),
+            y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
+            color=alt.Color('Product:N'),
+            xOffset='Product:N'
+        ).properties(title="Rating Comparison")
+        st.altair_chart(rating_chart, use_container_width=True)
 
     # --- Consistent Radar Chart ---
     st.markdown("---")
