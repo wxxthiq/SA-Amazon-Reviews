@@ -94,7 +94,6 @@ def main():
         st.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
 
     st.markdown("---")
-st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
     st.info("These charts directly compare the proportion of sentiments and star ratings for each product.")
 
