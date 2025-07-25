@@ -94,9 +94,7 @@ def main():
         st.subheader(product_b_details['product_title'])
         st.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
         
-    # In pages/5_Product_Comparison.py
-
-        st.markdown("---")
+    st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
     st.info("These charts directly compare the proportion of sentiments and star ratings for each product. Hover over the bars to see the raw counts.")
 
@@ -167,69 +165,59 @@ def main():
     # --- Feature-Level Performance: Comparative Radar Chart ---
     st.markdown("---")
     st.markdown("### Feature-Level Performance Comparison")
-    st.info("This radar chart compares the normalized sentiment profiles for common aspects discussed in reviews for both products.")
+    st.info(
+        "This radar chart compares the average sentiment score for common aspects. "
+        "A point further from the center indicates a more positive sentiment for that feature."
+    )
 
     aspects_a = extract_aspects_with_sentiment(product_a_reviews)
     aspects_b = extract_aspects_with_sentiment(product_b_reviews)
     
     if not aspects_a.empty and not aspects_b.empty:
-        counts_a = aspects_a.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
-        counts_b = aspects_b.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        # --- FIX: Calculate average sentiment score for each aspect ---
+        # Merge with original reviews to get the numerical sentiment_score
+        aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id')
+        aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id')
         
-        common_aspects = sorted(list(set(counts_a['aspect']).intersection(set(counts_b['aspect']))))
+        avg_sent_a = aspects_a.groupby('aspect')['sentiment_score'].mean()
+        avg_sent_b = aspects_b.groupby('aspect')['sentiment_score'].mean()
+
+        # Find common aspects and filter the data
+        common_aspects = sorted(list(set(avg_sent_a.index).intersection(set(avg_sent_b.index))))
         
         if len(common_aspects) >= 3:
-            # --- FIX: Create a multiselect for aspects to compare ---
-            selected_aspects = st.multiselect(
-                "Select common aspects to compare:",
-                options=common_aspects,
-                default=common_aspects[:5] # Default to the first 5 common aspects
+            avg_sent_a = avg_sent_a.reindex(common_aspects)
+            avg_sent_b = avg_sent_b.reindex(common_aspects)
+
+            product_a_title = truncate_text(product_a_details['product_title'])
+            product_b_title = truncate_text(product_b_details['product_title'])
+
+            fig = go.Figure()
+
+            # Add trace for Product A
+            fig.add_trace(go.Scatterpolar(
+                r=avg_sent_a.values,
+                theta=avg_sent_a.index, 
+                fill='toself',
+                name=product_a_title
+            ))
+            # Add trace for Product B
+            fig.add_trace(go.Scatterpolar(
+                r=avg_sent_b.values,
+                theta=avg_sent_b.index,
+                fill='toself',
+                name=product_b_title
+            ))
+            
+            fig.update_layout(
+              polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), # Range from -1 (Negative) to 1 (Positive)
+              showlegend=True,
+              title="Average Sentiment Score by Common Aspect"
             )
-
-            if len(selected_aspects) > 0:
-                # Filter for selected common aspects
-                radar_a = counts_a[counts_a['aspect'].isin(selected_aspects)].pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
-                radar_b = counts_b[counts_b['aspect'].isin(selected_aspects)].pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
-
-                categories = ['Positive', 'Negative', 'Neutral']
-                for col in categories:
-                    if col not in radar_a.columns: radar_a[col] = 0
-                    if col not in radar_b.columns: radar_b[col] = 0
-                
-                normalized_a = radar_a.div(radar_a.sum(axis=1), axis=0).reindex(columns=categories, fill_value=0)
-                normalized_b = radar_b.div(radar_b.sum(axis=1), axis=0).reindex(columns=categories, fill_value=0)
-
-                product_a_title = truncate_text(product_a_details['product_title'])
-                product_b_title = truncate_text(product_b_details['product_title'])
-
-                fig = go.Figure()
-
-                # Add trace for Product A for all selected aspects
-                fig.add_trace(go.Scatterpolar(
-                    r=normalized_a.values.flatten(), 
-                    theta=pd.MultiIndex.from_product([normalized_a.index, normalized_a.columns]),
-                    name=product_a_title
-                ))
-                # Add trace for Product B for all selected aspects
-                fig.add_trace(go.Scatterpolar(
-                    r=normalized_b.values.flatten(), 
-                    theta=pd.MultiIndex.from_product([normalized_b.index, normalized_b.columns]),
-                    name=product_b_title
-                ))
-                
-                fig.update_layout(
-                  polar=dict(
-                      radialaxis=dict(visible=True, range=[0, 1]),
-                      angularaxis=dict(tickfont=dict(size=8))
-                  ),
-                  showlegend=True,
-                  title="Normalized Sentiment Profile Comparison"
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Not enough common aspects (at least 3) were found between these two products to generate a comparison chart.")
+            st.info("Not enough common aspects (at least 3) were found to generate a comparison chart.")
     else:
         st.info("Not enough aspect data for one or both products to generate a comparison.")
-
 if __name__ == "__main__":
     main()
