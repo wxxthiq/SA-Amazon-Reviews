@@ -393,9 +393,9 @@ def main():
     st.markdown("---")
     st.markdown("### 🗓️ Trends Over Time")
     st.info(
-        "Analyze how review ratings and sentiment have evolved. Use the time period selector to "
-        "change the granularity. The Line Chart view is best for comparing individual trends, while the "
-        "Area Chart view is useful for seeing the overall volume and composition."
+        "Analyze how review ratings and sentiment have evolved. The dashed line shows the average trend. "
+        "The Line Chart view is best for comparing individual trends, while the Area Chart view "
+        "is useful for seeing the overall volume and composition."
     )
     
     time_granularity = st.radio(
@@ -418,6 +418,14 @@ def main():
     rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
     sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
     
+    # --- NEW: Calculate average trends ---
+    avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
+    # Map sentiment to a score for averaging
+    sentiment_score_map = {'Positive': 1, 'Neutral': 0, 'Negative': -1}
+    time_df['sentiment_numeric'] = time_df['sentiment'].map(sentiment_score_map)
+    avg_sentiment_trend = time_df.groupby('period')['sentiment_numeric'].mean().reset_index()
+    
+    
     # Create tabs for switching between chart types
     tab1, tab2 = st.tabs(["📈 Line Chart View", "📊 Area Chart View"])
     
@@ -432,8 +440,13 @@ def main():
                     title=f"Volume by Rating",
                     labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
                     color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
-                    category_orders={"rating": [1, 2, 3, 4, 5]}
+                    category_orders={"rating": [5, 4, 3, 2, 1]} # <-- FIX: Descending order
                 )
+                # --- NEW: Add average rating trace ---
+                fig_line_rating.add_trace(go.Scatter(
+                    x=avg_rating_trend['period'], y=avg_rating_trend['rating'],
+                    mode='lines', name='Average Rating', line=dict(color='blue', width=2, dash='dash')
+                ))
                 st.plotly_chart(fig_line_rating, use_container_width=True)
                 
         with col2:
@@ -444,11 +457,16 @@ def main():
                     title=f"Volume by Sentiment",
                     labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
                     color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]} # <-- FIX: Descending order
                 )
+                # --- NEW: Add average sentiment trace ---
+                fig_line_sentiment.add_trace(go.Scatter(
+                    x=avg_sentiment_trend['period'], y=avg_sentiment_trend['sentiment_numeric'],
+                    mode='lines', name='Average Sentiment', line=dict(color='blue', width=2, dash='dash')
+                ))
                 st.plotly_chart(fig_line_sentiment, use_container_width=True)
     
-    # --- Tab 2: Area Chart View ---
+    # --- Tab 2: Area Chart View (No average line needed here) ---
     with tab2:
         col1, col2 = st.columns(2)
         with col1:
@@ -459,7 +477,7 @@ def main():
                     title=f"Distribution by Rating",
                     labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
                     color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
-                    category_orders={"rating": [1, 2, 3, 4, 5]}
+                    category_orders={"rating": [5, 4, 3, 2, 1]} # <-- FIX: Descending order
                 )
                 st.plotly_chart(fig_area_rating, use_container_width=True)
     
@@ -471,10 +489,10 @@ def main():
                     title=f"Distribution by Sentiment",
                     labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
                     color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]} # <-- FIX: Descending order
                 )
-                st.plotly_chart(fig_area_sentiment, use_container_width=True)
-                
+                st.plotly_chart(fig_area_sentiment, use_container_width=True)     
+            
     st.markdown("### Rating vs. Text Discrepancy")
     st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Points in the top-left (low rating, positive sentiment) or bottom-right (high rating, negative sentiment) are the most discrepant. Click a point to read the review.")
     plot_col, review_col = st.columns([2, 1])
