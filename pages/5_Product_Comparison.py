@@ -94,8 +94,7 @@ def main():
         st.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
 
     st.markdown("---")
-
-    st.markdown("---")
+st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
     st.info("These charts directly compare the proportion of sentiments and star ratings for each product.")
 
@@ -109,13 +108,14 @@ def main():
         dist_a = product_a_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
         dist_b = product_b_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
         
-        # Combine data for easier plotting
-        plot_df = pd.DataFrame({'Product A': dist_a, 'Product B': dist_b}).reset_index().rename(columns={'index': 'Sentiment'})
+        # --- FIX: Reset the index to create the 'Sentiment' column before melting ---
+        plot_df = pd.DataFrame({'Product A': dist_a, 'Product B': dist_b})
+        plot_df = plot_df.reset_index().rename(columns={'index': 'Sentiment'})
         plot_df = plot_df.melt(id_vars='Sentiment', var_name='Product', value_name='Proportion')
 
         sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
-            x=alt.X('Sentiment:N', sort=['Positive', 'Neutral', 'Negative']),
-            y=alt.Y('Proportion:Q', axis=alt.Axis(format='%')),
+            x=alt.X('Sentiment:N', title="Sentiment", sort=['Positive', 'Neutral', 'Negative']),
+            y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
             color=alt.Color('Product:N'),
             xOffset='Product:N'
         ).properties(title="Sentiment Comparison")
@@ -128,8 +128,9 @@ def main():
         rating_dist_a = product_a_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
         rating_dist_b = product_b_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
         
-        # Combine data for easier plotting
-        plot_df_ratings = pd.DataFrame({'Product A': rating_dist_a, 'Product B': rating_dist_b}).reset_index().rename(columns={'index': 'Rating'})
+        # --- FIX: Reset the index to create the 'Rating' column before melting ---
+        plot_df_ratings = pd.DataFrame({'Product A': rating_dist_a, 'Product B': rating_dist_b})
+        plot_df_ratings = plot_df_ratings.reset_index().rename(columns={'index': 'Rating'})
         plot_df_ratings = plot_df_ratings.melt(id_vars='Rating', var_name='Product', value_name='Proportion')
 
         rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
