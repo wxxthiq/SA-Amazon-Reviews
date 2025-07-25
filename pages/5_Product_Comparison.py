@@ -33,7 +33,9 @@ conn = connect_to_db(DB_PATH)
 def extract_aspects_with_sentiment(dataf):
     aspect_sentiments = []
     stop_words = nlp.Defaults.stop_words
-    for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
+    
+    # --- FIX: Pass the review_id into the zip function ---
+    for doc, sentiment, review_id in zip(nlp.pipe(dataf['text']), dataf['sentiment'], dataf['review_id']):
         for chunk in doc.noun_chunks:
             tokens = [token for token in chunk]
             while len(tokens) > 0 and (tokens[0].is_stop or tokens[0].pos_ == 'DET'):
@@ -41,11 +43,20 @@ def extract_aspects_with_sentiment(dataf):
             while len(tokens) > 0 and tokens[-1].is_stop:
                 tokens.pop(-1)
             if not tokens: continue
+            
             final_aspect = " ".join(token.lemma_.lower() for token in tokens)
+            
             if len(final_aspect) > 3 and final_aspect not in stop_words:
-                aspect_sentiments.append({'aspect': final_aspect, 'sentiment': sentiment})
+                # --- FIX: Add the review_id to the dictionary ---
+                aspect_sentiments.append({
+                    'aspect': final_aspect, 
+                    'sentiment': sentiment,
+                    'review_id': review_id 
+                })
+
     if not aspect_sentiments:
         return pd.DataFrame()
+        
     return pd.DataFrame(aspect_sentiments)
 
 # --- Main App Logic ---
