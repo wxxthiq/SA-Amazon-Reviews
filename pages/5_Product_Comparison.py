@@ -116,7 +116,8 @@ def main():
         sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
             x=alt.X('Sentiment:N', title="Sentiment", sort=['Positive', 'Neutral', 'Negative']),
             y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
-            color=alt.Color('Product:N'),
+            # --- FIX: Define custom colors for the products ---
+            color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])), # Blue and Orange
             xOffset='Product:N'
         ).properties(title="Sentiment Comparison")
         st.altair_chart(sentiment_chart, use_container_width=True)
@@ -136,7 +137,8 @@ def main():
         rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
             x=alt.X('Rating:O', title="Star Rating", sort=alt.EncodingSortField(field="Rating", order="descending")),
             y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
-            color=alt.Color('Product:N'),
+            # --- FIX: Define custom colors for the products ---
+            color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])), # Blue and Orange
             xOffset='Product:N'
         ).properties(title="Rating Comparison")
         st.altair_chart(rating_chart, use_container_width=True)
