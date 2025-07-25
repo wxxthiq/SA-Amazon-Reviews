@@ -118,69 +118,89 @@ def main():
         st.warning("No distinct aspects could be extracted from the filtered reviews.")
         st.stop()
     # --- Aspect Summary Chart (with Interactive Sorting) ---
-    st.markdown("### Aspect Sentiment Summary")
-
-    # --- NEW: UI for Sorting ---
-    sort_option = st.selectbox(
-        "Sort aspects by:",
-        ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
-        key="aspect_sort_selector"
-    )
-
-    num_aspects_to_show = st.slider(
-        "Select number of top aspects to display:",
-        min_value=3, max_value=15, value=5, key="detailed_aspect_slider"
-    )
-
-    # --- NEW: Data Processing and Sorting Logic ---
-    sentiment_counts = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+    st.markdown("### Aspect Analysis")
     
-    # Pivot the data to make calculations easier
-    pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+    # Create a two-column layout
+    col1, col2 = st.columns([3, 2]) # Give more space to the main chart
     
-    # Ensure all sentiment columns exist
-    for col in ['Positive', 'Neutral', 'Negative']:
-        if col not in pivot_df.columns:
-            pivot_df[col] = 0
+    with col1:
+        st.markdown("#### Aspect Sentiment Summary")
+        sort_option = st.selectbox(
+            "Sort aspects by:",
+            ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
+            key="aspect_sort_selector"
+        )
+        num_aspects_to_show = st.slider(
+            "Select number of top aspects to display:",
+            min_value=3, max_value=20, value=10, key="detailed_aspect_slider"
+        )
+    
+        # --- Data Processing and Sorting Logic (Unchanged) ---
+        sentiment_counts = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+        for col in ['Positive', 'Neutral', 'Negative']:
+            if col not in pivot_df.columns: pivot_df[col] = 0
+        pivot_df['total'] = pivot_df['Positive'] + pivot_df['Neutral'] + pivot_df['Negative']
+        pivot_df['positive_pct'] = pivot_df['Positive'] / pivot_df['total']
+        pivot_df['negative_pct'] = pivot_df['Negative'] / pivot_df['total']
+        pivot_df['controversy'] = pivot_df['positive_pct'] * pivot_df['negative_pct']
+    
+        if sort_option == "Most Positive": sort_field, sort_order = 'positive_pct', 'descending'
+        elif sort_option == "Most Negative": sort_field, sort_order = 'negative_pct', 'descending'
+        elif sort_option == "Most Controversial": sort_field, sort_order = 'controversy', 'descending'
+        else: sort_field, sort_order = 'total', 'descending'
             
-    pivot_df['total'] = pivot_df['Positive'] + pivot_df['Neutral'] + pivot_df['Negative']
-    
-    # Calculate percentages for sorting
-    pivot_df['positive_pct'] = pivot_df['Positive'] / pivot_df['total']
-    pivot_df['negative_pct'] = pivot_df['Negative'] / pivot_df['total']
-    # Controversy is the product of positive and negative proportions
-    pivot_df['controversy'] = pivot_df['positive_pct'] * pivot_df['negative_pct']
-
-    # Determine the sorting order based on user selection
-    if sort_option == "Most Positive":
-        sort_field = 'positive_pct'
-        sort_order = 'descending'
-    elif sort_option == "Most Negative":
-        sort_field = 'negative_pct'
-        sort_order = 'descending'
-    elif sort_option == "Most Controversial":
-        sort_field = 'controversy'
-        sort_order = 'descending'
-    else: # Default to Most Discussed
-        sort_field = 'total'
-        sort_order = 'descending'
+        top_aspects_sorted = pivot_df.nlargest(num_aspects_to_show, sort_field).index.tolist()
+        top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
         
-    top_aspects_sorted = pivot_df.nlargest(num_aspects_to_show, sort_field).index.tolist()
-
-    # Filter the original counts data to only the top aspects
-    top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
+        # --- Create the Summary Chart (Unchanged) ---
+        summary_chart = alt.Chart(top_aspects_df).mark_bar().encode(
+            y=alt.Y('aspect:N', title='Product Aspect', sort=alt.EncodingSortField(field=sort_field, op="sum", order=sort_order)),
+            x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
+            color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
+            tooltip=[alt.Tooltip('aspect', title='Aspect'), alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('sum(count):Q', title='Review Count')]
+        ).properties(title=f"Sentiment Analysis of Top {num_aspects_to_show} Aspects")
+        st.altair_chart(summary_chart, use_container_width=True)
     
-    # --- Create the Chart ---
-    chart = alt.Chart(top_aspects_df).mark_bar().encode(
-        y=alt.Y('aspect:N', title='Product Aspect', sort=alt.EncodingSortField(field=sort_field, op="sum", order=sort_order)),
-        x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
-        color=alt.Color('sentiment:N',
-                        scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']),
-                        legend=alt.Legend(title="Sentiment")),
-        tooltip=[alt.Tooltip('aspect', title='Aspect'), alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('sum(count):Q', title='Review Count')]
-    ).properties(title=f"Sentiment Analysis of Top {num_aspects_to_show} Aspects (Sorted by {sort_option})")
+    with col2:
+        st.markdown("#### Comparative Analysis")
+        st.caption("Select 2+ aspects to compare their sentiment profiles.")
+        
+        if top_aspects_sorted:
+            selected_for_comparison = st.multiselect(
+                "Select aspects to compare:",
+                options=top_aspects_sorted,
+                default=top_aspects_sorted[:3] if len(top_aspects_sorted) >= 3 else top_aspects_sorted
+            )
     
-    st.altair_chart(chart, use_container_width=True)
+            if len(selected_for_comparison) >= 2:
+                comparison_df = sentiment_counts[sentiment_counts['aspect'].isin(selected_for_comparison)]
+                radar_df = comparison_df.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+                
+                categories = ['Positive', 'Negative', 'Neutral']
+                for sent in categories:
+                    if sent not in radar_df.columns: radar_df[sent] = 0
+                radar_df = radar_df[categories]
+    
+                fig = go.Figure()
+                for aspect in radar_df.index:
+                    hover_text = [f"{count} {cat} mentions" for cat, count in zip(categories, radar_df.loc[aspect].values)]
+                    fig.add_trace(go.Scatterpolar(
+                        r=radar_df.loc[aspect].values,
+                        theta=categories,
+                        fill='toself',
+                        name=aspect,
+                        hoverinfo='name+text',
+                        text=hover_text
+                    ))
+                
+                # --- FIX: Simplify the layout for a cleaner look ---
+                fig.update_layout(
+                  polar=dict(radialaxis=dict(visible=False)), # Hide the radial axis grid
+                  showlegend=True,
+                  title="Sentiment Profile Comparison"
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
     # --- Interactive Aspect Explorer (ENHANCED) ---
     st.markdown("---")
