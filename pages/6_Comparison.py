@@ -1,4 +1,4 @@
-# pages/5_Product_Comparison.py
+# pages/6_Comparison.py
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
