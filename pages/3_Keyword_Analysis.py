@@ -199,7 +199,7 @@ def main():
     @st.cache_data
     def get_dropdown_options(corpus, ngram_range_tuple):
         # First, get a list of the most frequent terms
-        top_terms_list = [term for term, count in get_term_freqs(corpus, n=50, ngram_range=ngram_range_tuple)]
+        top_terms_list = [term for term, count in get_term_freqs(corpus, ngram_range=ngram_range_tuple)]
         
         # Then, for each term, count how many reviews it appears in
         options = []
