@@ -219,50 +219,78 @@ def main():
             time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
         else: # Monthly
             time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
-        
-        t_col1, t_col2 = st.columns(2)
-        with t_col1:
-            st.markdown("###### Rating Volume & Average")
-            show_rating_trend = st.toggle('Show Average Rating Trend', key='keyword_rating_trend')
-            rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
-        
-            if not rating_counts_over_time.empty:
-                fig = px.area(rating_counts_over_time, x='period', y='count', color='rating',
-                              color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
-                              category_orders={"rating": [5, 4, 3, 2, 1]})
-                if show_rating_trend:
-                    avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
-                    fig.add_trace(go.Scatter(
-                        x=avg_rating_trend['period'], y=avg_rating_trend['rating'],
-                        mode='lines', name='Average Rating', yaxis='y2',
-                        line=dict(color='cyan', width=3, dash='dash')
-                    ))
-                fig.update_layout(yaxis2=dict(title='Average Rating', overlaying='y', side='right', range=[1, 5]),
-                                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                st.plotly_chart(fig, use_container_width=True)
-        
-        with t_col2:
-            st.markdown("###### Sentiment Volume & Average")
-            show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='keyword_sentiment_trend')
-            sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
-        
-            if not sentiment_counts_over_time.empty:
-                fig = px.area(sentiment_counts_over_time, x='period', y='count', color='sentiment',
-                              color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                              category_orders={"sentiment": ["Positive", "Neutral", "Negative"]})
-                if show_sentiment_trend:
-                    # Note: You must have 'text_polarity' in your database for this to work
-                    if 'text_polarity' in time_df.columns:
-                        avg_sentiment_trend = time_df.groupby('period')['text_polarity'].mean().reset_index()
-                        fig.add_trace(go.Scatter(
-                            x=avg_sentiment_trend['period'], y=avg_sentiment_trend['text_polarity'],
-                            mode='lines', name='Avg. Sentiment Score', yaxis='y2',
-                            line=dict(color='cyan', width=3, dash='dash')
-                        ))
-                fig.update_layout(yaxis2=dict(title='Average Sentiment Score', overlaying='y', side='right', range=[-1, 1]),
-                                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                st.plotly_chart(fig, use_container_width=True)
-        
+
+        # Create the data subsets
+        rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
+        sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+
+        # Create tabs for switching between chart types
+        tab1, tab2 = st.tabs(["📈 Line Chart View", "📊 Area Chart View"])
+
+        # --- Tab 1: Line Chart View ---
+        with tab1:
+            col1, col2 = st.columns(2)
+            with col1:
+                show_rating_trend = st.toggle('Show Average Rating Trend', key='keyword_rating_trend')
+                if not rating_counts_over_time.empty:
+                    fig = px.line(
+                        rating_counts_over_time, x='period', y='count', color='rating',
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
+                        color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: 'orange', 1: '#d73027'},
+                        category_orders={"rating": [5, 4, 3, 2, 1]}
+                    )
+                    if show_rating_trend:
+                        avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
+                        fig.add_trace(go.Scatter(x=avg_rating_trend['period'], y=avg_rating_trend['rating'], mode='lines', name='Average Rating', yaxis='y2', line=dict(dash='dash', color='blue')))
+                        fig.update_layout(title_text="Trend and Average Rating", yaxis2=dict(title='Avg Rating', overlaying='y', side='right', range=[1, 5]))
+                    else:
+                        fig.update_layout(title_text="Volume by Rating")
+                    fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                    st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='keyword_sentiment_trend')
+                if not sentiment_counts_over_time.empty:
+                    fig = px.line(
+                        sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
+                        color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                        category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                    )
+                    if show_sentiment_trend and 'sentiment_score' in time_df.columns:
+                        avg_sentiment_trend = time_df.groupby('period')['sentiment_score'].mean().reset_index()
+                        fig.add_trace(go.Scatter(x=avg_sentiment_trend['period'], y=avg_sentiment_trend['sentiment_score'], mode='lines', name='Avg. Sentiment', yaxis='y2', line=dict(dash='dash', color='blue')))
+                        fig.update_layout(title_text="Trend and Average Sentiment", yaxis2=dict(title='Avg Sentiment', overlaying='y', side='right', range=[-1, 1]))
+                    else:
+                        fig.update_layout(title_text="Volume by Sentiment")
+                    fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                    st.plotly_chart(fig, use_container_width=True)
+
+        # --- Tab 2: Area Chart View ---
+        with tab2:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("#### Rating Distribution")
+                if not rating_counts_over_time.empty:
+                    fig_area_rating = px.area(
+                        rating_counts_over_time, x='period', y='count', color='rating', title="Distribution by Rating",
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
+                        color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: 'orange', 1: '#d73027'},
+                        category_orders={"rating": [5, 4, 3, 2, 1]}
+                    )
+                    st.plotly_chart(fig_area_rating, use_container_width=True)
+
+            with col2:
+                st.markdown("#### Sentiment Distribution")
+                if not sentiment_counts_over_time.empty:
+                    fig_area_sentiment = px.area(
+                        sentiment_counts_over_time, x='period', y='count', color='sentiment', title="Distribution by Sentiment",
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
+                        color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                        category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                    )
+                    st.plotly_chart(fig_area_sentiment, use_container_width=True)
+
         st.markdown("---")
         
         st.markdown("**Example Reviews**")
