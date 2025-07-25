@@ -92,7 +92,7 @@ def main():
     with col2:
         st.subheader(product_b_details['product_title'])
         st.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
-
+        
     st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
     st.info("These charts directly compare the proportion of sentiments and star ratings for each product.")
@@ -107,10 +107,10 @@ def main():
         dist_a = product_a_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
         dist_b = product_b_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
         
-        # --- FIX: Reset the index to create the 'Sentiment' column before melting ---
-        plot_df = pd.DataFrame({'Product A': dist_a, 'Product B': dist_b})
-        plot_df = plot_df.reset_index().rename(columns={'index': 'Sentiment'})
-        plot_df = plot_df.melt(id_vars='Sentiment', var_name='Product', value_name='Proportion')
+        # --- FIX: Build the long-format DataFrame directly ---
+        df_a = dist_a.reset_index(); df_a.columns = ['Sentiment', 'Proportion']; df_a['Product'] = 'Product A'
+        df_b = dist_b.reset_index(); df_b.columns = ['Sentiment', 'Proportion']; df_b['Product'] = 'Product B'
+        plot_df = pd.concat([df_a, df_b])
 
         sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
             x=alt.X('Sentiment:N', title="Sentiment", sort=['Positive', 'Neutral', 'Negative']),
@@ -127,10 +127,10 @@ def main():
         rating_dist_a = product_a_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
         rating_dist_b = product_b_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
         
-        # --- FIX: Reset the index to create the 'Rating' column before melting ---
-        plot_df_ratings = pd.DataFrame({'Product A': rating_dist_a, 'Product B': rating_dist_b})
-        plot_df_ratings = plot_df_ratings.reset_index().rename(columns={'index': 'Rating'})
-        plot_df_ratings = plot_df_ratings.melt(id_vars='Rating', var_name='Product', value_name='Proportion')
+        # --- FIX: Build the long-format DataFrame directly ---
+        df_a_ratings = rating_dist_a.reset_index(); df_a_ratings.columns = ['Rating', 'Proportion']; df_a_ratings['Product'] = 'Product A'
+        df_b_ratings = rating_dist_b.reset_index(); df_b_ratings.columns = ['Rating', 'Proportion']; df_b_ratings['Product'] = 'Product B'
+        plot_df_ratings = pd.concat([df_a_ratings, df_b_ratings])
 
         rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
             x=alt.X('Rating:O', title="Star Rating", sort=alt.EncodingSortField(field="Rating", order="descending")),
@@ -139,7 +139,7 @@ def main():
             xOffset='Product:N'
         ).properties(title="Rating Comparison")
         st.altair_chart(rating_chart, use_container_width=True)
-
+        
     # --- Consistent Radar Chart ---
     st.markdown("---")
     st.markdown("### Feature-Level Performance Comparison")
