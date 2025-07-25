@@ -88,81 +88,49 @@ def main():
     st.info(f"Analyzing keywords from **{len(chart_data)}** reviews matching your criteria.")
 
     # --- N-GRAM WORD CLOUD SUMMARY ---
-    # --- COMPARATIVE KEYWORD & PHRASE SUMMARY ---
-    st.markdown("---")
-    st.markdown("### ☁️ Comparative Keyword & Phrase Summary")
-    st.info(
-        "Explore the language of your reviewers. This section shows terms unique to positive reviews, "
-        "unique to negative reviews, and those that are common to both."
-    )
-
-    # --- UI Controls ---
-    control_col1, control_col2 = st.columns([1, 2])
-    with control_col1:
-        max_words = st.slider("Max Terms per Cloud:", min_value=10, max_value=50, value=25, key="keyword_slider")
-    with control_col2:
-        ngram_level = st.radio("Select Term Type:", ("Single Words", "Bigrams"), index=0, horizontal=True, key="ngram_radio")
-
-    # --- Data Preparation ---
-    pos_text = chart_data[chart_data["sentiment"] == "Positive"]["text"].dropna()
-    neg_text = chart_data[chart_data["sentiment"] == "Negative"]["text"].dropna()
-    ngram_range = (1, 1) if ngram_level == "Single Words" else (2, 2)
-
-    # Helper function to get term frequencies as a dictionary
-    def get_term_freqs(corpus, n=100):
-        if corpus.empty:
-            return {}
+    st.markdown("### ☁️ Keyword & Phrase Summary")
+    
+    col1, col2 = st.columns([1,1])
+    with col1:
+        max_words = st.slider("Max Terms in Cloud:", min_value=5, max_value=50, value=15, key="keyword_cloud_slider")
+    with col2:
+        ngram_level = st.radio("Term Type:", ("Single Words", "Bigrams", "Trigrams"), index=0, horizontal=True, key="keyword_ngram_radio", on_change=reset_keyword_page)
+    
+    def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
         vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
         bag_of_words = vec.transform(corpus)
         sum_words = bag_of_words.sum(axis=0) 
         words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
-        return dict(sorted(words_freq, key=lambda x: x[1], reverse=True)[:n])
+        words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
+        return words_freq[:n]
 
-    pos_freqs = get_term_freqs(pos_text)
-    neg_freqs = get_term_freqs(neg_text)
+    ngram_range = {"Single Words": (1,1), "Bigrams": (2,2), "Trigrams": (3,3)}.get(ngram_level)
 
-    # Find common, positive-only, and negative-only terms
-    pos_terms = set(pos_freqs.keys())
-    neg_terms = set(neg_freqs.keys())
-    
-    common_terms = pos_terms.intersection(neg_terms)
-    positive_only_terms = pos_terms - neg_terms
-    negative_only_terms = neg_terms - pos_terms
-
-    # Create frequency dictionaries for each category
-    positive_only_freqs = {term: pos_freqs[term] for term in positive_only_terms}
-    negative_only_freqs = {term: neg_freqs[term] for term in negative_only_terms}
-    # For common terms, we can sum their frequencies or choose an average
-    common_freqs = {term: pos_freqs[term] + neg_freqs[term] for term in common_terms}
-
-    # --- Three-Column Layout for Word Clouds ---
-    wc_col1, wc_col2, wc_col3 = st.columns(3)
-
-    def generate_word_cloud(freq_dict, colormap, max_words):
-        if not freq_dict:
-            st.caption("No terms to display.")
-            return
-        # Sort and slice the dictionary to respect max_words limit
-        sorted_freqs = dict(sorted(freq_dict.items(), key=lambda item: item[1], reverse=True)[:max_words])
-        wordcloud = WordCloud(
-            stopwords=STOPWORDS, background_color="white", width=800, height=600, colormap=colormap
-        ).generate_from_frequencies(sorted_freqs)
-        fig, ax = plt.subplots()
-        ax.imshow(wordcloud, interpolation='bilinear')
-        ax.axis("off")
-        st.pyplot(fig)
-
+    wc_col1, wc_col2 = st.columns(2)
     with wc_col1:
-        st.markdown("#### Positive-Only Terms")
-        generate_word_cloud(positive_only_freqs, 'Greens', max_words)
+        st.markdown("#### Positive Terms")
+        pos_text = chart_data[chart_data["sentiment"]=="Positive"]["text"].dropna()
+        if not pos_text.empty:
+            top_pos_grams = get_top_ngrams(pos_text, n=max_words, ngram_range=ngram_range)
+            if top_pos_grams:
+                wordcloud_pos = WordCloud(stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens').generate_from_frequencies(dict(top_pos_grams))
+                fig, ax = plt.subplots()
+                ax.imshow(wordcloud_pos, interpolation='bilinear')
+                ax.axis("off")
+                st.pyplot(fig)
 
     with wc_col2:
-        st.markdown("#### Common Terms")
-        generate_word_cloud(common_freqs, 'Greys', max_words)
+        st.markdown("#### Negative Terms")
+        neg_text = chart_data[chart_data["sentiment"]=="Negative"]["text"].dropna()
+        if not neg_text.empty:
+            top_neg_grams = get_top_ngrams(neg_text, n=max_words, ngram_range=ngram_range)
+            if top_neg_grams:
+                wordcloud_neg = WordCloud(stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds').generate_from_frequencies(dict(top_neg_grams))
+                fig, ax = plt.subplots()
+                ax.imshow(wordcloud_neg, interpolation='bilinear')
+                ax.axis("off")
+                st.pyplot(fig)
 
-    with wc_col3:
-        st.markdown("#### Negative-Only Terms")
-        generate_word_cloud(negative_only_freqs, 'Reds', max_words)
     # --- INTERACTIVE KEYWORD EXPLORER ---
     st.markdown("---")
     st.markdown("### 🔬 Interactive Term Explorer")
