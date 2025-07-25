@@ -244,150 +244,124 @@ def main():
         st.warning("No reviews match the selected filters.")
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
-    sort_option = st.selectbox(
-        "Sort aspects by:",
-        ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
-        key="aspect_sort_selector"
-    )
-    num_aspects_to_show = st.slider(
-    "Select number of top aspects to display:",
-    min_value=3, max_value=15, value=5, key="overview_aspect_slider"
-    )
-    
-    aspect_df = extract_aspects_with_sentiment(chart_data, product_details)
-    if not aspect_df.empty:
-        # --- Data Processing and Sorting Logic ---
-        sentiment_counts = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
-        
-        # Pivot the data to make calculations easier
-        pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
-        
-        # Ensure all sentiment columns exist
-        for col in ['Positive', 'Neutral', 'Negative']:
-            if col not in pivot_df.columns:
-                pivot_df[col] = 0
-                
-        pivot_df['total'] = pivot_df['Positive'] + pivot_df['Neutral'] + pivot_df['Negative']
-        
-        # Calculate percentages for sorting
-        pivot_df['positive_pct'] = pivot_df['Positive'] / pivot_df['total']
-        pivot_df['negative_pct'] = pivot_df['Negative'] / pivot_df['total']
-        # Controversy is the product of positive and negative proportions
-        pivot_df['controversy'] = pivot_df['positive_pct'] * pivot_df['negative_pct']
-    
-        # Determine the sorting order based on user selection
-        if sort_option == "Most Positive":
-            sort_field = 'positive_pct'
-            sort_order = 'descending'
-        elif sort_option == "Most Negative":
-            sort_field = 'negative_pct'
-            sort_order = 'descending'
-        elif sort_option == "Most Controversial":
-            sort_field = 'controversy'
-            sort_order = 'descending'
-        else: # Default to Most Discussed
-            sort_field = 'total'
-            sort_order = 'descending'
-            
-        top_aspects_sorted = pivot_df.nlargest(num_aspects_to_show, sort_field).index.tolist()
-    
-        # Filter the original counts data to only the top aspects
-        top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
-        
-        # --- Create the Chart ---
-        chart = alt.Chart(top_aspects_df).mark_bar().encode(
-            y=alt.Y('aspect:N', title='Product Aspect', sort=alt.EncodingSortField(field=sort_field, op="sum", order=sort_order)),
-            x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
-            color=alt.Color('sentiment:N',
-                            scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
-                                            range=['#1a9850', '#cccccc', '#d73027']),
-                            legend=alt.Legend(title="Sentiment")),
-            tooltip=[
-                alt.Tooltip('aspect', title='Aspect'),
-                alt.Tooltip('sentiment', title='Sentiment'),
-                alt.Tooltip('sum(count):Q', title='Review Count')
-            ]
-        ).properties(
-            title=f"Sentiment Analysis of Top {num_aspects_to_show} Aspects (Sorted by {sort_option})"
-        )
-        
-        st.altair_chart(chart, use_container_width=True)
-    else:
-        st.info("No metadata-guided aspects could be extracted for the current filter selection.")
-    
-    if st.button("Perform Detailed Aspect Analysis 🔎", use_container_width=True):
-        st.switch_page("pages/4_Aspect_Analysis.py")
-   
-    
-    # --- KEYWORD ANALYSIS SECTION (WITH N-GRAMS) ---
-    st.markdown("---")
-    st.markdown("### ☁️ Keyword & Phrase Summary")
-    st.info("💡 These word clouds show the most frequent terms in positive vs. negative reviews. Use the 'Term Type' selector to analyze single words (unigrams), two-word phrases (bigrams), or three-word phrases (trigrams).")
 
-    col1, col2 = st.columns([1,1])
+    # --- Create the new 3:2 column layout ---
+    col1, col2 = st.columns([3, 2])
+
+    # --- Column 1: Keyword & Phrase Summary ---
     with col1:
-        max_words = st.slider("Max Terms in Cloud:", min_value=5, max_value=50, value=15)
-    with col2:
-        ngram_level = st.radio("Term Type:", ("Single Words", "Bigrams", "Trigrams"), index=0, horizontal=True)
+        st.markdown("### ☁️ Keyword & Phrase Summary")
+        st.info("Frequent terms in positive vs. negative reviews.")
 
-    # Helper function to generate n-grams
-    def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
-        vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
-        bag_of_words = vec.transform(corpus)
-        sum_words = bag_of_words.sum(axis=0) 
-        words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
-        words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
-        return words_freq[:n]
+        # UI for controls
+        control_col1, control_col2 = st.columns(2)
+        with control_col1:
+            max_words = st.slider("Max Terms in Cloud:", min_value=5, max_value=50, value=15, key="keyword_slider")
+        with control_col2:
+            ngram_level = st.radio("Term Type:", ("Single Words", "Bigrams", "Trigrams"), index=0, horizontal=True, key="ngram_radio")
 
-    ngram_range = {
-        "Single Words": (1,1),
-        "Bigrams": (2,2),
-        "Trigrams": (3,3)
-    }.get(ngram_level, (1,1))
+        # Helper function to generate n-grams
+        def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
+            vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
+            bag_of_words = vec.transform(corpus)
+            sum_words = bag_of_words.sum(axis=0) 
+            words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
+            words_freq = sorted(words_freq, key=lambda x: x[1], reverse=True)
+            return words_freq[:n]
 
-    wc_col1, wc_col2 = st.columns(2)
+        ngram_range = {"Single Words": (1,1), "Bigrams": (2,2), "Trigrams": (3,3)}.get(ngram_level, (1,1))
 
-    with wc_col1:
+        # Positive Word Cloud
         st.markdown("#### Positive Reviews")
         pos_text = chart_data[chart_data["sentiment"]=="Positive"]["text"].dropna()
         if not pos_text.empty:
             top_pos_grams = get_top_ngrams(pos_text, n=max_words, ngram_range=ngram_range)
-            pos_freq_dict = dict(top_pos_grams)
-            if pos_freq_dict:
-                wordcloud_pos = WordCloud(
-                    stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Greens'
-                ).generate_from_frequencies(pos_freq_dict)
+            if top_pos_grams:
+                pos_freq_dict = dict(top_pos_grams)
+                wordcloud_pos = WordCloud(stopwords=STOPWORDS, background_color="white", colormap='Greens').generate_from_frequencies(pos_freq_dict)
                 fig, ax = plt.subplots()
                 ax.imshow(wordcloud_pos, interpolation='bilinear')
                 ax.axis("off")
                 st.pyplot(fig)
             else:
-                st.info("No terms found for this n-gram level.")
+                st.caption("No terms found.")
         else:
-            st.info("No positive reviews to analyze.")
+            st.caption("No positive reviews.")
 
-    with wc_col2:
+        # Negative Word Cloud
         st.markdown("#### Negative Reviews")
         neg_text = chart_data[chart_data["sentiment"]=="Negative"]["text"].dropna()
         if not neg_text.empty:
             top_neg_grams = get_top_ngrams(neg_text, n=max_words, ngram_range=ngram_range)
-            neg_freq_dict = dict(top_neg_grams)
-            if neg_freq_dict:
-                wordcloud_neg = WordCloud(
-                    stopwords=STOPWORDS, background_color="white", width=800, height=400, colormap='Reds'
-                ).generate_from_frequencies(neg_freq_dict)
+            if top_neg_grams:
+                neg_freq_dict = dict(top_neg_grams)
+                wordcloud_neg = WordCloud(stopwords=STOPWORDS, background_color="white", colormap='Reds').generate_from_frequencies(neg_freq_dict)
                 fig, ax = plt.subplots()
                 ax.imshow(wordcloud_neg, interpolation='bilinear')
                 ax.axis("off")
                 st.pyplot(fig)
             else:
-                st.info("No terms found for this n-gram level.")
+                st.caption("No terms found.")
         else:
-            st.info("No negative reviews to analyze.")
-    
+            st.caption("No negative reviews.")
+
+    # --- Column 2: Aspect Sentiment Analysis ---
+    with col2:
+        st.markdown("### 🔎 Key Aspect Sentiment Analysis")
+        st.info("Sentiment breakdown for key product features.")
+
+        sort_option = st.selectbox(
+            "Sort aspects by:",
+            ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
+            key="aspect_sort_selector"
+        )
+        num_aspects_to_show = st.slider(
+            "Select number of top aspects to display:",
+            min_value=3, max_value=15, value=5, key="overview_aspect_slider"
+        )
+        
+        aspect_df = extract_aspects_with_sentiment(chart_data, product_details)
+        if not aspect_df.empty:
+            # Data Processing and Sorting Logic
+            sentiment_counts = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+            pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+            for col in ['Positive', 'Neutral', 'Negative']:
+                if col not in pivot_df.columns: pivot_df[col] = 0
+            pivot_df['total'] = pivot_df['Positive'] + pivot_df['Neutral'] + pivot_df['Negative']
+            pivot_df['positive_pct'] = pivot_df['Positive'] / pivot_df['total']
+            pivot_df['negative_pct'] = pivot_df['Negative'] / pivot_df['total']
+            pivot_df['controversy'] = pivot_df['positive_pct'] * pivot_df['negative_pct']
+
+            if sort_option == "Most Positive": sort_field, sort_order = 'positive_pct', 'descending'
+            elif sort_option == "Most Negative": sort_field, sort_order = 'negative_pct', 'descending'
+            elif sort_option == "Most Controversial": sort_field, sort_order = 'controversy', 'descending'
+            else: sort_field, sort_order = 'total', 'descending'
+                
+            top_aspects_sorted = pivot_df.nlargest(num_aspects_to_show, sort_field).index.tolist()
+            top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
+            
+            # Create the Chart
+            chart = alt.Chart(top_aspects_df).mark_bar().encode(
+                y=alt.Y('aspect:N', title=None, sort=alt.EncodingSortField(field=sort_field, op="sum", order=sort_order)),
+                x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
+                color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
+                tooltip=[alt.Tooltip('aspect', title='Aspect'), alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('sum(count):Q', title='Review Count')]
+            ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})")
+            
+            st.altair_chart(chart, use_container_width=True)
+        else:
+            st.info("No aspects could be extracted for this product.")
+
+    st.markdown("<hr>", unsafe_allow_html=True) # Add a horizontal rule after the columns
+
     # --- Navigation Buttons ---
-    if st.button("Perform Detailed Keyword Analysis 🔑"):
-        st.switch_page("pages/3_Keyword_Analysis.py")
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("Perform Detailed Keyword Analysis 🔑", use_container_width=True):
+            st.switch_page("pages/3_Keyword_Analysis.py")
+    with btn_col2:
+        if st.button("Perform Detailed Aspect Analysis 🔎", use_container_width=True):
+            st.switch_page("pages/4_Aspect_Analysis.py")
 
     # --- TRENDS OVER TIME ---
     st.markdown("---")
