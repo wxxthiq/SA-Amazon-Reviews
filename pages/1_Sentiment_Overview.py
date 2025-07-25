@@ -139,7 +139,7 @@ def main():
         if st.button("📝 Explore All Reviews"):
             st.switch_page("pages/2_Review_Explorer.py")
         if st.button("⚖️ Compare this Product"):
-            st.switch_page("pages/5_Product_Comparison.py")
+            st.switch_page("pages/6_Comparison.py")
             
     with right_col:
         st.header(product_details['product_title'])
