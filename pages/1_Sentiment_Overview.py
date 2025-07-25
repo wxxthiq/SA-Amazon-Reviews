@@ -456,7 +456,27 @@ def main():
                 # --- FIX: Add a right margin to prevent the axis from overlapping the legend ---
                 fig.update_layout(margin=dict(r=80))
                 st.plotly_chart(fig, use_container_width=True)
-        
+        with col2:
+            show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='line_sentiment_trend')
+            if not sentiment_counts_over_time.empty:
+                if show_sentiment_trend:
+                    avg_sentiment_trend = time_df.groupby('period')['sentiment_score'].mean().reset_index()
+                    fig = px.line(
+                        sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
+                        color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                        category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                    )
+                    fig.add_trace(go.Scatter(x=avg_sentiment_trend['period'], y=avg_sentiment_trend['sentiment_score'], mode='lines', name='Avg. Sentiment', yaxis='y2', line=dict(dash='dash')))
+                    fig.update_layout(title_text="Trend and Average Sentiment", yaxis2=dict(title='Avg Sentiment', overlaying='y', side='right', range=[-1, 1]))
+                else:
+                    fig = px.line(
+                        sentiment_counts_over_time, x='period', y='count', color='sentiment', title="Volume by Sentiment",
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
+                        color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                        category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                    )
+                st.plotly_chart(fig, use_container_width=True)
     # --- Tab 2: Area Chart View ---
     with tab2:
         col1, col2 = st.columns(2)
