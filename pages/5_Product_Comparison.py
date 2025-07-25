@@ -172,8 +172,7 @@ def main():
         ).properties(title="Rating Comparison")
         st.altair_chart(rating_chart, use_container_width=True)
         
-    # --- Feature-Level Performance: Comparative Radar Charts ---
-# --- Feature-Level Performance: Comparative Radar Chart ---
+    # --- Feature-Level Performance: Comparative Radar Chart ---
     st.markdown("---")
     st.markdown("### Feature-Level Performance Comparison")
     st.info(
