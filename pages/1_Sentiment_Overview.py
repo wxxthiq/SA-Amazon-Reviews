@@ -142,7 +142,7 @@ def main():
     with right_col:
         st.header(product_details['product_title'])
         st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
-        m_col1, m_col2 = st.columns(2)
+        m_col1, m_col2, m_col3 = st.columns(3)
         m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
         m_col2.metric("Filtered Reviews", f"{len(chart_data):,}")
             # --- NEW: Calculate and display Rating Standard Deviation ---
