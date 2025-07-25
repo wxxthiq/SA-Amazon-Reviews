@@ -428,7 +428,7 @@ def main():
         if len(selected_for_comparison) >= 2:
             comparison_df = sentiment_counts[sentiment_counts['aspect'].isin(selected_for_comparison)] # <--- CORRECTED VARIABLE
             
-            radar_df = comparison_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
+            radar_df = comparison_df.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
             
             categories = ['Positive', 'Negative', 'Neutral']
             for sent in categories:
