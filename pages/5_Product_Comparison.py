@@ -173,28 +173,45 @@ def main():
         st.altair_chart(rating_chart, use_container_width=True)
         
     # --- Feature-Level Performance: Comparative Radar Charts ---
+    # In pages/5_Product_Comparison.py
+
+    # --- Feature-Level Performance: Comparative Radar Charts ---
     st.markdown("---")
     st.markdown("### Feature-Level Performance Comparison")
-    st.info("These radar charts show the average sentiment score for the top common aspects.")
+    st.info("These radar charts show the average sentiment score for the most frequently discussed common aspects.")
 
     aspects_a = extract_aspects_with_sentiment(product_a_reviews)
     aspects_b = extract_aspects_with_sentiment(product_b_reviews)
     
     if not aspects_a.empty and not aspects_b.empty:
-        # Merge with original reviews to get the numerical sentiment_score
-        aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id')
-        aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id')
-        
-        avg_sent_a = aspects_a.groupby('aspect')['sentiment_score'].mean()
-        avg_sent_b = aspects_b.groupby('aspect')['sentiment_score'].mean()
+        # Get aspect counts for both products
+        counts_a = aspects_a['aspect'].value_counts()
+        counts_b = aspects_b['aspect'].value_counts()
 
-        # Find common aspects to ensure a fair comparison
-        common_aspects = sorted(list(set(avg_sent_a.index).intersection(set(avg_sent_b.index))))
+        # Find common aspects
+        common_aspects = set(counts_a.index).intersection(set(counts_b.index))
         
         if len(common_aspects) >= 3:
-            # Filter both datasets to only the common aspects
-            avg_sent_a = avg_sent_a.reindex(common_aspects)
-            avg_sent_b = avg_sent_b.reindex(common_aspects)
+            # --- FIX: Calculate total mention count for common aspects and add a slider ---
+            total_counts = (counts_a.reindex(common_aspects, fill_value=0) + counts_b.reindex(common_aspects, fill_value=0)).sort_values(ascending=False)
+            
+            num_aspects_to_show = st.slider(
+                "Select number of top aspects to display in radar charts:",
+                min_value=3, 
+                max_value=min(20, len(total_counts)), # Don't allow more than 20 or the total number of aspects
+                value=min(7, len(total_counts)), # Default to 7 or the total number
+                key="radar_aspect_slider"
+            )
+            
+            # Filter for the top N most discussed common aspects
+            top_common_aspects = total_counts.nlargest(num_aspects_to_show).index.tolist()
+
+            # Merge with reviews to get the numerical sentiment_score
+            aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id')
+            aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id')
+            
+            avg_sent_a = aspects_a.groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
+            avg_sent_b = aspects_b.groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
 
             # --- Create a two-column layout for the charts ---
             col1, col2 = st.columns(2)
@@ -202,32 +219,15 @@ def main():
             with col1:
                 st.markdown(f"**{truncate_text(product_a_details['product_title'])}**")
                 fig_a = go.Figure()
-                fig_a.add_trace(go.Scatterpolar(
-                    r=avg_sent_a.values,
-                    theta=avg_sent_a.index, 
-                    fill='toself',
-                    name='Product A'
-                ))
-                fig_a.update_layout(
-                  polar=dict(radialaxis=dict(visible=True, range=[-1, 1])),
-                  showlegend=False
-                )
+                fig_a.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself'))
+                fig_a.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=False)
                 st.plotly_chart(fig_a, use_container_width=True)
 
             with col2:
                 st.markdown(f"**{truncate_text(product_b_details['product_title'])}**")
                 fig_b = go.Figure()
-                fig_b.add_trace(go.Scatterpolar(
-                    r=avg_sent_b.values,
-                    theta=avg_sent_b.index,
-                    fill='toself',
-                    name='Product B',
-                    marker_color='orange'
-                ))
-                fig_b.update_layout(
-                  polar=dict(radialaxis=dict(visible=True, range=[-1, 1])),
-                  showlegend=False
-                )
+                fig_b.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', marker_color='orange'))
+                fig_b.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=False)
                 st.plotly_chart(fig_b, use_container_width=True)
         else:
             st.info("Not enough common aspects (at least 3) were found to generate a comparison chart.")
