@@ -389,7 +389,6 @@ def main():
     if st.button("Perform Detailed Keyword Analysis 🔑"):
         st.switch_page("pages/3_Keyword_Analysis.py")
 
-    st.markdown("---")
     # --- TRENDS OVER TIME ---
     st.markdown("---")
     st.markdown("### 🗓️ Trends Over Time")
@@ -405,7 +404,7 @@ def main():
         index=0, horizontal=True
     )
     
-    # Prepare the data once for both charts
+    # Prepare the data once for all charts
     time_df = chart_data.copy()
     time_df['date'] = pd.to_datetime(time_df['date'])
     if time_granularity == 'Monthly':
@@ -415,60 +414,66 @@ def main():
     else: # Daily
         time_df['period'] = time_df['date'].dt.date
     
+    # Create the data subsets
+    rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
+    sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+    
     # Create tabs for switching between chart types
     tab1, tab2 = st.tabs(["📈 Line Chart View", "📊 Area Chart View"])
     
-    # --- Rating Trends ---
+    # --- Tab 1: Line Chart View ---
     with tab1:
-        st.markdown("#### Rating Trend")
-        rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
-        if not rating_counts_over_time.empty:
-            fig_line_rating = px.line(
-                rating_counts_over_time, x='period', y='count', color='rating',
-                title=f"Volume of Reviews by Rating ({time_granularity})",
-                labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
-                color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
-                category_orders={"rating": [1, 2, 3, 4, 5]}
-            )
-            st.plotly_chart(fig_line_rating, use_container_width=True)
-    
-    with tab2:
-        st.markdown("#### Rating Distribution")
-        if not rating_counts_over_time.empty:
-            fig_area_rating = px.area(
-                rating_counts_over_time, x='period', y='count', color='rating',
-                title=f"Distribution of Reviews by Rating ({time_granularity})",
-                labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
-                color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
-                category_orders={"rating": [1, 2, 3, 4, 5]}
-            )
-            st.plotly_chart(fig_area_rating, use_container_width=True)
-    
-    
-    # --- Sentiment Trends ---
-    sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
-    if not sentiment_counts_over_time.empty:
-        with tab1:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### Rating Trend")
+            if not rating_counts_over_time.empty:
+                fig_line_rating = px.line(
+                    rating_counts_over_time, x='period', y='count', color='rating',
+                    title=f"Volume by Rating",
+                    labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
+                    color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
+                    category_orders={"rating": [1, 2, 3, 4, 5]}
+                )
+                st.plotly_chart(fig_line_rating, use_container_width=True)
+                
+        with col2:
             st.markdown("#### Sentiment Trend")
-            fig_line_sentiment = px.line(
-                sentiment_counts_over_time, x='period', y='count', color='sentiment',
-                title=f"Volume of Reviews by Sentiment ({time_granularity})",
-                labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
-                color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
-            )
-            st.plotly_chart(fig_line_sentiment, use_container_width=True)
+            if not sentiment_counts_over_time.empty:
+                fig_line_sentiment = px.line(
+                    sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                    title=f"Volume by Sentiment",
+                    labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
+                    color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                )
+                st.plotly_chart(fig_line_sentiment, use_container_width=True)
     
-        with tab2:
+    # --- Tab 2: Area Chart View ---
+    with tab2:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### Rating Distribution")
+            if not rating_counts_over_time.empty:
+                fig_area_rating = px.area(
+                    rating_counts_over_time, x='period', y='count', color='rating',
+                    title=f"Distribution by Rating",
+                    labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
+                    color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
+                    category_orders={"rating": [1, 2, 3, 4, 5]}
+                )
+                st.plotly_chart(fig_area_rating, use_container_width=True)
+    
+        with col2:
             st.markdown("#### Sentiment Distribution")
-            fig_area_sentiment = px.area(
-                sentiment_counts_over_time, x='period', y='count', color='sentiment',
-                title=f"Distribution of Reviews by Sentiment ({time_granularity})",
-                labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
-                color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
-            )
-            st.plotly_chart(fig_area_sentiment, use_container_width=True)
+            if not sentiment_counts_over_time.empty:
+                fig_area_sentiment = px.area(
+                    sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                    title=f"Distribution by Sentiment",
+                    labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
+                    color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
+                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                )
+                st.plotly_chart(fig_area_sentiment, use_container_width=True)
                 
     st.markdown("### Rating vs. Text Discrepancy")
     st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Points in the top-left (low rating, positive sentiment) or bottom-right (high rating, negative sentiment) are the most discrepant. Click a point to read the review.")
