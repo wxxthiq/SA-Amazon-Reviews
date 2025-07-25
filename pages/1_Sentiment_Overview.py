@@ -145,8 +145,12 @@ def main():
         m_col1, m_col2 = st.columns(2)
         m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
         m_col2.metric("Filtered Reviews", f"{len(chart_data):,}")
+            # --- NEW: Calculate and display Rating Standard Deviation ---
+        if not chart_data.empty:
+            rating_std_dev = chart_data['rating'].std()
+            m_col3.metric("Rating Deviation (σ)", f"{rating_std_dev:.2f}")
         st.markdown("---")
-        dist_col1, dist_col2 = st.columns(2)
+        dist_col1, dist_col2, dist_col3 = st.columns(3)
         with dist_col1:
             st.markdown("**Rating Distribution**")
             if not chart_data.empty:
@@ -334,7 +338,6 @@ def main():
             st.info("No negative reviews to analyze.")
     
     # --- Navigation Buttons ---
-    st.markdown("---")
     if st.button("Perform Detailed Keyword Analysis 🔑"):
         st.switch_page("pages/3_Keyword_Analysis.py")
 
