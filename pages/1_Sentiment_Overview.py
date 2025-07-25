@@ -448,15 +448,16 @@ def main():
                     ))
                     fig.update_layout(
                         title_text="Trend and Average Rating",
-                        yaxis2=dict(title='Avg Rating', overlaying='y', side='right', range=[1, 5])
-                    )
+                        yaxis2=dict(title='Avg Rating', overlaying='y', side='right', range=[1, 5]),
+                        legend=dict(
+                            orientation="h", # Horizontal legend
+                            yanchor="bottom",
+                            y=1.02,          # Positioned above the chart
+                            xanchor="right",
+                            x=1))
                 else:
                     fig.update_layout(title_text="Volume by Rating")
                 
-                            # --- FIX: Add a right margin to prevent the axis from overlapping the legend ---
-                fig.update_layout(
-                    margin=dict(r=500) # Add this line to create space on the right
-                )
                 st.plotly_chart(fig, use_container_width=True)
         with col2:
             show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='line_sentiment_trend')
