@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import spacy
 import re
 import json
+import altair as alt
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
