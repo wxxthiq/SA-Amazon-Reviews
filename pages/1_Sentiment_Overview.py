@@ -453,8 +453,10 @@ def main():
                 else:
                     fig.update_layout(title_text="Volume by Rating")
                 
-                # --- FIX: Add a right margin to prevent the axis from overlapping the legend ---
-                fig.update_layout(margin=dict(r=180))
+                            # --- FIX: Add a right margin to prevent the axis from overlapping the legend ---
+                fig.update_layout(
+                    margin=dict(r=500) # Add this line to create space on the right
+                )
                 st.plotly_chart(fig, use_container_width=True)
         with col2:
             show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='line_sentiment_trend')
