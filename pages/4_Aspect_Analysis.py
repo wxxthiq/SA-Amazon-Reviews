@@ -132,7 +132,7 @@ def main():
         )
         num_aspects_to_show = st.slider(
             "Select number of top aspects to display:",
-            min_value=3, max_value=20, value=10, key="detailed_aspect_slider"
+            min_value=3, max_value=15, value=5, key="detailed_aspect_slider"
         )
     
         # --- Data Processing and Sorting Logic (Unchanged) ---
