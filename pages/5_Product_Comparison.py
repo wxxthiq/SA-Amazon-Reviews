@@ -172,20 +172,15 @@ def main():
         ).properties(title="Rating Comparison")
         st.altair_chart(rating_chart, use_container_width=True)
         
-    # --- Feature-Level Performance: Comparative Radar Chart ---
-    # --- Feature-Level Performance: Comparative Radar Chart ---
+    # --- Feature-Level Performance: Comparative Radar Charts ---
     st.markdown("---")
     st.markdown("### Feature-Level Performance Comparison")
-    st.info(
-        "This radar chart compares the average sentiment score for common aspects. "
-        "A point further from the center indicates a more positive sentiment for that feature."
-    )
+    st.info("These radar charts show the average sentiment score for the top common aspects.")
 
     aspects_a = extract_aspects_with_sentiment(product_a_reviews)
     aspects_b = extract_aspects_with_sentiment(product_b_reviews)
     
     if not aspects_a.empty and not aspects_b.empty:
-        # --- FIX: Calculate average sentiment score for each aspect ---
         # Merge with original reviews to get the numerical sentiment_score
         aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id')
         aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id')
@@ -193,39 +188,47 @@ def main():
         avg_sent_a = aspects_a.groupby('aspect')['sentiment_score'].mean()
         avg_sent_b = aspects_b.groupby('aspect')['sentiment_score'].mean()
 
-        # Find common aspects and filter the data
+        # Find common aspects to ensure a fair comparison
         common_aspects = sorted(list(set(avg_sent_a.index).intersection(set(avg_sent_b.index))))
         
         if len(common_aspects) >= 3:
+            # Filter both datasets to only the common aspects
             avg_sent_a = avg_sent_a.reindex(common_aspects)
             avg_sent_b = avg_sent_b.reindex(common_aspects)
 
-            product_a_title = truncate_text(product_a_details['product_title'])
-            product_b_title = truncate_text(product_b_details['product_title'])
+            # --- Create a two-column layout for the charts ---
+            col1, col2 = st.columns(2)
 
-            fig = go.Figure()
+            with col1:
+                st.markdown(f"**{truncate_text(product_a_details['product_title'])}**")
+                fig_a = go.Figure()
+                fig_a.add_trace(go.Scatterpolar(
+                    r=avg_sent_a.values,
+                    theta=avg_sent_a.index, 
+                    fill='toself',
+                    name='Product A'
+                ))
+                fig_a.update_layout(
+                  polar=dict(radialaxis=dict(visible=True, range=[-1, 1])),
+                  showlegend=False
+                )
+                st.plotly_chart(fig_a, use_container_width=True)
 
-            # Add trace for Product A
-            fig.add_trace(go.Scatterpolar(
-                r=avg_sent_a.values,
-                theta=avg_sent_a.index, 
-                fill='toself',
-                name=product_a_title
-            ))
-            # Add trace for Product B
-            fig.add_trace(go.Scatterpolar(
-                r=avg_sent_b.values,
-                theta=avg_sent_b.index,
-                fill='toself',
-                name=product_b_title
-            ))
-            
-            fig.update_layout(
-              polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), # Range from -1 (Negative) to 1 (Positive)
-              showlegend=True,
-              title="Average Sentiment Score by Common Aspect"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            with col2:
+                st.markdown(f"**{truncate_text(product_b_details['product_title'])}**")
+                fig_b = go.Figure()
+                fig_b.add_trace(go.Scatterpolar(
+                    r=avg_sent_b.values,
+                    theta=avg_sent_b.index,
+                    fill='toself',
+                    name='Product B',
+                    marker_color='orange'
+                ))
+                fig_b.update_layout(
+                  polar=dict(radialaxis=dict(visible=True, range=[-1, 1])),
+                  showlegend=False
+                )
+                st.plotly_chart(fig_b, use_container_width=True)
         else:
             st.info("Not enough common aspects (at least 3) were found to generate a comparison chart.")
     else:
