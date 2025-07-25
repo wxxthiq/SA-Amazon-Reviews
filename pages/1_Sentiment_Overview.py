@@ -145,10 +145,26 @@ def main():
         m_col1, m_col2, m_col3 = st.columns(3)
         m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
         m_col2.metric("Filtered Reviews", f"{len(chart_data):,}")
+        # Helper function to interpret standard deviation
+        def get_rating_consensus(std_dev):
+            if std_dev < 1.1:
+                return "✅ Consistent"  # Low deviation = high agreement
+            elif std_dev < 1.4:
+                return "↔️ Mixed"      # Medium deviation = some disagreement
+            else:
+                return "⚠️ Polarizing" # High deviation = strong disagreement
             # --- NEW: Calculate and display Rating Standard Deviation ---
-        if not chart_data.empty:
+        # --- NEW: Calculate and display Rating Consensus with a tooltip ---
+        if not chart_data.empty and len(chart_data) > 1:
             rating_std_dev = chart_data['rating'].std()
-            m_col3.metric("Rating Deviation (σ)", f"{rating_std_dev:.2f}")
+            consensus_text = get_rating_consensus(rating_std_dev)
+            
+            # Add the 'help' parameter to create a tooltip
+            m_col3.metric(
+                "Reviewer Consensus",
+                consensus_text,
+                help=f"Standard Deviation of ratings: {rating_std_dev:.2f}"
+            )
         st.markdown("---")
         dist_col1, dist_col2, dist_col3 = st.columns(3)
         with dist_col1:
