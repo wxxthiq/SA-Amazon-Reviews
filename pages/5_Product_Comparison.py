@@ -164,6 +164,7 @@ def main():
         st.altair_chart(rating_chart, use_container_width=True)
         
     # --- Feature-Level Performance: Comparative Radar Chart ---
+    # --- Feature-Level Performance: Comparative Radar Chart ---
     st.markdown("---")
     st.markdown("### Feature-Level Performance Comparison")
     st.info("This radar chart compares the normalized sentiment profiles for common aspects discussed in reviews for both products.")
@@ -175,48 +176,56 @@ def main():
         counts_a = aspects_a.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         counts_b = aspects_b.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         
-        common_aspects = set(counts_a['aspect']).intersection(set(counts_b['aspect']))
+        common_aspects = sorted(list(set(counts_a['aspect']).intersection(set(counts_b['aspect']))))
         
         if len(common_aspects) >= 3:
-            # Filter for common aspects and create pivot tables
-            radar_a = counts_a[counts_a['aspect'].isin(common_aspects)].pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
-            radar_b = counts_b[counts_b['aspect'].isin(common_aspects)].pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
-
-            # Ensure all sentiment columns exist for both
-            categories = ['Positive', 'Negative', 'Neutral']
-            for col in categories:
-                if col not in radar_a.columns: radar_a[col] = 0
-                if col not in radar_b.columns: radar_b[col] = 0
-            
-            # --- FIX: Correctly normalize and structure the data ---
-            normalized_a = radar_a.div(radar_a.sum(axis=1), axis=0).reindex(columns=categories, fill_value=0)
-            normalized_b = radar_b.div(radar_b.sum(axis=1), axis=0).reindex(columns=categories, fill_value=0)
-
-            product_a_title = truncate_text(product_a_details['product_title'])
-            product_b_title = truncate_text(product_b_details['product_title'])
-
-            fig = go.Figure()
-            # Add trace for Product A
-            fig.add_trace(go.Scatterpolar(
-                r=normalized_a.loc[list(common_aspects)].values.mean(axis=0), # Average proportions across aspects
-                theta=categories, 
-                fill='toself', 
-                name=product_a_title
-            ))
-            # Add trace for Product B
-            fig.add_trace(go.Scatterpolar(
-                r=normalized_b.loc[list(common_aspects)].values.mean(axis=0), # Average proportions across aspects
-                theta=categories, 
-                fill='toself', 
-                name=product_b_title
-            ))
-            
-            fig.update_layout(
-              polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-              showlegend=True,
-              title="Normalized Sentiment Profile Comparison"
+            # --- FIX: Create a multiselect for aspects to compare ---
+            selected_aspects = st.multiselect(
+                "Select common aspects to compare:",
+                options=common_aspects,
+                default=common_aspects[:5] # Default to the first 5 common aspects
             )
-            st.plotly_chart(fig, use_container_width=True)
+
+            if len(selected_aspects) > 0:
+                # Filter for selected common aspects
+                radar_a = counts_a[counts_a['aspect'].isin(selected_aspects)].pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+                radar_b = counts_b[counts_b['aspect'].isin(selected_aspects)].pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+
+                categories = ['Positive', 'Negative', 'Neutral']
+                for col in categories:
+                    if col not in radar_a.columns: radar_a[col] = 0
+                    if col not in radar_b.columns: radar_b[col] = 0
+                
+                normalized_a = radar_a.div(radar_a.sum(axis=1), axis=0).reindex(columns=categories, fill_value=0)
+                normalized_b = radar_b.div(radar_b.sum(axis=1), axis=0).reindex(columns=categories, fill_value=0)
+
+                product_a_title = truncate_text(product_a_details['product_title'])
+                product_b_title = truncate_text(product_b_details['product_title'])
+
+                fig = go.Figure()
+
+                # Add trace for Product A for all selected aspects
+                fig.add_trace(go.Scatterpolar(
+                    r=normalized_a.values.flatten(), 
+                    theta=pd.MultiIndex.from_product([normalized_a.index, normalized_a.columns]),
+                    name=product_a_title
+                ))
+                # Add trace for Product B for all selected aspects
+                fig.add_trace(go.Scatterpolar(
+                    r=normalized_b.values.flatten(), 
+                    theta=pd.MultiIndex.from_product([normalized_b.index, normalized_b.columns]),
+                    name=product_b_title
+                ))
+                
+                fig.update_layout(
+                  polar=dict(
+                      radialaxis=dict(visible=True, range=[0, 1]),
+                      angularaxis=dict(tickfont=dict(size=8))
+                  ),
+                  showlegend=True,
+                  title="Normalized Sentiment Profile Comparison"
+                )
+                st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Not enough common aspects (at least 3) were found between these two products to generate a comparison chart.")
     else:
