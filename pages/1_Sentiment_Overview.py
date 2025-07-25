@@ -425,21 +425,33 @@ def main():
         with col1:
             show_rating_trend = st.toggle('Show Average Rating Trend', key='line_rating_trend')
             if not rating_counts_over_time.empty:
+                # Create the base line chart
+                fig = px.line(
+                    rating_counts_over_time, x='period', y='count', color='rating',
+                    labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
+                    color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}
+                )
+    
                 if show_rating_trend:
+                    # Add the average trendline if toggled
                     avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
-                    fig = px.line(
-                        rating_counts_over_time, x='period', y='count', color='rating',
-                        labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
-                        color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}
+                    fig.add_trace(go.Scatter(
+                        x=avg_rating_trend['period'], 
+                        y=avg_rating_trend['rating'], 
+                        mode='lines', 
+                        name='Average Rating', 
+                        yaxis='y2',
+                        # --- FIX: Set a distinct color for the trendline ---
+                        line=dict(dash='dash', color='blue') 
+                    ))
+                    fig.update_layout(
+                        title_text="Trend and Average Rating",
+                        yaxis2=dict(title='Avg Rating', overlaying='y', side='right', range=[1, 5])
                     )
-                    fig.add_trace(go.Scatter(x=avg_rating_trend['period'], y=avg_rating_trend['rating'], mode='lines', name='Average Rating', yaxis='y2', line=dict(dash='dash')))
-                    fig.update_layout(title_text="Trend and Average Rating", yaxis2=dict(title='Avg Rating', overlaying='y', side='right', range=[1, 5]))
                 else:
-                    fig = px.line(
-                        rating_counts_over_time, x='period', y='count', color='rating', title="Volume by Rating",
-                        labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
-                        color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}
-                    )
+                    fig.update_layout(title_text="Volume by Rating")
+                
+                # --- FIX: Reverse the legend order ---
                 fig.update_layout(legend={'traceorder': 'reversed'})
                 st.plotly_chart(fig, use_container_width=True)
                 
