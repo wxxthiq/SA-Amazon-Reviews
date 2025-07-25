@@ -93,9 +93,72 @@ def main():
         st.subheader(product_b_details['product_title'])
         st.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
 
-    # --- Macro-Level Sentiment Chart (Unchanged) ---
-    st.markdown("---")
-    # ... (Diverging bar chart code is correct and remains here)
+        st.markdown("---")
+    st.markdown("### Sentiment and Rating Distribution")
+    st.info("These charts show the proportion of positive vs. negative sentiment and high vs. low star ratings based on your filters.")
+
+    # --- Create a two-column layout for the charts ---
+    col1, col2 = st.columns(2)
+
+    # --- Column 1: Diverging Sentiment Bar Chart ---
+    with col1:
+        st.markdown("**Sentiment Distribution**")
+        
+        # Calculate sentiment proportions
+        sentiment_dist = chart_data['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
+        
+        fig_sent = go.Figure()
+        fig_sent.add_trace(go.Bar(
+            y=['Sentiment'], x=[sentiment_dist['Positive']], 
+            name='Positive', orientation='h', marker_color='#1a9850'
+        ))
+        fig_sent.add_trace(go.Bar(
+            y=['Sentiment'], x=[sentiment_dist['Neutral']], 
+            name='Neutral', orientation='h', marker_color='#cccccc'
+        ))
+        fig_sent.add_trace(go.Bar(
+            y=['Sentiment'], x=[-sentiment_dist['Negative']], 
+            name='Negative', orientation='h', marker_color='#d73027'
+        ))
+
+        fig_sent.update_layout(
+            barmode='relative', 
+            xaxis_title="Proportion of Reviews", 
+            yaxis_title=None,
+            xaxis=dict(tickformat='.0%'),
+            height=200,
+            margin=dict(l=20, r=20, t=40, b=20),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_sent, use_container_width=True)
+
+    # --- Column 2: Diverging Rating Bar Chart ---
+    with col2:
+        st.markdown("**Rating Distribution**")
+
+        # Calculate rating proportions
+        rating_dist = chart_data['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
+        
+        fig_rate = go.Figure()
+        # High ratings (4 & 5 stars) go to the right
+        fig_rate.add_trace(go.Bar(y=['Rating'], x=[rating_dist[5]], name='5 Stars', orientation='h', marker_color='#1a9850'))
+        fig_rate.add_trace(go.Bar(y=['Rating'], x=[rating_dist[4]], name='4 Stars', orientation='h', marker_color='#91cf60'))
+        # Neutral rating (3 stars)
+        fig_rate.add_trace(go.Bar(y=['Rating'], x=[rating_dist[3]], name='3 Stars', orientation='h', marker_color='#cccccc'))
+        # Low ratings (1 & 2 stars) go to the left
+        fig_rate.add_trace(go.Bar(y=['Rating'], x=[-rating_dist[2]], name='2 Stars', orientation='h', marker_color='orange'))
+        fig_rate.add_trace(go.Bar(y=['Rating'], x=[-rating_dist[1]], name='1 Star', orientation='h', marker_color='#d73027'))
+        
+        fig_rate.update_layout(
+            barmode='relative', 
+            xaxis_title="Proportion of Reviews", 
+            yaxis_title=None,
+            xaxis=dict(tickformat='.0%'),
+            height=200,
+            margin=dict(l=20, r=20, t=40, b=20),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_rate, use_container_width=True)
 
     # --- Consistent Radar Chart ---
     st.markdown("---")
