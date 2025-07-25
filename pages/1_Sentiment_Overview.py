@@ -421,61 +421,41 @@ def main():
     
     # --- Tab 1: Line Chart View ---
     with tab1:
-        col1, col2 = st.columns(2)
-        with col1:
-            show_rating_trend = st.toggle('Show Average Rating Trend', key='line_rating_trend')
-            if not rating_counts_over_time.empty:
-                # Create the base line chart
-                fig = px.line(
-                    rating_counts_over_time, x='period', y='count', color='rating',
-                    labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
-                    color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'}
+    col1, col2 = st.columns(2)
+    with col1:
+        show_rating_trend = st.toggle('Show Average Rating Trend', key='line_rating_trend')
+        if not rating_counts_over_time.empty:
+            
+            # --- FIX: Use category_orders for sorting and update the color map ---
+            fig = px.line(
+                rating_counts_over_time, x='period', y='count', color='rating',
+                labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
+                color_discrete_map={
+                    5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 
+                    2: 'orange', # <-- Set Rating 2 to orange
+                    1: '#d73027'
+                },
+                # Enforce descending sort order for the legend
+                category_orders={"rating": [5, 4, 3, 2, 1]}
+            )
+
+            if show_rating_trend:
+                avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
+                fig.add_trace(go.Scatter(
+                    x=avg_rating_trend['period'], y=avg_rating_trend['rating'], 
+                    mode='lines', name='Average Rating', yaxis='y2',
+                    line=dict(dash='dash', color='blue')
+                ))
+                fig.update_layout(
+                    title_text="Trend and Average Rating",
+                    yaxis2=dict(title='Avg Rating', overlaying='y', side='right', range=[1, 5])
                 )
-    
-                if show_rating_trend:
-                    # Add the average trendline if toggled
-                    avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
-                    fig.add_trace(go.Scatter(
-                        x=avg_rating_trend['period'], 
-                        y=avg_rating_trend['rating'], 
-                        mode='lines', 
-                        name='Average Rating', 
-                        yaxis='y2',
-                        # --- FIX: Set a distinct color for the trendline ---
-                        line=dict(dash='dash', color='blue') 
-                    ))
-                    fig.update_layout(
-                        title_text="Trend and Average Rating",
-                        yaxis2=dict(title='Avg Rating', overlaying='y', side='right', range=[1, 5])
-                    )
-                else:
-                    fig.update_layout(title_text="Volume by Rating")
-                
-                # --- FIX: Reverse the legend order ---
-                fig.update_layout(legend={'traceorder': 'reversed'})
-                st.plotly_chart(fig, use_container_width=True)
-                
-        with col2:
-            show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='line_sentiment_trend')
-            if not sentiment_counts_over_time.empty:
-                if show_sentiment_trend:
-                    avg_sentiment_trend = time_df.groupby('period')['sentiment_score'].mean().reset_index()
-                    fig = px.line(
-                        sentiment_counts_over_time, x='period', y='count', color='sentiment',
-                        labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
-                        color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                        category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
-                    )
-                    fig.add_trace(go.Scatter(x=avg_sentiment_trend['period'], y=avg_sentiment_trend['sentiment_score'], mode='lines', name='Avg. Sentiment', yaxis='y2', line=dict(dash='dash')))
-                    fig.update_layout(title_text="Trend and Average Sentiment", yaxis2=dict(title='Avg Sentiment', overlaying='y', side='right', range=[-1, 1]))
-                else:
-                    fig = px.line(
-                        sentiment_counts_over_time, x='period', y='count', color='sentiment', title="Volume by Sentiment",
-                        labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
-                        color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                        category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
-                    )
-                st.plotly_chart(fig, use_container_width=True)
+            else:
+                fig.update_layout(title_text="Volume by Rating")
+            
+            # --- FIX: Add a right margin to prevent the axis from overlapping the legend ---
+            fig.update_layout(margin=dict(r=80))
+            st.plotly_chart(fig, use_container_width=True)
     
     # --- Tab 2: Area Chart View ---
     with tab2:
