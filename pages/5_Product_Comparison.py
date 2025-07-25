@@ -96,14 +96,58 @@ def main():
     product_a_reviews = get_reviews_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
     product_b_reviews = get_reviews_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
 
-    # --- Display Panes ---
+# Helper function to interpret standard deviation
+    def get_rating_consensus(std_dev):
+        if std_dev is None or pd.isna(std_dev):
+            return "N/A"
+        if std_dev < 1.1:
+            return "✅ Consistent"
+        elif std_dev < 1.4:
+            return "↔️ Mixed"
+        else:
+            return "⚠️ Polarizing"
+
     col1, col2 = st.columns(2)
+
+    # --- Product A Display ---
     with col1:
         st.subheader(product_a_details['product_title'])
-        st.metric("Filtered Reviews", f"{len(product_a_reviews):,}")
+        
+        # Image Display
+        image_urls_str_a = product_a_details.get('image_urls')
+        image_urls_a = image_urls_str_a.split(',') if pd.notna(image_urls_str_a) and image_urls_str_a else []
+        if image_urls_a:
+            st.image(image_urls_a[0], use_container_width=True)
+
+        # Metrics Display
+        m_col1, m_col2, m_col3 = st.columns(3)
+        m_col1.metric("Average Rating", f"{product_a_details.get('average_rating', 0):.2f} ⭐")
+        m_col2.metric("Filtered Reviews", f"{len(product_a_reviews):,}")
+        
+        if not product_a_reviews.empty and len(product_a_reviews) > 1:
+            std_dev_a = product_a_reviews['rating'].std()
+            consensus_a = get_rating_consensus(std_dev_a)
+            m_col3.metric("Consensus", consensus_a, help=f"Std. Dev: {std_dev_a:.2f}")
+
+    # --- Product B Display ---
     with col2:
         st.subheader(product_b_details['product_title'])
-        st.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
+
+        # Image Display
+        image_urls_str_b = product_b_details.get('image_urls')
+        image_urls_b = image_urls_str_b.split(',') if pd.notna(image_urls_str_b) and image_urls_str_b else []
+        if image_urls_b:
+            st.image(image_urls_b[0], use_container_width=True)
+            
+        # Metrics Display
+        m_col1, m_col2, m_col3 = st.columns(3)
+        m_col1.metric("Average Rating", f"{product_b_details.get('average_rating', 0):.2f} ⭐")
+        m_col2.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
+
+        if not product_b_reviews.empty and len(product_b_reviews) > 1:
+            std_dev_b = product_b_reviews['rating'].std()
+            consensus_b = get_rating_consensus(std_dev_b)
+            m_col3.metric("Consensus", consensus_b, help=f"Std. Dev: {std_dev_b:.2f}")
         
     st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
