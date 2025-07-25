@@ -191,7 +191,7 @@ def main():
     
     selected_aspect = st.selectbox(
         "Select an auto-detected aspect to analyze in detail:",
-        options=["--- Select an Aspect ---"] + top_aspects_list,
+        options=["--- Select an Aspect ---"] + top_aspects_sorted,
         on_change=reset_aspect_page_number # Reset pagination if aspect changes
     )
     
@@ -418,11 +418,11 @@ def main():
     st.markdown("### ⚖️ Comparative Aspect Analysis")
     st.caption("Select two or more aspects to compare their sentiment profiles. Hover over the points for details.")
 
-    if top_aspects_list:
+    if top_aspects_sorted:
         selected_for_comparison = st.multiselect(
             "Select aspects to compare:",
-            options=top_aspects_list,
-            default=top_aspects_list[:3] if len(top_aspects_list) >= 3 else top_aspects_list
+            options=top_aspects_sorted,
+            default=top_aspects_sorted[:3] if len(top_aspects_sorted) >= 3 else sorted
         )
 
         if len(selected_for_comparison) >= 2:
