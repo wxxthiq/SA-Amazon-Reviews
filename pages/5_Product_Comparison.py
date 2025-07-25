@@ -163,44 +163,68 @@ def main():
         ).properties(title="Rating Comparison")
         st.altair_chart(rating_chart, use_container_width=True)
         
-    # --- Consistent Radar Chart ---
+    # --- Feature-Level Performance: Comparative Radar Chart ---
     st.markdown("---")
     st.markdown("### Feature-Level Performance Comparison")
+    st.info("This radar chart compares the normalized sentiment profiles for common aspects discussed in reviews for both products.")
+
     aspects_a = extract_aspects_with_sentiment(product_a_reviews)
     aspects_b = extract_aspects_with_sentiment(product_b_reviews)
     
     if not aspects_a.empty and not aspects_b.empty:
+        # Get sentiment counts for each aspect
         counts_a = aspects_a.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         counts_b = aspects_b.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         
+        # Find the common aspects between both products
         common_aspects = set(counts_a['aspect']).intersection(set(counts_b['aspect']))
         
         if len(common_aspects) >= 3:
+            # Filter for common aspects
+            counts_a = counts_a[counts_a['aspect'].isin(common_aspects)]
+            counts_b = counts_b[counts_b['aspect'].isin(common_aspects)]
+            
             # Create pivot tables
             radar_a = counts_a.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
             radar_b = counts_b.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+
+            # Ensure all sentiment columns exist
+            for col in ['Positive', 'Neutral', 'Negative']:
+                if col not in radar_a.columns: radar_a[col] = 0
+                if col not in radar_b.columns: radar_b[col] = 0
             
-            # Combine and find common profile
-            combined_radar = radar_a.add(radar_b, fill_value=0).reindex(common_aspects)
-            
-            # Normalize the data for better comparison
-            normalized_a = combined_radar.div(combined_radar.sum(axis=1), axis=0).reindex(columns=['Positive', 'Negative', 'Neutral'], fill_value=0)
+            # Normalize the data for a fair comparison of profiles
+            normalized_a = radar_a.div(radar_a.sum(axis=1), axis=0).reindex(columns=['Positive', 'Negative', 'Neutral'], fill_value=0)
             normalized_b = radar_b.div(radar_b.sum(axis=1), axis=0).reindex(columns=['Positive', 'Negative', 'Neutral'], fill_value=0)
 
+            # Use the (truncated) product titles for the legend
+            product_a_title = truncate_text(product_a_details['product_title'])
+            product_b_title = truncate_text(product_b_details['product_title'])
+
             fig = go.Figure()
-            fig.add_trace(go.Scatterpolar(r=normalized_a.values, theta=normalized_a.columns, fill='toself', name='Product A'))
-            fig.add_trace(go.Scatterpolar(r=normalized_b.values, theta=normalized_b.columns, fill='toself', name='Product B'))
+            fig.add_trace(go.Scatterpolar(
+                r=normalized_a.values.flatten(), 
+                theta=normalized_a.columns, 
+                fill='toself', 
+                name=product_a_title
+            ))
+            fig.add_trace(go.Scatterpolar(
+                r=normalized_b.values.flatten(), 
+                theta=normalized_b.columns, 
+                fill='toself', 
+                name=product_b_title
+            ))
             
             fig.update_layout(
-                polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
-                showlegend=True,
-                title="Normalized Sentiment Profile Comparison"
+              polar=dict(radialaxis=dict(visible=True, range=[0, 1])),
+              showlegend=True,
+              title="Normalized Sentiment Profile Comparison"
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Not enough common aspects found to generate a comparison chart.")
+            st.info("Not enough common aspects (at least 3) were found between these two products to generate a comparison chart.")
     else:
-        st.info("Not enough aspect data for one or both products to compare.")
+        st.info("Not enough aspect data for one or both products to generate a comparison.")
 
     # --- Word Cloud Section (Unchanged) ---
     st.markdown("---")
