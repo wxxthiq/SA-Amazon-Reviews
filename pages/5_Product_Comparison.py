@@ -62,7 +62,9 @@ def extract_aspects_with_sentiment(dataf):
 # --- Main App Logic ---
 def main():
     st.title("⚖️ Product Comparison")
-
+        # --- Add the back button here ---
+    if st.button("⬅️ Back to Sentiment Overview"):
+        st.switch_page("pages/1_Sentiment_Overview.py")
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
         st.warning("Please select a product from the main search page first to begin a comparison.")
         st.stop()
