@@ -172,45 +172,41 @@ def main():
     aspects_b = extract_aspects_with_sentiment(product_b_reviews)
     
     if not aspects_a.empty and not aspects_b.empty:
-        # Get sentiment counts for each aspect
         counts_a = aspects_a.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         counts_b = aspects_b.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         
-        # Find the common aspects between both products
         common_aspects = set(counts_a['aspect']).intersection(set(counts_b['aspect']))
         
         if len(common_aspects) >= 3:
-            # Filter for common aspects
-            counts_a = counts_a[counts_a['aspect'].isin(common_aspects)]
-            counts_b = counts_b[counts_b['aspect'].isin(common_aspects)]
-            
-            # Create pivot tables
-            radar_a = counts_a.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
-            radar_b = counts_b.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+            # Filter for common aspects and create pivot tables
+            radar_a = counts_a[counts_a['aspect'].isin(common_aspects)].pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+            radar_b = counts_b[counts_b['aspect'].isin(common_aspects)].pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
 
-            # Ensure all sentiment columns exist
-            for col in ['Positive', 'Neutral', 'Negative']:
+            # Ensure all sentiment columns exist for both
+            categories = ['Positive', 'Negative', 'Neutral']
+            for col in categories:
                 if col not in radar_a.columns: radar_a[col] = 0
                 if col not in radar_b.columns: radar_b[col] = 0
             
-            # Normalize the data for a fair comparison of profiles
-            normalized_a = radar_a.div(radar_a.sum(axis=1), axis=0).reindex(columns=['Positive', 'Negative', 'Neutral'], fill_value=0)
-            normalized_b = radar_b.div(radar_b.sum(axis=1), axis=0).reindex(columns=['Positive', 'Negative', 'Neutral'], fill_value=0)
+            # --- FIX: Correctly normalize and structure the data ---
+            normalized_a = radar_a.div(radar_a.sum(axis=1), axis=0).reindex(columns=categories, fill_value=0)
+            normalized_b = radar_b.div(radar_b.sum(axis=1), axis=0).reindex(columns=categories, fill_value=0)
 
-            # Use the (truncated) product titles for the legend
             product_a_title = truncate_text(product_a_details['product_title'])
             product_b_title = truncate_text(product_b_details['product_title'])
 
             fig = go.Figure()
+            # Add trace for Product A
             fig.add_trace(go.Scatterpolar(
-                r=normalized_a.values.flatten(), 
-                theta=normalized_a.columns, 
+                r=normalized_a.loc[list(common_aspects)].values.mean(axis=0), # Average proportions across aspects
+                theta=categories, 
                 fill='toself', 
                 name=product_a_title
             ))
+            # Add trace for Product B
             fig.add_trace(go.Scatterpolar(
-                r=normalized_b.values.flatten(), 
-                theta=normalized_b.columns, 
+                r=normalized_b.loc[list(common_aspects)].values.mean(axis=0), # Average proportions across aspects
+                theta=categories, 
                 fill='toself', 
                 name=product_b_title
             ))
@@ -225,10 +221,6 @@ def main():
             st.info("Not enough common aspects (at least 3) were found between these two products to generate a comparison chart.")
     else:
         st.info("Not enough aspect data for one or both products to generate a comparison.")
-
-    # --- Word Cloud Section (Unchanged) ---
-    st.markdown("---")
-    # ... (Word cloud logic remains here)
 
 if __name__ == "__main__":
     main()
