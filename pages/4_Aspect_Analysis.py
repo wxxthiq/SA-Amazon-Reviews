@@ -28,6 +28,30 @@ def convert_df_to_csv(df):
     """Converts a dataframe to a downloadable CSV file."""
     return df.to_csv(index=False).encode('utf-8')
 
+# --- Definitive Aspect Extraction Function ---
+@st.cache_data
+def extract_aspects_with_sentiment(dataf):
+    """
+    Uses a definitive, fully automated filtering approach to extract 
+    high-quality aspects using spaCy's built-in stop word list.
+    """
+    aspect_sentiments = []
+    stop_words = nlp.Defaults.stop_words
+    for doc, sentiment in zip(nlp.pipe(dataf['text']), dataf['sentiment']):
+        for chunk in doc.noun_chunks:
+            tokens = [token for token in chunk]
+            while len(tokens) > 0 and (tokens[0].is_stop or tokens[0].pos_ == 'DET'):
+                tokens.pop(0)
+            while len(tokens) > 0 and tokens[-1].is_stop:
+                tokens.pop(-1)
+            if not tokens:
+                continue
+            final_aspect = " ".join(token.lemma_.lower() for token in tokens)
+            if len(final_aspect) > 3 and final_aspect not in stop_words:
+                aspect_sentiments.append({'aspect': final_aspect, 'sentiment': sentiment})
+    if not aspect_sentiments:
+        return pd.DataFrame()
+    return pd.DataFrame(aspect_sentiments)
 nlp = load_spacy_model()
 DB_PATH = "amazon_reviews_final.duckdb"
 conn = connect_to_db(DB_PATH)
@@ -87,35 +111,12 @@ def main():
         
     st.info(f"Analyzing aspects from **{len(chart_data)}** reviews matching your criteria.")
 
-    # --- Aspect Summary Chart (Unchanged) ---
-    @st.cache_data
-    def get_aspect_summary(data, num_aspects):
-        all_aspects = []
-        def clean_chunk(chunk):
-            return " ".join(token.lemma_.lower() for token in chunk if token.pos_ in ['NOUN', 'PROPN', 'ADJ'])
-        
-        for doc in nlp.pipe(data['text'].astype(str)):
-            for chunk in doc.noun_chunks:
-                cleaned = clean_chunk(chunk)
-                if cleaned and len(cleaned) > 2:
-                    all_aspects.append(cleaned)
-        
-        if not all_aspects:
-            return pd.DataFrame(), []
-            
-        top_aspects = [aspect for aspect, freq in Counter(all_aspects).most_common(num_aspects)]
-        
-        aspect_sentiments = []
-        for aspect in top_aspects:
-            for text in data['text']:
-                if re.search(r'\b' + re.escape(aspect) + r'\b', str(text).lower()):
-                    window = str(text).lower()[max(0, str(text).lower().find(aspect)-50):min(len(text), str(text).lower().find(aspect)+len(aspect)+50)]
-                    polarity = TextBlob(window).sentiment.polarity
-                    sentiment_cat = 'Positive' if polarity > 0.1 else 'Negative' if polarity < -0.1 else 'Neutral'
-                    aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment_cat})
-        
-        return pd.DataFrame(aspect_sentiments), top_aspects
+    # --- FIX: Call the correct function to create aspect_df ---
+    aspect_df = extract_aspects_with_sentiment(chart_data)
 
+    if aspect_df.empty:
+        st.warning("No distinct aspects could be extracted from the filtered reviews.")
+        st.stop()
     # --- Aspect Summary Chart (with Interactive Sorting) ---
     st.markdown("### Aspect Sentiment Summary")
 
