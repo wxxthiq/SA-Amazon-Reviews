@@ -244,7 +244,11 @@ def main():
         st.warning("No reviews match the selected filters.")
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
-
+    sort_option = st.selectbox(
+        "Sort aspects by:",
+        ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
+        key="aspect_sort_selector"
+    )
     num_aspects_to_show = st.slider(
     "Select number of top aspects to display:",
     min_value=3, max_value=15, value=5, key="overview_aspect_slider"
@@ -252,19 +256,47 @@ def main():
     
     aspect_df = extract_aspects_with_sentiment(chart_data, product_details)
     if not aspect_df.empty:
-        # --- Data Processing to find the Top N Aspects ---
-        aspect_totals = aspect_df['aspect'].value_counts().reset_index()
-        aspect_totals.columns = ['aspect', 'mention_count']
-        top_aspects = aspect_totals.nlargest(num_aspects_to_show, 'mention_count')['aspect'].tolist()
+        # --- Data Processing and Sorting Logic ---
+        sentiment_counts = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         
-        # Filter the main distribution data to only include the top aspects
-        top_aspects_df = aspect_df[aspect_df['aspect'].isin(top_aspects)]
+        # Pivot the data to make calculations easier
+        pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+        
+        # Ensure all sentiment columns exist
+        for col in ['Positive', 'Neutral', 'Negative']:
+            if col not in pivot_df.columns:
+                pivot_df[col] = 0
+                
+        pivot_df['total'] = pivot_df['Positive'] + pivot_df['Neutral'] + pivot_df['Negative']
+        
+        # Calculate percentages for sorting
+        pivot_df['positive_pct'] = pivot_df['Positive'] / pivot_df['total']
+        pivot_df['negative_pct'] = pivot_df['Negative'] / pivot_df['total']
+        # Controversy is the product of positive and negative proportions
+        pivot_df['controversy'] = pivot_df['positive_pct'] * pivot_df['negative_pct']
     
-        # --- Create the 100% Stacked Bar Chart ---
-        sentiment_counts = top_aspects_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        # Determine the sorting order based on user selection
+        if sort_option == "Most Positive":
+            sort_field = 'positive_pct'
+            sort_order = 'descending'
+        elif sort_option == "Most Negative":
+            sort_field = 'negative_pct'
+            sort_order = 'descending'
+        elif sort_option == "Most Controversial":
+            sort_field = 'controversy'
+            sort_order = 'descending'
+        else: # Default to Most Discussed
+            sort_field = 'total'
+            sort_order = 'descending'
+            
+        top_aspects_sorted = pivot_df.nlargest(num_aspects_to_show, sort_field).index.tolist()
+    
+        # Filter the original counts data to only the top aspects
+        top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
         
-        chart = alt.Chart(sentiment_counts).mark_bar().encode(
-            y=alt.Y('aspect:N', title='Product Aspect', sort=alt.EncodingSortField(field="count", op="sum", order="descending")),
+        # --- Create the Chart ---
+        chart = alt.Chart(top_aspects_df).mark_bar().encode(
+            y=alt.Y('aspect:N', title='Product Aspect', sort=alt.EncodingSortField(field=sort_field, op="sum", order=sort_order)),
             x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
             color=alt.Color('sentiment:N',
                             scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
@@ -276,12 +308,12 @@ def main():
                 alt.Tooltip('sum(count):Q', title='Review Count')
             ]
         ).properties(
-            title=f"Sentiment Analysis of Top {num_aspects_to_show} Aspects"
+            title=f"Sentiment Analysis of Top {num_aspects_to_show} Aspects (Sorted by {sort_option})"
         )
         
         st.altair_chart(chart, use_container_width=True)
     else:
-        st.info("No aspects to display for the current filter selection.")
+        st.info("No metadata-guided aspects could be extracted for the current filter selection.")
     
     if st.button("Perform Detailed Aspect Analysis 🔎", use_container_width=True):
         st.switch_page("pages/4_Aspect_Analysis.py")
