@@ -163,51 +163,51 @@ def main():
         st.altair_chart(summary_chart, use_container_width=True)
     
     with col2:
-    st.markdown("#### Comparative Analysis")
-    st.caption("Select 2+ aspects to compare their sentiment profiles.")
-    
-    if top_aspects_sorted:
-        selected_for_comparison = st.multiselect(
-            "Select aspects to compare:",
-            options=top_aspects_sorted,
-            default=top_aspects_sorted[:3] if len(top_aspects_sorted) >= 3 else top_aspects_sorted
-        )
-
-        if len(selected_for_comparison) >= 2:
-            comparison_df = sentiment_counts[sentiment_counts['aspect'].isin(selected_for_comparison)]
-            radar_df = comparison_df.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
-            
-            categories = ['Positive', 'Negative', 'Neutral']
-            for sent in categories:
-                if sent not in radar_df.columns: radar_df[sent] = 0
-            radar_df = radar_df[categories]
-
-            # --- NEW: Normalize the data for better comparison ---
-            # For each row (aspect), divide by its sum to get proportions
-            normalized_radar_df = radar_df.div(radar_df.sum(axis=1), axis=0)
-
-            fig = go.Figure()
-            for aspect in normalized_radar_df.index:
-                hover_text = [f"{count} {cat} mentions" for cat, count in zip(categories, radar_df.loc[aspect].values)]
-                fig.add_trace(go.Scatterpolar(
-                    r=normalized_radar_df.loc[aspect].values, # Use normalized values for plotting
-                    theta=categories,
-                    fill='toself',
-                    name=aspect,
-                    hoverinfo='name+text',
-                    text=hover_text
-                ))
-            
-            fig.update_layout(
-              polar=dict(
-                radialaxis=dict(
-                  visible=True,
-                  range=[0, 1] # Set the axis range from 0 to 1
-                )),
-              showlegend=True,
-              title="Normalized Sentiment Profile Comparison"
+        st.markdown("#### Comparative Analysis")
+        st.caption("Select 2+ aspects to compare their sentiment profiles.")
+        
+        if top_aspects_sorted:
+            selected_for_comparison = st.multiselect(
+                "Select aspects to compare:",
+                options=top_aspects_sorted,
+                default=top_aspects_sorted[:3] if len(top_aspects_sorted) >= 3 else top_aspects_sorted
             )
-            st.plotly_chart(fig, use_container_width=True)
+    
+            if len(selected_for_comparison) >= 2:
+                comparison_df = sentiment_counts[sentiment_counts['aspect'].isin(selected_for_comparison)]
+                radar_df = comparison_df.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+                
+                categories = ['Positive', 'Negative', 'Neutral']
+                for sent in categories:
+                    if sent not in radar_df.columns: radar_df[sent] = 0
+                radar_df = radar_df[categories]
+    
+                # --- NEW: Normalize the data for better comparison ---
+                # For each row (aspect), divide by its sum to get proportions
+                normalized_radar_df = radar_df.div(radar_df.sum(axis=1), axis=0)
+    
+                fig = go.Figure()
+                for aspect in normalized_radar_df.index:
+                    hover_text = [f"{count} {cat} mentions" for cat, count in zip(categories, radar_df.loc[aspect].values)]
+                    fig.add_trace(go.Scatterpolar(
+                        r=normalized_radar_df.loc[aspect].values, # Use normalized values for plotting
+                        theta=categories,
+                        fill='toself',
+                        name=aspect,
+                        hoverinfo='name+text',
+                        text=hover_text
+                    ))
+                
+                fig.update_layout(
+                  polar=dict(
+                    radialaxis=dict(
+                      visible=True,
+                      range=[0, 1] # Set the axis range from 0 to 1
+                    )),
+                  showlegend=True,
+                  title="Normalized Sentiment Profile Comparison"
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
     # --- Interactive Aspect Explorer (ENHANCED) ---
     st.markdown("---")
