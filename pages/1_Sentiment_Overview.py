@@ -427,20 +427,24 @@ def main():
         with col1:
             show_rating_trend = st.toggle('Show Average Rating Trend', key='line_rating_trend')
             if not rating_counts_over_time.empty:
+                # --- FIX: Moved 'labels' into the px.line() function ---
                 if show_rating_trend:
-                    # Advanced chart with trendline
                     avg_rating_trend = time_df.groupby('period')['rating'].mean().reset_index()
-                    fig = px.line(rating_counts_over_time, x='period', y='count', color='rating')
+                    fig = px.line(
+                        rating_counts_over_time, x='period', y='count', color='rating',
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'}
+                    )
                     fig.add_trace(go.Scatter(x=avg_rating_trend['period'], y=avg_rating_trend['rating'], mode='lines', name='Average Rating', yaxis='y2', line=dict(dash='dash')))
                     fig.update_layout(title_text="Trend and Average Rating", yaxis2=dict(title='Avg Rating', overlaying='y', side='right', range=[1, 5]))
                 else:
-                    # Default chart
-                    fig = px.line(rating_counts_over_time, x='period', y='count', color='rating', title="Volume by Rating")
+                    fig = px.line(
+                        rating_counts_over_time, x='period', y='count', color='rating',
+                        title="Volume by Rating",
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'}
+                    )
                 
                 fig.update_layout(
-                    labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
                     color_discrete_map={5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 2: '#fee08b', 1: '#d73027'},
-                    # --- FIX: Corrected descending sort order ---
                     legend={'traceorder': 'reversed'}
                 )
                 st.plotly_chart(fig, use_container_width=True)
@@ -448,20 +452,24 @@ def main():
         with col2:
             show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='line_sentiment_trend')
             if not sentiment_counts_over_time.empty:
+                # --- FIX: Moved 'labels' into the px.line() function ---
                 if show_sentiment_trend:
-                    # Advanced chart with trendline
                     avg_sentiment_trend = time_df.groupby('period')['sentiment_score'].mean().reset_index()
-                    fig = px.line(sentiment_counts_over_time, x='period', y='count', color='sentiment')
+                    fig = px.line(
+                        sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'}
+                    )
                     fig.add_trace(go.Scatter(x=avg_sentiment_trend['period'], y=avg_sentiment_trend['sentiment_score'], mode='lines', name='Avg. Sentiment', yaxis='y2', line=dict(dash='dash')))
                     fig.update_layout(title_text="Trend and Average Sentiment", yaxis2=dict(title='Avg Sentiment', overlaying='y', side='right', range=[-1, 1]))
                 else:
-                    # Default chart
-                    fig = px.line(sentiment_counts_over_time, x='period', y='count', color='sentiment', title="Volume by Sentiment")
+                    fig = px.line(
+                        sentiment_counts_over_time, x='period', y='count', color='sentiment',
+                        title="Volume by Sentiment",
+                        labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'}
+                    )
     
                 fig.update_layout(
-                    labels={'period': 'Date', 'count': 'Number of Reviews', 'sentiment': 'Sentiment'},
                     color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'},
-                    # --- FIX: Corrected descending sort order ---
                     category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
                 )
                 st.plotly_chart(fig, use_container_width=True)
