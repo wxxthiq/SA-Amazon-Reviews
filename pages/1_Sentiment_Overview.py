@@ -431,7 +431,7 @@ def main():
                     rating_counts_over_time, x='period', y='count', color='rating',
                     labels={'period': 'Date', 'count': 'Number of Reviews', 'rating': 'Star Rating'},
                     color_discrete_map={
-                        5: '#1a9850', 4: '#91cf60', 3: '#d9ef8b', 
+                        5: '#1a9850', 4: '#91cf60', 3: 'yellow', 
                         2: 'orange', # <-- Set Rating 2 to orange
                         1: '#d73027'
                     },
@@ -454,7 +454,7 @@ def main():
                     fig.update_layout(title_text="Volume by Rating")
                 
                 # --- FIX: Add a right margin to prevent the axis from overlapping the legend ---
-                fig.update_layout(margin=dict(r=80))
+                fig.update_layout(margin=dict(r=180))
                 st.plotly_chart(fig, use_container_width=True)
         with col2:
             show_sentiment_trend = st.toggle('Show Average Sentiment Trend', key='line_sentiment_trend')
