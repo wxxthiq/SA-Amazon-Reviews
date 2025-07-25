@@ -129,7 +129,7 @@ def main():
 
     num_aspects_to_show = st.slider(
         "Select number of top aspects to display:",
-        min_value=3, max_value=20, value=10, key="detailed_aspect_slider"
+        min_value=3, max_value=15, value=5, key="detailed_aspect_slider"
     )
 
     # --- NEW: Data Processing and Sorting Logic ---
@@ -426,7 +426,7 @@ def main():
         )
 
         if len(selected_for_comparison) >= 2:
-            comparison_df = aspect_summary_df[aspect_summary_df['aspect'].isin(selected_for_comparison)]
+            comparison_df = sentiment_counts[sentiment_counts['aspect'].isin(selected_for_comparison)] # <--- CORRECTED VARIABLE
             
             radar_df = comparison_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
             
