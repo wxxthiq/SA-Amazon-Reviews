@@ -95,68 +95,52 @@ def main():
 
     st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
-    st.info("These charts compare the proportion of positive vs. negative sentiment and high vs. low star ratings for each product.")
+    st.info("These charts directly compare the proportion of sentiments and star ratings for each product.")
 
     # --- Create a two-column layout for the charts ---
     col1, col2 = st.columns(2)
 
-    # --- Column 1: Diverging Sentiment Bar Chart ---
+    # --- Column 1: Grouped Sentiment Bar Chart ---
     with col1:
         st.markdown("**Sentiment Distribution**")
         
-        # Calculate sentiment proportions for both products
         dist_a = product_a_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
         dist_b = product_b_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
         
-        fig_sent = go.Figure()
-        # Product A Traces
-        fig_sent.add_trace(go.Bar(y=['Product A'], x=[dist_a['Positive']], name='Positive', orientation='h', marker_color='#1a9850'))
-        fig_sent.add_trace(go.Bar(y=['Product A'], x=[dist_a['Neutral']], name='Neutral', orientation='h', marker_color='#cccccc'))
-        fig_sent.add_trace(go.Bar(y=['Product A'], x=[-dist_a['Negative']], name='Negative', orientation='h', marker_color='#d73027'))
-        # Product B Traces
-        fig_sent.add_trace(go.Bar(y=['Product B'], x=[dist_b['Positive']], name='Positive', orientation='h', showlegend=False, marker_color='#1a9850'))
-        fig_sent.add_trace(go.Bar(y=['Product B'], x=[dist_b['Neutral']], name='Neutral', orientation='h', showlegend=False, marker_color='#cccccc'))
-        fig_sent.add_trace(go.Bar(y=['Product B'], x=[-dist_b['Negative']], name='Negative', orientation='h', showlegend=False, marker_color='#d73027'))
-
+        fig_sent = go.Figure(data=[
+            go.Bar(name='Product A', x=dist_a.index, y=dist_a.values),
+            go.Bar(name='Product B', x=dist_b.index, y=dist_b.values)
+        ])
+        
         fig_sent.update_layout(
-            barmode='relative', 
-            xaxis_title="Proportion of Reviews", 
-            yaxis_title=None,
-            xaxis=dict(tickformat='.0%'),
-            height=250,
+            barmode='group',
+            xaxis_title="Sentiment",
+            yaxis_title="Proportion of Reviews",
+            yaxis=dict(tickformat='.0%'),
+            height=300,
             margin=dict(l=20, r=20, t=40, b=20),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         st.plotly_chart(fig_sent, use_container_width=True)
 
-    # --- Column 2: Diverging Rating Bar Chart ---
+    # --- Column 2: Grouped Rating Bar Chart ---
     with col2:
         st.markdown("**Rating Distribution**")
 
-        # Calculate rating proportions for both products
         rating_dist_a = product_a_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
         rating_dist_b = product_b_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
         
-        fig_rate = go.Figure()
-        # Product A Traces
-        fig_rate.add_trace(go.Bar(y=['Product A'], x=[rating_dist_a[5]], name='5 Stars', orientation='h', marker_color='#1a9850'))
-        fig_rate.add_trace(go.Bar(y=['Product A'], x=[rating_dist_a[4]], name='4 Stars', orientation='h', marker_color='#91cf60'))
-        fig_rate.add_trace(go.Bar(y=['Product A'], x=[rating_dist_a[3]], name='3 Stars', orientation='h', marker_color='#cccccc'))
-        fig_rate.add_trace(go.Bar(y=['Product A'], x=[-rating_dist_a[2]], name='2 Stars', orientation='h', marker_color='orange'))
-        fig_rate.add_trace(go.Bar(y=['Product A'], x=[-rating_dist_a[1]], name='1 Star', orientation='h', marker_color='#d73027'))
-        # Product B Traces
-        fig_rate.add_trace(go.Bar(y=['Product B'], x=[rating_dist_b[5]], name='5 Stars', orientation='h', showlegend=False, marker_color='#1a9850'))
-        fig_rate.add_trace(go.Bar(y=['Product B'], x=[rating_dist_b[4]], name='4 Stars', orientation='h', showlegend=False, marker_color='#91cf60'))
-        fig_rate.add_trace(go.Bar(y=['Product B'], x=[rating_dist_b[3]], name='3 Stars', orientation='h', showlegend=False, marker_color='#cccccc'))
-        fig_rate.add_trace(go.Bar(y=['Product B'], x=[-rating_dist_b[2]], name='2 Stars', orientation='h', showlegend=False, marker_color='orange'))
-        fig_rate.add_trace(go.Bar(y=['Product B'], x=[-rating_dist_b[1]], name='1 Star', orientation='h', showlegend=False, marker_color='#d73027'))
+        fig_rate = go.Figure(data=[
+            go.Bar(name='Product A', x=rating_dist_a.index, y=rating_dist_a.values),
+            go.Bar(name='Product B', x=rating_dist_b.index, y=rating_dist_b.values)
+        ])
         
         fig_rate.update_layout(
-            barmode='relative', 
-            xaxis_title="Proportion of Reviews", 
-            yaxis_title=None,
-            xaxis=dict(tickformat='.0%'),
-            height=250,
+            barmode='group',
+            xaxis_title="Star Rating",
+            yaxis_title="Proportion of Reviews",
+            yaxis=dict(tickformat='.0%'),
+            height=300,
             margin=dict(l=20, r=20, t=40, b=20),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
