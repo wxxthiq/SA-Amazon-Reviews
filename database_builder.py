@@ -1,46 +1,30 @@
-# database_builder.py (Final Modular & Updatable Version)
-# This script allows re-running to add new features without rebuilding everything from scratch.
-# Includes category-specific aspects and rating distribution pre-computation.
-
+# database_builder.py (V8.4 - Kaggle Version)
 import pandas as pd
-import sqlite3
-from textblob import TextBlob
-import spacy
-import time
-import os
+import duckdb
 import json
+import os
+import time
+from tqdm.auto import tqdm
+import torch
+from transformers import pipeline
 
-# --- Configuration ---
-# This should match the directory where your JSONL files are located on your build machine (e.g., Kaggle)
-KAGGLE_INPUT_DIR = 'mcauley-jsonl'
+# --- Configuration for Kaggle Notebooks ---
+# Assumes your dataset slug is 'mcauley-jsonl'
+KAGGLE_INPUT_DIR = '/kaggle/input/mcauley-jsonl/' 
 OUTPUT_FOLDER = '/kaggle/working/'
-# I've named the output DB 'final_v2.db' to distinguish it from previous versions.
-OUTPUT_DB_PATH = os.path.join(OUTPUT_FOLDER, 'amazon_reviews_v3.db')
+OUTPUT_DB_PATH = os.path.join(OUTPUT_FOLDER, 'amazon_reviews_final.duckdb')
 
+# --- UPDATE: Remove .gz extension from filenames ---
 CATEGORIES_TO_PROCESS = {
-    'Amazon Fashion': ('Amazon_Fashion.jsonl', 'meta_Amazon_Fashion.jsonl'),
-    'All Beauty': ('All_Beauty.jsonl', 'meta_All_Beauty.jsonl'),
-    'Appliances': ('Appliances.jsonl', 'meta_Appliances.jsonl')
+    'All Beauty': ('All_Beauty.jsonl/All_Beauty.jsonl'  , 'meta_All_Beauty.jsonl/meta_All_Beauty.jsonl')
 }
-CHUNK_SIZE = 100000 # Reduced for memory safety during the build process
-
-# --- PERFECTED ASPECT LISTS ---
-# Aspects common to all product types
-COMMON_ASPECTS = ['price', 'value', 'quality', 'packaging', 'shipping', 'delivery', 'service', 'return', 'customer service']
-
-# Category-specific aspects
-FASHION_ASPECTS = ['fit', 'size', 'color', 'fabric', 'style', 'comfort', 'stitching', 'zipper', 'material', 'durability', 'design', 'look']
-BEAUTY_ASPECTS = ['scent', 'fragrance', 'texture', 'consistency', 'longevity', 'coverage', 'formula', 'ingredients', 'application', 'pigmentation', 'moisture']
-APPLIANCES_ASPECTS = ['power', 'noise', 'performance', 'battery', 'durability', 'ease of use', 'features', 'design', 'size', 'installation', 'efficiency']
-
-# Combine all aspects into a single list for analysis
-ALL_ASPECTS = list(set(COMMON_ASPECTS + FASHION_ASPECTS + BEAUTY_ASPECTS + APPLIANCES_ASPECTS))
-
+TOP_N_PRODUCTS = 100
+SENTIMENT_BATCH_SIZE = 512
 
 # --- Helper Functions ---
+# --- UPDATE: Reverted to a standard file reader ---
 def parse_jsonl_to_df(path):
-    """Reads a plain text JSON-lines (.jsonl) file."""
-    print(f"  Reading metadata from: {path}")
+    print(f"  Reading data from: {os.path.basename(path)}")
     data = []
     try:
         with open(path, 'r', encoding='utf-8') as f:
@@ -52,213 +36,183 @@ def parse_jsonl_to_df(path):
         return None
 
 def extract_and_join_image_urls(image_data):
-    """Safely extracts all available URLs and joins them into a comma-separated string."""
-    if not isinstance(image_data, list) or not image_data: return None
-    urls = [img.get('hi_res') or img.get('large') for img in image_data if isinstance(img, dict) and (img.get('hi_res') or img.get('large'))]
-    return ",".join(urls) if urls else None
+    if not isinstance(image_data, list): return None
+    urls = [img.get('hi_res') or img.get('large') for img in image_data if isinstance(img, dict)]
+    return ",".join(filter(None, urls)) if urls else None
 
-# --- Modular Build Functions ---
-
-def stage_raw_data(conn, full_input_path):
-    """
-    Reads all source JSONL files, enriches them, and stages them into a single 'raw_reviews' table.
-    This is the longest-running step and should only be run once.
-    """
-    print("\n--- STAGE 1: Staging Raw Data ---")
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='raw_reviews'")
-    if cursor.fetchone():
-        print("✅ 'raw_reviews' table already exists. Skipping.")
-        return
-
-    is_first_write = True
-    for category_name, (review_file, meta_file) in CATEGORIES_TO_PROCESS.items():
-        phase_start_time = time.time()
-        print(f"\n--- Processing Category: {category_name} ---")
-        
-        review_file_path = os.path.join(full_input_path, review_file, review_file)
-        meta_file_path = os.path.join(full_input_path, meta_file, meta_file)
-
-        meta_df = parse_jsonl_to_df(meta_file_path)
-        if meta_df is None: continue
-
-        meta_df = meta_df.rename(columns={'title': 'product_title', 'images': 'image_list'})
-        meta_df['image_urls'] = meta_df['image_list'].apply(extract_and_join_image_urls)
-        meta_df = meta_df[['parent_asin', 'product_title', 'image_urls']].dropna(subset=['parent_asin'])
-
-        chunk_num = 1
-        for reviews_chunk_df in pd.read_json(review_file_path, lines=True, chunksize=CHUNK_SIZE):
-            print(f"  - Processing chunk {chunk_num}...")
-            
-            merged_chunk_df = pd.merge(reviews_chunk_df, meta_df, on='parent_asin', how='left')
-            merged_chunk_df['category'] = category_name
-            merged_chunk_df['rating'] = pd.to_numeric(merged_chunk_df['rating'], errors='coerce')
-            merged_chunk_df.dropna(subset=['rating', 'text', 'parent_asin'], inplace=True)
-            
-            sentiments = merged_chunk_df['text'].astype(str).apply(lambda text: TextBlob(text).sentiment)
-            merged_chunk_df['sentiment'] = sentiments.apply(lambda s: 'Positive' if s.polarity > 0.1 else ('Negative' if s.polarity < -0.1 else 'Neutral'))
-            merged_chunk_df['text_polarity'] = sentiments.apply(lambda s: s.polarity)
-            merged_chunk_df['timestamp'] = pd.to_datetime(merged_chunk_df['timestamp'], unit='s', errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
-
-            final_columns = ['parent_asin', 'product_title', 'category', 'image_urls', 'rating', 'text', 'sentiment', 'text_polarity', 'timestamp']
-            
-            write_mode = 'replace' if is_first_write and chunk_num == 1 else 'append'
-            merged_chunk_df[final_columns].to_sql('raw_reviews', conn, if_exists=write_mode, index=False)
-            
-            is_first_write = False
-            chunk_num += 1
-        print(f"✅ Finished staging '{category_name}' in {time.time() - phase_start_time:.2f} seconds.")
-    print("✅ Raw data staging complete.")
-
-def create_products_table(conn):
-    """Creates the aggregated 'products' table for the main gallery."""
-    print("\n--- Building: products table ---")
-    cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS products")
-    cursor.execute("""
-        CREATE TABLE products AS
-        SELECT
-            parent_asin,
-            FIRST_VALUE(product_title) OVER (PARTITION BY parent_asin ORDER BY rowid) as product_title,
-            FIRST_VALUE(image_urls) OVER (PARTITION BY parent_asin ORDER BY rowid) as image_urls,
-            FIRST_VALUE(category) OVER (PARTITION BY parent_asin ORDER BY rowid) as category,
-            AVG(rating) as average_rating,
-            COUNT(rating) as review_count
-        FROM raw_reviews GROUP BY parent_asin;
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_category ON products (category);")
-    conn.commit()
-    print("✅ 'products' table created.")
-
-def create_reviews_table(conn):
-    """Creates the lean 'reviews' table for paginated display."""
-    print("\n--- Building: reviews table ---")
-    cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS reviews")
-    cursor.execute("""
-        CREATE TABLE reviews AS
-        SELECT parent_asin, rating, sentiment, text FROM raw_reviews;
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_reviews_parent_asin ON reviews (parent_asin);")
-    conn.commit()
-    print("✅ 'reviews' table created.")
-
-def create_discrepancy_table(conn):
-    """Creates the lightweight table for the discrepancy plot."""
-    print("\n--- Building: discrepancy_data table ---")
-    cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS discrepancy_data")
-    cursor.execute("""
-        CREATE TABLE discrepancy_data AS
-        SELECT parent_asin, rating, text_polarity FROM raw_reviews;
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_discrepancy_parent_asin ON discrepancy_data (parent_asin);")
-    conn.commit()
-    print("✅ 'discrepancy_data' table created.")
-
-def create_rating_distribution_table(conn):
-    """(NEW) Pre-computes the count of each rating (1-5 stars) for every product."""
-    print("\n--- Building: rating_distribution table ---")
-    cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS rating_distribution")
-    cursor.execute("""
-        CREATE TABLE rating_distribution AS
-        SELECT
-            parent_asin,
-            COUNT(CASE WHEN rating = 1.0 THEN 1 END) as '1_star',
-            COUNT(CASE WHEN rating = 2.0 THEN 1 END) as '2_star',
-            COUNT(CASE WHEN rating = 3.0 THEN 1 END) as '3_star',
-            COUNT(CASE WHEN rating = 4.0 THEN 1 END) as '4_star',
-            COUNT(CASE WHEN rating = 5.0 THEN 1 END) as '5_star'
-        FROM raw_reviews
-        GROUP BY parent_asin;
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_rating_dist_parent_asin ON rating_distribution (parent_asin);")
-    conn.commit()
-    print("✅ 'rating_distribution' table created.")
-
-def create_aspects_table(conn, nlp):
-    """Performs the intensive aspect analysis and saves the results."""
-    print("\n--- Building: aspect_sentiments table ---")
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='aspect_sentiments'")
-    if cursor.fetchone():
-        print("✅ 'aspect_sentiments' table already exists. Skipping.")
-        return
-        
-    print("Pre-computing all aspect sentiments (this will take a very long time)...")
-    df_for_aspects = pd.read_sql("SELECT parent_asin, text FROM raw_reviews", conn)
-    aspect_results = []
-    
-    for parent_asin, group in df_for_aspects.groupby('parent_asin'):
-        print(f"  - Analyzing aspects for product: {parent_asin}...")
-        aspect_sentiments = {aspect: {'positive': 0, 'negative': 0, 'neutral': 0} for aspect in ALL_ASPECTS}
-        for review_text in group['text'].dropna():
-            try:
-                doc = nlp(review_text)
-                for sentence in doc.sents:
-                    for aspect in ALL_ASPECTS:
-                        if f' {aspect.lower()} ' in f' {sentence.text.lower()} ':
-                            sentiment = TextBlob(sentence.text).sentiment.polarity
-                            if sentiment > 0.1: aspect_sentiments[aspect]['positive'] += 1
-                            elif sentiment < -0.1: aspect_sentiments[aspect]['negative'] += 1
-                            else: aspect_sentiments[aspect]['neutral'] += 1
-            except Exception:
-                continue
-        
-        for aspect, scores in aspect_sentiments.items():
-            if scores['positive'] > 0 or scores['negative'] > 0 or scores['neutral'] > 0:
-                aspect_results.append({
-                    'parent_asin': parent_asin,
-                    'aspect': aspect,
-                    'positive': scores['positive'],
-                    'negative': scores['negative'],
-                    'neutral': scores['neutral']
-                })
-    
-    pd.DataFrame(aspect_results).to_sql('aspect_sentiments', conn, if_exists='replace', index=False)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_aspects_parent_asin ON aspect_sentiments (parent_asin);")
-    conn.commit()
-    print("✅ 'aspect_sentiments' table created.")
-
-# --- Main Execution Controller ---
+# --- Main Build Process ---
 def main():
     start_time = time.time()
-    
-    conn = sqlite3.connect(OUTPUT_DB_PATH)
-    nlp = None
-    
-    # --- CONTROL PANEL ---
-    # Comment or un-comment the steps you want to run.
-    
-    # STEP 1: Stage raw data. This is the longest step. Run it only once.
-    print("--- Checking Step 1: Staging Raw Data ---")
-    stage_raw_data(conn, '/kaggle/input/' + KAGGLE_INPUT_DIR)
-    
-    # STEP 2: Create the main aggregated tables. These are fast and can be re-run.
-    print("\n--- Checking Step 2: Creating Core Tables ---")
-    create_products_table(conn)
-    create_reviews_table(conn)
-    create_discrepancy_table(conn)
-    create_rating_distribution_table(conn) # <-- Includes the new rating distribution table
-    
-    # STEP 3: Run the most expensive analysis. Run it only once.
-    print("\n--- Checking Step 3: Creating Aspect Sentiments Table ---")
-    print("Loading spaCy model for aspect analysis...")
-    nlp = spacy.load("en_core_web_sm")
-    create_aspects_table(conn, nlp)
-    
-    # STEP 4: Clean up the raw data table to save space (optional, but recommended for the final DB).
-    print("\n--- Checking Step 4: Final Cleanup ---")
-    conn.execute("DROP TABLE IF EXISTS raw_reviews;")
-    conn.execute("VACUUM;")
-    conn.commit()
-    print("✅ Cleanup complete.")
-    
+    print(f"--- Starting Database Build (V8.4 - Kaggle) ---")
+
+    # --- STAGE 0: Initialize Models ---
+    print("\n--- STAGE 0: Initializing Models ---")
+    device = 0 if torch.cuda.is_available() else -1
+    if device == 0: print("✅ GPU detected.")
+    else: print("⚠️ WARNING: No GPU detected (will be slow).")
+
+    model_name = "cardiffnlp/twitter-roberta-base-sentiment"
+    sentiment_pipeline = pipeline("sentiment-analysis", model=model_name, device=device)
+    print("✅ Models loaded successfully.")
+
+    # --- Database Setup (Enriched Products Table) ---
+    conn = duckdb.connect(database=OUTPUT_DB_PATH, read_only=False)
+    conn.execute("""
+    CREATE OR REPLACE TABLE products (
+        parent_asin VARCHAR PRIMARY KEY, product_title VARCHAR, category VARCHAR, 
+        store VARCHAR, image_urls VARCHAR, features VARCHAR, description VARCHAR, 
+        details VARCHAR, average_rating FLOAT, review_count INTEGER
+    );
+    """)
+    conn.execute("""
+    CREATE OR REPLACE TABLE reviews (
+        review_id VARCHAR PRIMARY KEY, parent_asin VARCHAR, rating INTEGER, 
+        review_title VARCHAR, text VARCHAR, date DATE, helpful_vote INTEGER, 
+        verified_purchase BOOLEAN, sentiment VARCHAR, sentiment_score FLOAT
+    );
+    """)
+    print("✅ Enriched 2-Table database schema created successfully.")
+
+    master_products_list = []
+    master_reviews_list = []
+
+    # --- Main Loop ---
+    for category_name, (review_file, meta_file) in CATEGORIES_TO_PROCESS.items():
+        phase_start_time = time.time()
+        print(f"\n\n--- Processing Category: {category_name} ---")
+
+        reviews_df = parse_jsonl_to_df(os.path.join(KAGGLE_INPUT_DIR, review_file))
+        if reviews_df is None or reviews_df.empty: continue
+        
+        meta_df = parse_jsonl_to_df(os.path.join(KAGGLE_INPUT_DIR, meta_file))
+        if meta_df is None or meta_df.empty: continue
+
+        top_products = reviews_df['parent_asin'].value_counts().nlargest(TOP_N_PRODUCTS).index.tolist()
+        reviews_df = reviews_df[reviews_df['parent_asin'].isin(top_products)].copy()
+        reviews_df.dropna(subset=['text'], inplace=True)
+        reviews_df['text'] = reviews_df['text'].astype(str)
+        reviews_df['review_id'] = reviews_df['parent_asin'] + '-' + reviews_df.index.astype(str)
+        print(f"  - Loaded and filtered {len(reviews_df)} reviews.")
+
+        # --- PHASE 1: Perform Sentiment Analysis ---
+        print("\n--- PHASE 1: Performing Sentiment Analysis ---")
+        batch_size_reviews = 10000 
+        num_batches = (len(reviews_df) // batch_size_reviews) + 1
+        aggregated_sentiments_list = []
+        print(f"  - Processing {len(reviews_df)} reviews in {num_batches} batches...")
+
+        for i in tqdm(range(num_batches), desc="  - Analyzing Batches"):
+            start_index = i * batch_size_reviews
+            end_index = start_index + batch_size_reviews
+            review_batch_df = reviews_df.iloc[start_index:end_index]
+
+            if review_batch_df.empty: continue
+
+            sentence_map = []
+            for row in review_batch_df.itertuples():
+                sentences = [s.strip() for s in row.text.split('.') if s.strip()]
+                for sentence in sentences:
+                    sentence_map.append({'review_id': row.review_id, 'sentence': sentence})
+
+            if not sentence_map: continue
+            
+            sentences_df = pd.DataFrame(sentence_map)
+            all_sentences = sentences_df['sentence'].tolist()
+            sentiment_results = sentiment_pipeline(all_sentences, batch_size=SENTIMENT_BATCH_SIZE, truncation=True)
+            
+            results_df = pd.DataFrame(sentiment_results)
+            sentences_df = pd.concat([sentences_df.reset_index(drop=True), results_df], axis=1)
+
+            label_map = {
+                'LABEL_2': 1, 'Positive': 1, 'LABEL_1': 0, 
+                'Neutral': 0, 'LABEL_0': -1, 'Negative': -1
+            }
+            sentences_df['numeric_score'] = sentences_df['label'].map(label_map).fillna(0) * sentences_df['score']
+            
+            batch_aggregated_sentiments = sentences_df.groupby('review_id')['numeric_score'].mean().reset_index()
+            aggregated_sentiments_list.append(batch_aggregated_sentiments)
+
+        if aggregated_sentiments_list:
+            aggregated_sentiments = pd.concat(aggregated_sentiments_list, ignore_index=True)
+            def score_to_label(score):
+                if score > 0.1: return 'Positive'
+                elif score < -0.1: return 'Negative'
+                return 'Neutral'
+            aggregated_sentiments['final_label'] = aggregated_sentiments['numeric_score'].apply(score_to_label)
+            reviews_df = pd.merge(reviews_df, aggregated_sentiments, on='review_id', how='left')
+            reviews_df.rename(columns={'final_label': 'sentiment', 'numeric_score': 'sentiment_score'}, inplace=True)
+        
+        reviews_df['sentiment'] = reviews_df['sentiment'].fillna('Neutral')
+        reviews_df['sentiment_score'] = reviews_df['sentiment_score'].fillna(0.0)
+        print("  - Sentiment analysis complete.")
+        
+        # --- PHASE 2: Preparing DataFrames for Consolidation ---
+        print("\n--- PHASE 2: Preparing DataFrames for Ingestion ---")
+        meta_df.rename(columns={'title': 'product_title'}, inplace=True)
+        meta_df['image_urls'] = meta_df['images'].apply(extract_and_join_image_urls)
+        
+        for col in ['features', 'description', 'details']:
+            if col in meta_df.columns:
+                meta_df[col] = meta_df[col].apply(lambda x: json.dumps(x) if x else None)
+
+        product_aggs = reviews_df.groupby('parent_asin').agg(average_rating=('rating', 'mean'), review_count=('review_id', 'count')).reset_index()
+        
+        # Select the new metadata columns
+        meta_cols_to_select = ['parent_asin', 'product_title', 'store', 'image_urls', 'features', 'description', 'details']
+        
+        # Ensure all required meta columns exist before selecting them
+        final_meta_cols = [col for col in meta_cols_to_select if col in meta_df.columns]
+        
+        products_final_df = pd.merge(meta_df[final_meta_cols], product_aggs, on='parent_asin', how='inner')
+        products_final_df['category'] = category_name
+        master_products_list.append(products_final_df)
+
+        reviews_df['date'] = pd.to_datetime(reviews_df['timestamp'], unit='ms', errors='coerce').dt.date
+        reviews_df['helpful_vote'] = pd.to_numeric(reviews_df['helpful_vote'], errors='coerce').fillna(0).astype(int)
+        
+        # --- FIX: Ensure all necessary columns are selected for the final reviews DataFrame ---
+        final_review_cols = [
+            'review_id', 'parent_asin', 'rating', 'title', 'text', 
+            'date', 'helpful_vote', 'verified_purchase', 'sentiment', 'sentiment_score'
+        ]
+        reviews_final_df = reviews_df[final_review_cols].rename(columns={'title': 'review_title'})
+        master_reviews_list.append(reviews_final_df)
+        
+        print(f"✅ Finished processing '{category_name}' in {time.time() - phase_start_time:.2f} seconds.")
+
+    # --- FINAL INGESTION ---
+    print("\n\n--- Final Ingestion: Writing all data to database ---")
+
+    if master_products_list:
+        final_products_df = pd.concat(master_products_list, ignore_index=True)
+        conn.register('products_view', final_products_df)
+        
+        # --- FIX: Explicitly list the columns to ensure correct mapping ---
+        conn.execute("""
+            INSERT INTO products (
+                parent_asin, product_title, category, store, image_urls, 
+                features, description, details, average_rating, review_count
+            ) 
+            SELECT 
+                parent_asin, product_title, category, store, image_urls, 
+                features, description, details, average_rating, review_count
+            FROM products_view;
+        """)
+        conn.unregister('products_view')
+        print(f"  - Inserted {len(final_products_df)} records into 'products'.")
+
+    if master_reviews_list:
+        final_reviews_df = pd.concat(master_reviews_list, ignore_index=True)
+        conn.register('reviews_view', final_reviews_df)
+        conn.execute("INSERT INTO reviews SELECT * FROM reviews_view;")
+        conn.unregister('reviews_view')
+        print(f"  - Inserted {len(final_reviews_df)} records into 'reviews'.")
+
     conn.close()
-
     end_time = time.time()
-    print(f"\n✅ Database build complete in {end_time - start_time:.2f} seconds.")
+    print(f"\n\n✅✅ Database build complete in {end_time - start_time:.2f} seconds.")
+    print(f"Database file created at: {OUTPUT_DB_PATH}")
 
+# --- Run the main function ---
 if __name__ == '__main__':
     main()
