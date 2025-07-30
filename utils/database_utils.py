@@ -256,3 +256,43 @@ def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filt
 
     # --- RETURN a tuple with all the necessary data ---
     return paginated_reviews_df, total_reviews, all_filtered_df
+
+# --- NEW FUNCTION TO GET PRE-COMPUTED ASPECTS ---
+@st.cache_data
+def get_aspects_for_product(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter):
+    """
+    Fetches pre-computed aspects, joining with reviews to apply filters.
+    """
+    query = """
+        SELECT
+            a.aspect,
+            a.sentiment
+        FROM aspects AS a
+        JOIN reviews AS r ON a.review_id = r.review_id
+        WHERE a.parent_asin = ?
+    """
+    params = [asin]
+
+    # Add filters based on the joined 'reviews' table
+    if date_range and len(date_range) == 2:
+        start_date, end_date = date_range
+        query += " AND r.date BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
+    if rating_filter:
+        placeholders = ', '.join(['?'] * len(rating_filter))
+        query += f" AND r.rating IN ({placeholders})"
+        params.extend(rating_filter)
+    if sentiment_filter:
+        placeholders = ', '.join(['?'] * len(sentiment_filter))
+        query += f" AND r.sentiment IN ({placeholders})"
+        params.extend(sentiment_filter)
+    if verified_filter == "Verified Only":
+        query += " AND r.verified_purchase = TRUE"
+    elif verified_filter == "Not Verified":
+        query += " AND r.verified_purchase = FALSE"
+
+    # Add a reasonable limit to prevent pulling millions of aspects into memory
+    query += " LIMIT 50000"
+
+    df = _conn.execute(query, params).fetchdf()
+    return df
