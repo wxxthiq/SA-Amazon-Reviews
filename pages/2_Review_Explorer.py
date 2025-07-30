@@ -1,12 +1,16 @@
 # pages/2_Review_Explorer.py
 import streamlit as st
+import re
+import numpy as np
+import plotly.express as px
+from streamlit_plotly_events import plotly_events
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
     get_product_date_range,
-    get_paginated_reviews
+    get_paginated_reviews,
+    get_single_review_details # Import this function
 )
-import re
 
 # --- Page Configuration and Constants ---
 st.set_page_config(layout="wide", page_title="Review Explorer")
@@ -33,8 +37,7 @@ def main():
     selected_asin = st.session_state.selected_product
 
     product_details = get_product_details(conn, selected_asin).iloc[0]
-    st.header(product_details['product_title'])
-    st.caption("Browse, filter, and sort all reviews. When searching, results are sorted by helpfulness.")
+    st.header(Browse, filter, and sort all reviews. When searching, results are sorted by helpfulness.)
 
     # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
