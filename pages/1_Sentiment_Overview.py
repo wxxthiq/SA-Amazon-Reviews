@@ -281,21 +281,19 @@ def main():
             ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
             key="aspect_sort_selector"
         )
-        num_aspects_to_show = st.slider(
-            "Select number of top aspects to display:",
-            min_value=3, max_value=15, value=5, key="overview_aspect_slider"
-        )
-
-        # MOVED FROM SIDEBAR
-        # Calculate a smart default for the minimum mentions
-        smart_threshold = max(3, min(10, int(len(chart_data) * 0.01)))
-        min_mentions = st.slider(
-            "Aspect Mention Threshold",
-            min_value=1,
-            max_value=50,
-            value=smart_threshold,
-            help="Filters out aspects mentioned fewer than this many times to reduce noise."
-        )
+        with st.expander("Advanced Settings"):
+            num_aspects_to_show = st.slider(
+                "Select number of top aspects to display:",
+                min_value=3, max_value=15, value=5, key="overview_aspect_slider"
+            )
+            smart_threshold = max(3, min(10, int(len(chart_data) * 0.01)))
+            min_mentions = st.slider(
+                "Aspect Mention Threshold",
+                min_value=1,
+                max_value=50,
+                value=smart_threshold,
+                help="Filters out aspects mentioned fewer than this many times to reduce noise."
+            )
 
         aspect_df = get_aspects_for_product(
             conn, selected_asin, selected_date_range,
