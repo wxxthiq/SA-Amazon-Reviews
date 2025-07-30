@@ -114,9 +114,6 @@ def main():
 
     st.info(f"Analyzing aspects from **{len(reviews_data)}** reviews matching your criteria.")
 
-    # --- FIX: Call the correct function to create aspect_df ---
-    aspect_df = extract_aspects_with_sentiment(chart_data)
-
     if aspect_df.empty:
         st.warning("No distinct aspects could be extracted from the filtered reviews.")
         st.stop()
