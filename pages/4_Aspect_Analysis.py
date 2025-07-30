@@ -4,16 +4,14 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import altair as alt
-import spacy
-from collections import Counter
 import re
-from textblob import TextBlob
 import plotly.graph_objects as go
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
     get_reviews_for_product,
-    get_product_date_range
+    get_product_date_range,
+    get_aspects_for_product # Import the new function
 )
 
 # --- Page Configuration and NLP Model Loading ---
@@ -101,15 +99,20 @@ def main():
     
     # Add the reset button
     st.sidebar.button("Reset All Filters", on_click=reset_all_aspect_filters, use_container_width=True, key='reset_aspect_filters')
-    # Load data based on all filters
-    chart_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+    
+    # --- Load Data Based on Filters ---
+    # Load all reviews matching filters (for the review display section)
+    reviews_data = get_reviews_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+    # Load all aspects matching filters (for the charts)
+    aspect_df = get_aspects_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+
 
     st.markdown("---")
-    if chart_data.empty:
-        st.warning("No review data available for the selected filters.")
+    if reviews_data.empty or aspect_df.empty:
+        st.warning("No review or aspect data available for the selected filters.")
         st.stop()
-        
-    st.info(f"Analyzing aspects from **{len(chart_data)}** reviews matching your criteria.")
+
+    st.info(f"Analyzing aspects from **{len(reviews_data)}** reviews matching your criteria.")
 
     # --- FIX: Call the correct function to create aspect_df ---
     aspect_df = extract_aspects_with_sentiment(chart_data)
@@ -122,7 +125,6 @@ def main():
     
     # Create a two-column layout
     col1, col2 = st.columns([3, 2]) # Give more space to the main chart
-    
     with col1:
         st.markdown("#### Aspect Sentiment Summary")
         sort_option = st.selectbox(
@@ -134,26 +136,42 @@ def main():
             "Select number of top aspects to display:",
             min_value=3, max_value=15, value=5, key="detailed_aspect_slider"
         )
-    
-        # --- Data Processing and Sorting Logic (Unchanged) ---
-        sentiment_counts = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+        # Smart threshold for filtering noise
+        smart_threshold = max(3, min(10, int(len(reviews_data) * 0.01)))
+        min_mentions = st.slider(
+            "Aspect Mention Threshold",
+            min_value=1, max_value=50, value=smart_threshold,
+            help="Filters out aspects mentioned fewer than this many times to reduce noise."
+        )
+
+        # --- Data Processing and Sorting Logic ---
+        aspect_counts = aspect_df['aspect'].value_counts()
+        significant_aspects = aspect_counts[aspect_counts >= min_mentions].index.tolist()
+        
+        if not significant_aspects:
+            st.warning(f"No aspects were mentioned at least {min_mentions} times. Try lowering the threshold slider.")
+            st.stop()
+
+        filtered_aspect_df = aspect_df[aspect_df['aspect'].isin(significant_aspects)]
+        sentiment_counts = filtered_aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
         pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+
         for col in ['Positive', 'Neutral', 'Negative']:
             if col not in pivot_df.columns: pivot_df[col] = 0
         pivot_df['total'] = pivot_df['Positive'] + pivot_df['Neutral'] + pivot_df['Negative']
         pivot_df['positive_pct'] = pivot_df['Positive'] / pivot_df['total']
         pivot_df['negative_pct'] = pivot_df['Negative'] / pivot_df['total']
         pivot_df['controversy'] = pivot_df['positive_pct'] * pivot_df['negative_pct']
-    
+
         if sort_option == "Most Positive": sort_field, sort_order = 'positive_pct', 'descending'
         elif sort_option == "Most Negative": sort_field, sort_order = 'negative_pct', 'descending'
         elif sort_option == "Most Controversial": sort_field, sort_order = 'controversy', 'descending'
         else: sort_field, sort_order = 'total', 'descending'
-            
+
+        num_aspects_to_show = min(num_aspects_to_show, len(pivot_df))
         top_aspects_sorted = pivot_df.nlargest(num_aspects_to_show, sort_field).index.tolist()
         top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
-        
-        # --- Create the Summary Chart (Unchanged) ---
+
         summary_chart = alt.Chart(top_aspects_df).mark_bar().encode(
             y=alt.Y('aspect:N', title='Product Aspect', sort=alt.EncodingSortField(field=sort_field, op="sum", order=sort_order)),
             x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
@@ -223,12 +241,15 @@ def main():
     )
     
     if selected_aspect != "--- Select an Aspect ---":
-        aspect_df = chart_data[chart_data['text'].str.contains(r'\b' + re.escape(selected_aspect) + r'\b', case=False, na=False)].copy()
-        
+        # --- UPDATED LOGIC ---
+        # 1. Get the review_ids for the selected aspect from the pre-computed data
+        aspect_specific_review_ids = aspect_df[aspect_df['aspect'] == selected_aspect]['review_id'].unique()
+        # 2. Filter the main reviews DataFrame to get the full review details
+        aspect_reviews_df = reviews_data[reviews_data['review_id'].isin(aspect_specific_review_ids)].copy()
+
         st.markdown(f"---")
-        st.markdown(f"#### Analysis for aspect: `{selected_aspect}` ({len(aspect_df)} mentions)")
-        
-        if aspect_df.empty:
+        st.markdown(f"#### Analysis for aspect: `{selected_aspect}` ({len(aspect_reviews_df)} mentions)")
+        if aspect_reviews_df.empty:
             st.warning(f"No mentions of '{selected_aspect}' found with the current filters.")
         else:
             col1, col2 = st.columns(2)
