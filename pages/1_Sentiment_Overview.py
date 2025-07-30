@@ -275,25 +275,27 @@ def main():
     with col2:
         st.markdown("### 🔎 Key Aspect Sentiment Analysis")
         st.info("Sentiment breakdown for key product features.")
-
-        sort_option = st.selectbox(
-            "Sort aspects by:",
-            ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
-            key="aspect_sort_selector"
-        )
-        with st.expander("Advanced Settings"):
-            num_aspects_to_show = st.slider(
-                "Select number of top aspects to display:",
-                min_value=3, max_value=15, value=5, key="overview_aspect_slider"
+        aspect_col1, aspect_col2 = st.columns(2)
+        with aspect_col1:
+            sort_option = st.selectbox(
+                "Sort aspects by:",
+                ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
+                key="aspect_sort_selector"
             )
-            smart_threshold = max(3, min(10, int(len(chart_data) * 0.01)))
-            min_mentions = st.slider(
-                "Aspect Mention Threshold",
-                min_value=1,
-                max_value=50,
-                value=smart_threshold,
-                help="Filters out aspects mentioned fewer than this many times to reduce noise."
-            )
+        with aspect_col2:
+            with st.expander("Advanced Settings"):
+                num_aspects_to_show = st.slider(
+                    "Select number of top aspects to display:",
+                    min_value=3, max_value=15, value=5, key="overview_aspect_slider"
+                )
+                smart_threshold = max(3, min(10, int(len(chart_data) * 0.01)))
+                min_mentions = st.slider(
+                    "Aspect Mention Threshold",
+                    min_value=1,
+                    max_value=50,
+                    value=smart_threshold,
+                    help="Filters out aspects mentioned fewer than this many times to reduce noise."
+                )
 
         aspect_df = get_aspects_for_product(
             conn, selected_asin, selected_date_range,
