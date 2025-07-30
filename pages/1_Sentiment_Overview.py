@@ -205,7 +205,7 @@ def main():
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
         st.stop()
-     st.markdown("---")
+    st.markdown("---")
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
     
     # --- Create the new 3:2 column layout ---
