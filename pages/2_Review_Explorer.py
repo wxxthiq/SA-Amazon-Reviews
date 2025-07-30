@@ -37,8 +37,7 @@ def main():
     selected_asin = st.session_state.selected_product
 
     product_details = get_product_details(conn, selected_asin).iloc[0]
-    st.header("Browse, filter, and sort all reviews. When searching, results are sorted by helpfulness.")
-
+ 
     # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
@@ -60,7 +59,6 @@ def main():
     st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], key='explorer_verified_filter', on_change=reset_page_number)
 
     # --- Controls for Sorting and Searching (WITH CONDITIONAL LOGIC) ---
-    st.markdown("---")
     c1, c2 = st.columns([1, 1])
     
     with c2:
