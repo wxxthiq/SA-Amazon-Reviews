@@ -357,8 +357,6 @@ def main():
         else:
             st.info("No aspect data found for the selected filters.")
             
-    st.markdown("<hr>", unsafe_allow_html=True) # Add a horizontal rule after the columns
-
     # --- Navigation Buttons ---
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
@@ -377,6 +375,7 @@ def main():
         "comparing individual trends."
     )
     
+    tab1, tab2 = st.tabs(["📈 Line Chart View", "📊 Area Chart View"])
     time_granularity = st.radio(
         "Select time period:",
         ("Monthly", "Weekly", "Daily"),
@@ -395,9 +394,6 @@ def main():
     
     rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
     sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
-    
-    tab1, tab2 = st.tabs(["📈 Line Chart View", "📊 Area Chart View"])
-    
     # --- Tab 1: Line Chart View ---
     with tab1:
         col1, col2 = st.columns(2)
