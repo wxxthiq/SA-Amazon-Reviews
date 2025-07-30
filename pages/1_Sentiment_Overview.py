@@ -320,6 +320,13 @@ def main():
             ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})")
 
             st.altair_chart(chart, use_container_width=True)
+                        # --- NEW: Add an expander to show the raw data table ---
+            with st.expander("View Data Table"):
+                # Prepare the dataframe for display
+                display_df = pivot_df.loc[top_aspects_sorted].copy()
+                display_df = display_df[['Positive', 'Negative', 'Neutral', 'total']]
+                display_df.rename(columns={'total': 'Total Mentions'}, inplace=True)
+                st.dataframe(display_df, use_container_width=True)
         else:
             st.info("No aspect data found for the selected filters.")
             
