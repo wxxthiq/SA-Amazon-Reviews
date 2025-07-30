@@ -206,7 +206,39 @@ def main():
         st.warning("No reviews match the selected filters.")
         st.stop()
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
+        # --- NEW: Automated Pros & Cons Section ---
+    aspect_df = get_aspects_for_product(
+        conn, selected_asin, selected_date_range,
+        tuple(selected_ratings), tuple(selected_sentiments), selected_verified
+    )
 
+    if not aspect_df.empty:
+        aspect_counts = aspect_df['aspect'].value_counts()
+        significant_aspects = aspect_counts[aspect_counts >= 3].index.tolist()
+        if significant_aspects:
+            filtered_aspect_df = aspect_df[aspect_df['aspect'].isin(significant_aspects)]
+            sentiment_counts = filtered_aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+            pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
+            for col in ['Positive', 'Neutral', 'Negative']:
+                if col not in pivot_df.columns: pivot_df[col] = 0
+            pivot_df['total'] = pivot_df['Positive'] + pivot_df['Neutral'] + pivot_df['Negative']
+            pivot_df['positive_pct'] = pivot_df['Positive'] / pivot_df['total']
+            pivot_df['negative_pct'] = pivot_df['Negative'] / pivot_df['total']
+
+            pros = pivot_df.nlargest(3, 'positive_pct').index.tolist()
+            cons = pivot_df.nlargest(3, 'negative_pct').index.tolist()
+
+            st.markdown("#### At a Glance: Pros & Cons")
+            pro_col, con_col = st.columns(2)
+            with pro_col:
+                st.markdown("##### 👍 What people liked:")
+                for pro in pros:
+                    st.markdown(f"- {pro.capitalize()}")
+            with con_col:
+                st.markdown("##### 👎 What people disliked:")
+                for con in cons:
+                    st.markdown(f"- {con.capitalize()}")
+            st.markdown("---")
     # --- Create the new 3:2 column layout ---
     col1, col2 = st.columns([3, 2])
 
@@ -296,11 +328,6 @@ def main():
                     value=smart_threshold,
                     help="Filters out aspects mentioned fewer than this many times to reduce noise."
                 )
-
-        aspect_df = get_aspects_for_product(
-            conn, selected_asin, selected_date_range,
-            tuple(selected_ratings), tuple(selected_sentiments), selected_verified
-        )
 
         if not aspect_df.empty:
             # --- UPDATED: Use the dynamic min_mentions from the slider ---
