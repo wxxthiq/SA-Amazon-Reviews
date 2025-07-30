@@ -125,7 +125,7 @@ def main():
             m_col3.metric(
                 "Reviewer Consensus",
                 consensus_text,
-                help=f"Standard Deviation of ratings: {rating_std_dev:.2f}"
+                help="This measures how much agreement there is in the star ratings. 'Consistent' means most ratings are similar, while 'Polarizing' means there are many high and low ratings with few in the middle."
             )
         st.markdown("---")
         dist_col1, dist_col2, dist_col3 = st.columns(3)
