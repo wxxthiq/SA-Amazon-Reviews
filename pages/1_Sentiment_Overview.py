@@ -374,8 +374,6 @@ def main():
         "change the granularity and the toggles to show an average trendline. The Line Chart view is best for "
         "comparing individual trends."
     )
-    
-    tab1, tab2 = st.tabs(["📈 Line Chart View", "📊 Area Chart View"])
     time_granularity = st.radio(
         "Select time period:",
         ("Monthly", "Weekly", "Daily"),
@@ -394,6 +392,7 @@ def main():
     
     rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
     sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
+    tab1, tab2 = st.tabs(["📈 Line Chart View", "📊 Area Chart View"])
     # --- Tab 1: Line Chart View ---
     with tab1:
         col1, col2 = st.columns(2)
