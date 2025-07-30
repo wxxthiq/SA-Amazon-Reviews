@@ -20,7 +20,8 @@ from utils.database_utils import (
     get_product_details,
     get_reviews_for_product,
     get_product_date_range,
-    get_single_review_details
+    get_single_review_details,
+    get_aspects_for_product # --- IMPORT THE NEW FUNCTION ---
 )
 
 # --- Page Configuration and State Initialization ---
@@ -31,46 +32,6 @@ def load_spacy_model():
     return spacy.load("en_core_web_sm")
 
 nlp = load_spacy_model()
-
-# In pages/1_Sentiment_Overview.py
-@st.cache_data
-def extract_aspects_with_sentiment(_reviews_df, _product_details):
-    """
-    Performs metadata-guided Aspect-Based Sentiment Analysis (ABSA).
-    It extracts seed aspects from product metadata and finds mentions in reviews.
-    """
-    # ... (function content remains the same)
-    seed_aspects = set()
-    title = _product_details.get('product_title')
-    if title and isinstance(title, str):
-        for token in nlp(title):
-            if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
-                seed_aspects.add(token.lemma_.lower())
-    features_json = _product_details.get('features')
-    if features_json and isinstance(features_json, str):
-        try:
-            features_list = json.loads(features_json)
-            if isinstance(features_list, list):
-                for feature_item in features_list:
-                    for token in nlp(str(feature_item)):
-                        if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
-                            seed_aspects.add(token.lemma_.lower())
-        except json.JSONDecodeError:
-            print("Could not decode features JSON")
-    if not seed_aspects:
-        return pd.DataFrame()
-    aspect_sentiments = []
-    for review_text, sentiment in zip(_reviews_df['text'], _reviews_df['sentiment']):
-        mentioned_aspects_in_review = set()
-        doc = nlp(review_text)
-        for aspect in seed_aspects:
-            if re.search(r'\b' + re.escape(aspect) + r'\b', doc.text, re.IGNORECASE):
-                if aspect not in mentioned_aspects_in_review:
-                    aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment})
-                    mentioned_aspects_in_review.add(aspect)
-    if not aspect_sentiments:
-        return pd.DataFrame()
-    return pd.DataFrame(aspect_sentiments)
     
 if 'selected_review_id' not in st.session_state:
     st.session_state.selected_review_id = None
@@ -323,12 +284,17 @@ def main():
         )
         num_aspects_to_show = st.slider(
             "Select number of top aspects to display:",
-            min_value=3, max_value=15, value=5, key="overview_aspect_slider"
+            min_value=3, max_value=10, value=5, key="overview_aspect_slider"
         )
-        
-        aspect_df = extract_aspects_with_sentiment(chart_data, product_details)
+
+        # --- MODIFICATION: Call the new function to get pre-computed aspects ---
+        aspect_df = get_aspects_for_product(
+            conn, selected_asin, selected_date_range,
+            tuple(selected_ratings), tuple(selected_sentiments), selected_verified
+        )
+
         if not aspect_df.empty:
-            # Data Processing and Sorting Logic
+            # Data Processing and Sorting Logic (This part remains the same)
             sentiment_counts = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
             pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
             for col in ['Positive', 'Neutral', 'Negative']:
@@ -342,22 +308,22 @@ def main():
             elif sort_option == "Most Negative": sort_field, sort_order = 'negative_pct', 'descending'
             elif sort_option == "Most Controversial": sort_field, sort_order = 'controversy', 'descending'
             else: sort_field, sort_order = 'total', 'descending'
-                
+
             top_aspects_sorted = pivot_df.nlargest(num_aspects_to_show, sort_field).index.tolist()
             top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
-            
-            # Create the Chart
+
+            # The Charting Logic (This part also remains the same)
             chart = alt.Chart(top_aspects_df).mark_bar().encode(
                 y=alt.Y('aspect:N', title=None, sort=alt.EncodingSortField(field=sort_field, op="sum", order=sort_order)),
                 x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
                 color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
                 tooltip=[alt.Tooltip('aspect', title='Aspect'), alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('sum(count):Q', title='Review Count')]
             ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})")
-            
+
             st.altair_chart(chart, use_container_width=True)
         else:
-            st.info("No aspects could be extracted for this product.")
-
+            st.info("No aspect data found for the selected filters.")
+            
     st.markdown("<hr>", unsafe_allow_html=True) # Add a horizontal rule after the columns
 
     # --- Navigation Buttons ---
