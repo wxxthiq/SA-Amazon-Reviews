@@ -37,7 +37,7 @@ def main():
     selected_asin = st.session_state.selected_product
 
     product_details = get_product_details(conn, selected_asin).iloc[0]
-    st.header(Browse, filter, and sort all reviews. When searching, results are sorted by helpfulness.)
+    st.header("Browse, filter, and sort all reviews. When searching, results are sorted by helpfulness.")
 
     # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
