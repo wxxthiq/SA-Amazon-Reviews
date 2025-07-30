@@ -249,9 +249,9 @@ def main():
             with col1:
                 st.markdown("**Rating Distribution for this Aspect**")
                 # Prepare data and calculate percentages
-                rating_counts_df = aspect_reviews['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
+                rating_counts_df = aspect_reviews_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
                 rating_counts_df.columns = ['rating', 'count']
-                rating_counts_df['percentage'] = (rating_counts_df['count'] / len(aspect_reviews)) * 100
+                rating_counts_df['percentage'] = (rating_counts_df['count'] / len(aspect_reviews_df)) * 100
                 rating_counts_df['rating_str'] = rating_counts_df['rating'].astype(str) + ' ⭐'
         
                 # Base bar chart
@@ -272,9 +272,9 @@ def main():
             with col2:
                 st.markdown("**Sentiment Distribution for this Aspect**")
                 # Prepare data and calculate percentages
-                sentiment_counts_df = aspect_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
+                sentiment_counts_df = aspect_reviews_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
                 sentiment_counts_df.columns = ['sentiment', 'count']
-                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / len(aspect_reviews)) * 100
+                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / len(aspect_reviews_df)) * 100
         
                 # Base bar chart
                 sentiment_bar_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
@@ -300,7 +300,7 @@ def main():
             key="aspect_time_granularity"
             )
             
-            time_df = aspect_reviews.copy()
+            time_df = aspect_reviews_df.copy()
             time_df['date'] = pd.to_datetime(time_df['date'])
             
             if time_granularity == 'Daily':
