@@ -59,52 +59,6 @@ def main():
     st.sidebar.multiselect("Filter by Sentiment", options=['Positive', 'Negative', 'Neutral'], key='explorer_sentiment_filter', on_change=reset_page_number)
     st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], key='explorer_verified_filter', on_change=reset_page_number)
 
-    # --- Controls for Sorting and Searching (WITH CONDITIONAL LOGIC) ---
-    st.markdown("---")
-    c1, c2 = st.columns([1, 1])
-    
-    with c2:
-        st.session_state.explorer_search_term = st.text_input(
-            "Search within review text:", 
-            value=st.session_state.explorer_search_term,
-            on_change=reset_page_number,
-            placeholder="e.g., battery life, easy to use"
-        )
-    
-    with c1:
-        sort_options = ("Newest First", "Oldest First", "Highest Rating", "Lowest Rating", "Most Helpful")
-        search_active = bool(st.session_state.explorer_search_term)
-        
-        # If search is active, force sort to "Most Helpful". Otherwise, use the user's selection.
-        if search_active:
-            current_index = sort_options.index("Most Helpful")
-        else:
-            # Check if a sort option has been selected before, otherwise default to "Newest First"
-            current_index = st.session_state.get('sort_by_index', 0)
-
-        # The selectbox is disabled when a search term is entered
-        sort_by = st.selectbox(
-            "Sort reviews by:",
-            sort_options,
-            index=current_index,
-            on_change=lambda: st.session_state.update(sort_by_index=sort_options.index(st.session_state.sort_selector)),
-            disabled=search_active,
-            key='sort_selector'
-        )
-
-    # --- Data Fetching ---
-    paginated_reviews_df, total_reviews, all_filtered_df = get_paginated_reviews(
-        _conn=conn,
-        asin=selected_asin,
-        date_range=st.session_state.explorer_date_filter,
-        rating_filter=tuple(st.session_state.explorer_rating_filter),
-        sentiment_filter=tuple(st.session_state.explorer_sentiment_filter),
-        verified_filter=st.session_state.explorer_verified_filter,
-        search_term=st.session_state.explorer_search_term,
-        sort_by=sort_by,
-        limit=REVIEWS_PER_PAGE,
-        offset=st.session_state.review_page * REVIEWS_PER_PAGE
-    )
     # --- MOVED: RATING VS TEXT DISCREPANCY PLOT ---
     st.markdown("---")
     st.markdown("### Rating vs. Text Discrepancy")
@@ -152,6 +106,54 @@ def main():
                     if st.button("Close Review", key="close_review_button"):
                         st.session_state.selected_review_id = None
                         st.rerun()
+                        
+    # --- Controls for Sorting and Searching (WITH CONDITIONAL LOGIC) ---
+    st.markdown("---")
+    c1, c2 = st.columns([1, 1])
+    
+    with c2:
+        st.session_state.explorer_search_term = st.text_input(
+            "Search within review text:", 
+            value=st.session_state.explorer_search_term,
+            on_change=reset_page_number,
+            placeholder="e.g., battery life, easy to use"
+        )
+    
+    with c1:
+        sort_options = ("Newest First", "Oldest First", "Highest Rating", "Lowest Rating", "Most Helpful")
+        search_active = bool(st.session_state.explorer_search_term)
+        
+        # If search is active, force sort to "Most Helpful". Otherwise, use the user's selection.
+        if search_active:
+            current_index = sort_options.index("Most Helpful")
+        else:
+            # Check if a sort option has been selected before, otherwise default to "Newest First"
+            current_index = st.session_state.get('sort_by_index', 0)
+
+        # The selectbox is disabled when a search term is entered
+        sort_by = st.selectbox(
+            "Sort reviews by:",
+            sort_options,
+            index=current_index,
+            on_change=lambda: st.session_state.update(sort_by_index=sort_options.index(st.session_state.sort_selector)),
+            disabled=search_active,
+            key='sort_selector'
+        )
+
+    # --- Data Fetching ---
+    paginated_reviews_df, total_reviews, all_filtered_df = get_paginated_reviews(
+        _conn=conn,
+        asin=selected_asin,
+        date_range=st.session_state.explorer_date_filter,
+        rating_filter=tuple(st.session_state.explorer_rating_filter),
+        sentiment_filter=tuple(st.session_state.explorer_sentiment_filter),
+        verified_filter=st.session_state.explorer_verified_filter,
+        search_term=st.session_state.explorer_search_term,
+        sort_by=sort_by,
+        limit=REVIEWS_PER_PAGE,
+        offset=st.session_state.review_page * REVIEWS_PER_PAGE
+    )
+    
     # --- Display Results and Export Button ---
     st.markdown("---")
     
