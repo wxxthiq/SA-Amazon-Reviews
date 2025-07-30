@@ -113,10 +113,6 @@ def main():
         st.stop()
 
     st.info(f"Analyzing aspects from **{len(reviews_data)}** reviews matching your criteria.")
-
-    if aspect_df.empty:
-        st.warning("No distinct aspects could be extracted from the filtered reviews.")
-        st.stop()
     # --- Aspect Summary Chart (with Interactive Sorting) ---
     st.markdown("### Aspect Analysis")
     
@@ -253,9 +249,9 @@ def main():
             with col1:
                 st.markdown("**Rating Distribution for this Aspect**")
                 # Prepare data and calculate percentages
-                rating_counts_df = aspect_df['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
+                rating_counts_df = aspect_reviews['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
                 rating_counts_df.columns = ['rating', 'count']
-                rating_counts_df['percentage'] = (rating_counts_df['count'] / len(aspect_df)) * 100
+                rating_counts_df['percentage'] = (rating_counts_df['count'] / len(aspect_reviews)) * 100
                 rating_counts_df['rating_str'] = rating_counts_df['rating'].astype(str) + ' ⭐'
         
                 # Base bar chart
@@ -276,9 +272,9 @@ def main():
             with col2:
                 st.markdown("**Sentiment Distribution for this Aspect**")
                 # Prepare data and calculate percentages
-                sentiment_counts_df = aspect_df['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
+                sentiment_counts_df = aspect_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
                 sentiment_counts_df.columns = ['sentiment', 'count']
-                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / len(aspect_df)) * 100
+                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / len(aspect_reviews)) * 100
         
                 # Base bar chart
                 sentiment_bar_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
@@ -304,7 +300,7 @@ def main():
             key="aspect_time_granularity"
             )
             
-            time_df = aspect_df.copy()
+            time_df = aspect_reviews.copy()
             time_df['date'] = pd.to_datetime(time_df['date'])
             
             if time_granularity == 'Daily':
@@ -396,27 +392,27 @@ def main():
                 )
             
             with download_col:
-                if not aspect_df.empty:
-                    csv_data = convert_df_to_csv(aspect_df)
+                if not aspect_reviews_df.empty:
+                    csv_data = convert_df_to_csv(aspect_reviews_df)
                     st.download_button(
                        label="📥 Download Reviews",
                        data=csv_data,
                        file_name=f"{selected_asin}_{selected_aspect}_reviews.csv",
                        mime="text/csv",
                        use_container_width=True,
-                       help=f"Download all {len(aspect_df)} reviews that mention '{selected_aspect}'"
+                       help=f"Download all {len(aspect_reviews_df)} reviews that mention '{selected_aspect}'"
                     )
     
             if sort_reviews_by == "Most Helpful":
-                sorted_aspect_df = aspect_df.sort_values(by="helpful_vote", ascending=False)
+                sorted_aspect_df = aspect_reviews_df.sort_values(by="helpful_vote", ascending=False)
             elif sort_reviews_by == "Highest Rating":
-                sorted_aspect_df = aspect_df.sort_values(by=["rating", "helpful_vote"], ascending=[False, False])
+                sorted_aspect_df = aspect_reviews_df.sort_values(by=["rating", "helpful_vote"], ascending=[False, False])
             elif sort_reviews_by == "Lowest Rating":
-                sorted_aspect_df = aspect_df.sort_values(by=["rating", "helpful_vote"], ascending=[True, False])
+                sorted_aspect_df = aspect_reviews_df.sort_values(by=["rating", "helpful_vote"], ascending=[True, False])
             elif sort_reviews_by == "Oldest":
-                sorted_aspect_df = aspect_df.sort_values(by="date", ascending=True)
+                sorted_aspect_df = aspect_reviews_df.sort_values(by="date", ascending=True)
             else: # Newest
-                sorted_aspect_df = aspect_df.sort_values(by="date", ascending=False)
+                sorted_aspect_df = aspect_reviews_df.sort_values(by="date", ascending=False)
     
             start_idx = st.session_state.aspect_review_page * REVIEWS_PER_PAGE
             end_idx = start_idx + REVIEWS_PER_PAGE
