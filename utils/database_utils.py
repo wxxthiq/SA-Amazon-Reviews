@@ -265,6 +265,7 @@ def get_aspects_for_product(_conn, asin, date_range, rating_filter, sentiment_fi
     """
     query = """
         SELECT
+            a.review_id,
             a.aspect,
             a.sentiment
         FROM aspects AS a
@@ -273,7 +274,6 @@ def get_aspects_for_product(_conn, asin, date_range, rating_filter, sentiment_fi
     """
     params = [asin]
 
-    # Add filters based on the joined 'reviews' table
     if date_range and len(date_range) == 2:
         start_date, end_date = date_range
         query += " AND r.date BETWEEN ? AND ?"
@@ -291,8 +291,6 @@ def get_aspects_for_product(_conn, asin, date_range, rating_filter, sentiment_fi
     elif verified_filter == "Not Verified":
         query += " AND r.verified_purchase = FALSE"
 
-    # Add a reasonable limit to prevent pulling millions of aspects into memory
     query += " LIMIT 50000"
-
     df = _conn.execute(query, params).fetchdf()
     return df
