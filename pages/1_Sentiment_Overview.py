@@ -283,18 +283,38 @@ def main():
         )
         num_aspects_to_show = st.slider(
             "Select number of top aspects to display:",
-            min_value=3, max_value=10, value=5, key="overview_aspect_slider"
+            min_value=3, max_value=15, value=5, key="overview_aspect_slider"
         )
 
-        # --- MODIFICATION: Call the new function to get pre-computed aspects ---
+        # MOVED FROM SIDEBAR
+        # Calculate a smart default for the minimum mentions
+        smart_threshold = max(3, min(10, int(len(chart_data) * 0.01)))
+        min_mentions = st.slider(
+            "Aspect Mention Threshold",
+            min_value=1,
+            max_value=50,
+            value=smart_threshold,
+            help="Filters out aspects mentioned fewer than this many times to reduce noise."
+        )
+
         aspect_df = get_aspects_for_product(
             conn, selected_asin, selected_date_range,
             tuple(selected_ratings), tuple(selected_sentiments), selected_verified
         )
 
         if not aspect_df.empty:
-            # Data Processing and Sorting Logic (This part remains the same)
-            sentiment_counts = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+            # --- UPDATED: Use the dynamic min_mentions from the slider ---
+            aspect_counts = aspect_df['aspect'].value_counts()
+            significant_aspects = aspect_counts[aspect_counts >= min_mentions].index.tolist()
+
+            if not significant_aspects:
+                st.warning(f"No aspects were mentioned at least {min_mentions} times. Try lowering the threshold slider.")
+                st.stop()
+
+            filtered_aspect_df = aspect_df[aspect_df['aspect'].isin(significant_aspects)]
+
+            # Data Processing and Sorting Logic
+            sentiment_counts = filtered_aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
             pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
             for col in ['Positive', 'Neutral', 'Negative']:
                 if col not in pivot_df.columns: pivot_df[col] = 0
@@ -308,10 +328,17 @@ def main():
             elif sort_option == "Most Controversial": sort_field, sort_order = 'controversy', 'descending'
             else: sort_field, sort_order = 'total', 'descending'
 
+            # Ensure we don't try to show more aspects than are available after filtering
+            num_aspects_to_show = min(num_aspects_to_show, len(pivot_df))
             top_aspects_sorted = pivot_df.nlargest(num_aspects_to_show, sort_field).index.tolist()
+            
+            if not top_aspects_sorted:
+                 st.warning("No aspects to display with the current settings.")
+                 st.stop()
+
             top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
 
-            # The Charting Logic (This part also remains the same)
+            # The Charting Logic
             chart = alt.Chart(top_aspects_df).mark_bar().encode(
                 y=alt.Y('aspect:N', title=None, sort=alt.EncodingSortField(field=sort_field, op="sum", order=sort_order)),
                 x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
@@ -320,9 +347,9 @@ def main():
             ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})")
 
             st.altair_chart(chart, use_container_width=True)
-                        # --- NEW: Add an expander to show the raw data table ---
+
+            # --- Add an expander to show the raw data table ---
             with st.expander("View Data Table"):
-                # Prepare the dataframe for display
                 display_df = pivot_df.loc[top_aspects_sorted].copy()
                 display_df = display_df[['Positive', 'Negative', 'Neutral', 'total']]
                 display_df.rename(columns={'total': 'Total Mentions'}, inplace=True)
