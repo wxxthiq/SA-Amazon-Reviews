@@ -163,7 +163,7 @@ def main():
                 st.markdown("**⭐ Rating Distribution**")
             with icon_c1:
                 clickable_help_icon("Rating") # The button to toggle the help text
-     -
+                
             if st.session_state.get('active_help_topic') == "Rating":
                 with st.container(border=True):
                     st.markdown("##### What am I looking at?")
