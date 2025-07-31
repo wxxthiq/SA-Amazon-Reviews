@@ -152,40 +152,23 @@ def main():
                 learn="Quickly see if a product is generally well-liked (many 4-5 star reviews) or has significant issues (many 1-2 star reviews)."
             )
             if not chart_data.empty:
-                # Prepare data and calculate percentages
+                # --- NEW: Donut Chart Logic ---
                 rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
                 rating_counts_df.columns = ['rating', 'count']
-                rating_counts_df['percentage'] = (rating_counts_df['count'] / chart_data.shape[0]) * 100
-                rating_counts_df['rating_str'] = rating_counts_df['rating'].astype(str) + ' ⭐'
-
-                # Base bar chart
-                bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(
-                    x=alt.X('count:Q', title='Number of Reviews'),
-                    y=alt.Y('rating_str:N', sort=alt.EncodingSortField(field="rating", order="descending"), title='Rating'),
-                    color=alt.Color('rating:O',
-                                    scale=alt.Scale(domain=[5, 4, 3, 2, 1], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
-                                    legend=None),
-                    tooltip=[
-                        alt.Tooltip('rating_str', title='Rating'),
-                        alt.Tooltip('count', title='Reviews'),
-                        alt.Tooltip('percentage', title='Percentage', format='.1f')
-                    ]
-                )
                 
-                # Text labels to overlay on the bars
-                text_labels = bar_chart.mark_text(
-                    align='left',
-                    baseline='middle',
-                    dx=3,  # Nudges text to the right so it's not on the edge
-                    color='white'
-                ).encode(
-                    text=alt.Text('percentage:Q', format='.1f')
-                )
+                # Use category for proper coloring and ordering
+                rating_counts_df['rating_cat'] = rating_counts_df['rating'].astype(str) + ' ⭐'
+                
+                donut_chart = alt.Chart(rating_counts_df).mark_arc(innerRadius=70).encode(
+                    theta=alt.Theta(field="count", type="quantitative"),
+                    color=alt.Color('rating_cat:N',
+                                    scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'],
+                                                    range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
+                                    legend=alt.Legend(title="Rating", orient="right")),
+                    tooltip=[alt.Tooltip('rating_cat', title='Rating'), alt.Tooltip('count', title='Reviews')]
+                ).properties(height=250)
 
-                # Combine chart and text
-                final_chart = (bar_chart + text_labels).properties(height=250)
-                st.altair_chart(final_chart, use_container_width=True)
-
+                st.altair_chart(donut_chart, use_container_width=True)
         with dist_col2:
             render_help_popover(
                 title="Sentiment Distribution",
