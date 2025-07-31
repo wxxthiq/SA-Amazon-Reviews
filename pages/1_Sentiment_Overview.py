@@ -230,15 +230,17 @@ def main():
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
         st.stop()
+        
     st.markdown("---")
     st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
-    
-    # --- Create the new 3:2 column layout ---
     col1, col2 = st.columns([3, 2])
-
-    # --- Column 1: Keyword & Phrase Summary ---
     with col1:
-        st.markdown("### ☁️ Keyword & Phrase Summary")
+        render_help_popover(
+            title="### ☁️ Keyword & Phrase Summary",
+            what="A word cloud of the most frequent words and phrases found in both Positive and Negative reviews.",
+            how="Use the 'Advanced Settings' above to switch between single words, bigrams (two-word phrases), and trigrams (three-word phrases).",
+            learn="Identify the specific terms and features that customers consistently praise."
+        )
         st.info("Commonly Used Words and Phrases")
 
         with st.expander("Advanced Settings"):
@@ -248,9 +250,7 @@ def main():
             with control_col2:
                 ngram_level = st.radio("Term Type:", ("Single Words", "2 Words", "3 Words"), index=0, horizontal=True, key="ngram_radio")
 
-        # Helper function to generate n-grams (remains the same)
         def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
-            # ... function content is unchanged
             vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
             bag_of_words = vec.transform(corpus)
             sum_words = bag_of_words.sum(axis=0) 
@@ -259,10 +259,7 @@ def main():
             return words_freq[:n]
 
         ngram_range = {"Single Words": (1,1), "Bigrams": (2,2), "Trigrams": (3,3)}.get(ngram_level, (1,1))
-
-        # --- FIX: Create a nested two-column layout for the word clouds ---
         wc_col1, wc_col2 = st.columns(2)
-
         with wc_col1:
             st.markdown("#### Positive Reviews")
             pos_text = chart_data[chart_data["sentiment"]=="Positive"]["text"].dropna()
@@ -299,8 +296,6 @@ def main():
 
     # --- Column 2: Aspect Sentiment Analysis ---
     with col2:
-        st.markdown("### 🔎 Key Aspect Sentiment Analysis")
-                # --- MODIFIED: Use popover in the main header for this section ---
         render_help_popover(
             title="🔎 Key Aspect Sentiment Analysis",
             what="This chart identifies key product features (aspects) and shows the sentiment breakdown for each.",
