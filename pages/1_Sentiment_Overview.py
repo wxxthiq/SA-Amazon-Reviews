@@ -196,7 +196,7 @@ def main():
                         alt.Tooltip('count', title='Reviews'),
                         alt.Tooltip('percentage:Q', title='Share', format='.1%')
                     ]
-                ).properties(height=100)
+                ).properties(height=150)
                 st.altair_chart(bar_chart, use_container_width=True)
 
         # --- Column 2: Sentiment Distribution ---
@@ -240,7 +240,7 @@ def main():
                         alt.Tooltip('count', title='Reviews'),
                         alt.Tooltip('percentage:Q', title='Share', format='.1%')
                     ]
-                ).properties(height=100)
+                ).properties(height=150)
                 st.altair_chart(bar_chart, use_container_width=True)
                 
     if chart_data.empty:
