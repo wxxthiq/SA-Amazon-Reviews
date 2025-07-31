@@ -53,12 +53,12 @@ def main():
     def reset_page_number():
         st.session_state.review_page = 0
     def reset_all_explorer_filters():
-    st.session_state.explorer_date_filter = default_date_range
-    st.session_state.explorer_rating_filter = default_ratings
-    st.session_state.explorer_sentiment_filter = default_sentiments
-    st.session_state.explorer_verified_filter = default_verified
-    st.session_state.explorer_search_term = ""
-    st.session_state.review_page = 0
+        st.session_state.explorer_date_filter = default_date_range
+        st.session_state.explorer_rating_filter = default_ratings
+        st.session_state.explorer_sentiment_filter = default_sentiments
+        st.session_state.explorer_verified_filter = default_verified
+        st.session_state.explorer_search_term = ""
+        st.session_state.review_page = 0
     
     st.sidebar.date_input("Filter by Date Range", key='explorer_date_filter', on_change=reset_page_number)
     st.sidebar.multiselect("Filter by Star Rating", options=[1, 2, 3, 4, 5], key='explorer_rating_filter', on_change=reset_page_number)
