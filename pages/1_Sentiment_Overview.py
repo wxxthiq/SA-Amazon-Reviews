@@ -547,7 +547,6 @@ def main():
     with tab2:
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("#### Rating Distribution")
             if not rating_counts_over_time.empty:
                 fig_area_rating = px.area(
                     rating_counts_over_time, x='period', y='count', color='rating', title="Distribution by Rating",
@@ -558,7 +557,6 @@ def main():
                 st.plotly_chart(fig_area_rating, use_container_width=True)
     
         with col2:
-            st.markdown("#### Sentiment Distribution")
             if not sentiment_counts_over_time.empty:
                 fig_area_sentiment = px.area(
                     sentiment_counts_over_time, x='period', y='count', color='sentiment', title="Distribution by Sentiment",
