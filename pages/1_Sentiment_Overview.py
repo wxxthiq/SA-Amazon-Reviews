@@ -290,7 +290,6 @@ def main():
             how="Use the 'Advanced Settings' above to switch between single words, bigrams (two-word phrases), and trigrams (three-word phrases).",
             learn="Identify the specific terms and features that customers consistently praise."
         )
-        st.info("Commonly Used Words and Phrases")
 
         with st.expander("Advanced Settings"):
             control_col1, control_col2 = st.columns(2)
@@ -351,7 +350,6 @@ def main():
             how="Use the dropdowns to sort aspects by how much they are discussed, or by which are most positive or negative. Hover over the bars for detailed counts.",
             learn="Pinpoint specific product strengths and weaknesses. An aspect with a large red bar (e.g., 'battery life') is a clear area for concern."
         )
-        st.info("Sentiment breakdown for key product features.")
         aspect_col1, aspect_col2 = st.columns(2)
         with aspect_col1:
             sort_option = st.selectbox(
