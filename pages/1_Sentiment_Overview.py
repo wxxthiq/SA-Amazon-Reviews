@@ -227,7 +227,6 @@ def main():
         st.stop()
         
     st.markdown("---")
-    st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
     col1, col2 = st.columns([3, 2])
     with col1:
         render_help_popover(
@@ -366,15 +365,8 @@ def main():
                 color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
                 tooltip=[alt.Tooltip('aspect', title='Aspect'), alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('sum(count):Q', title='Review Count')]
             ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})")
-
             st.altair_chart(chart, use_container_width=True)
 
-            # --- Add an expander to show the raw data table ---
-            with st.expander("View Data Table"):
-                display_df = pivot_df.loc[top_aspects_sorted].copy()
-                display_df = display_df[['Positive', 'Negative', 'Neutral', 'total']]
-                display_df.rename(columns={'total': 'Total Mentions'}, inplace=True)
-                st.dataframe(display_df, use_container_width=True)
         else:
             st.info("No aspect data found for the selected filters.")
             
