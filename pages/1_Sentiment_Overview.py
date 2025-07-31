@@ -284,12 +284,18 @@ def main():
     st.markdown("---")
     col1, col2 = st.columns([3, 2])
     with col1:
-        render_help_popover(
-            title="☁️ Keyword & Phrase Summary",
-            what="A word cloud of the most frequent words and phrases found in both Positive and Negative reviews.",
-            how="Use the 'Advanced Settings' above to switch between single words, bigrams (two-word phrases), and trigrams (three-word phrases).",
-            learn="Identify the specific terms and features that customers consistently praise."
-        )
+        # --- MODIFIED: Title with an integrated help popover ---
+        title_c, popover_c = st.columns([0.9, 0.1])
+        with title_c:
+            st.markdown("### ☁️ Keyword & Phrase Summary")
+        with popover_c:
+            with st.popover("ⓘ"):
+                st.markdown("##### What am I looking at?")
+                st.markdown("These word clouds show the most frequent words or phrases found in positive and negative reviews. The larger the word, the more often it was mentioned.")
+                st.markdown("##### How do I use it?")
+                st.markdown("Use the 'Advanced Settings' expander to switch between single words, two-word phrases (bigrams), or three-word phrases (trigrams) to find more specific insights.")
+                st.markdown("##### What can I learn?")
+                st.markdown("Quickly identify the key terms customers use to praise or complain about the product. This helps you spot common themes at a glance.")
         with st.expander("Advanced Settings"):
             control_col1, control_col2 = st.columns(2)
             with control_col1:
@@ -346,7 +352,7 @@ def main():
         # --- MODIFIED: Title and Icon ---
         title_c, icon_c = st.columns([0.9, 0.1])
         with title_c:
-            st.markdown("### 🔎 Key Aspect Sentiment Analysis")
+            st.markdown("### 🔎 Key Aspect Summary")
         with icon_c:
             # This button will toggle the help text below
             clickable_help_icon("Aspect")
