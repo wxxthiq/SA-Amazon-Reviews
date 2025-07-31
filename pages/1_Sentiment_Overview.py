@@ -177,38 +177,20 @@ def main():
                 learn="Understand the overall feeling of the reviews. A high percentage of 'Negative' sentiment might indicate widespread problems, even if the star rating is okay."
             )
             if not chart_data.empty:
-                # Prepare data and calculate percentages
+                # --- NEW: Donut Chart Logic ---
                 sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
                 sentiment_counts_df.columns = ['sentiment', 'count']
-                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / chart_data.shape[0]) * 100
 
-                # Base bar chart
-                bar_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
-                    x=alt.X('count:Q', title='Number of Reviews'),
-                    y=alt.Y('sentiment:N', sort=['Positive', 'Neutral', 'Negative'], title='Sentiment'),
+                donut_chart = alt.Chart(sentiment_counts_df).mark_arc(innerRadius=70).encode(
+                    theta=alt.Theta(field="count", type="quantitative"),
                     color=alt.Color('sentiment:N',
-                                    scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']),
-                                    legend=None),
-                    tooltip=[
-                        alt.Tooltip('sentiment', title='Sentiment'),
-                        alt.Tooltip('count', title='Reviews'),
-                        alt.Tooltip('percentage', title='Percentage', format='.1f')
-                    ]
-                )
+                                    scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
+                                                    range=['#1a9850', '#cccccc', '#d73027']),
+                                    legend=alt.Legend(title="Sentiment", orient="right")),
+                    tooltip=[alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('count', title='Reviews')]
+                ).properties(height=250)
                 
-                # Text labels to overlay on the bars
-                text_labels = bar_chart.mark_text(
-                    align='left',
-                    baseline='middle',
-                    dx=3,
-                    color='white'
-                ).encode(
-                    text=alt.Text('percentage:Q', format='.1f')
-                )
-
-                # Combine chart and text
-                final_chart = (bar_chart + text_labels).properties(height=250)
-                st.altair_chart(final_chart, use_container_width=True) 
+                st.altair_chart(donut_chart, use_container_width=True) 
                 
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
