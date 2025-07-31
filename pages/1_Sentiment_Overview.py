@@ -145,7 +145,12 @@ def main():
         st.markdown("---")
         dist_col1, dist_col2, dist_col3 = st.columns(3)
         with dist_col1:
-            st.markdown("**Rating Distribution**")
+            render_help_popover(
+                title="Rating Distribution",
+                what="This chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.",
+                how="Hover over the bars to see the exact number and percentage of reviews for each rating.",
+                learn="Quickly see if a product is generally well-liked (many 4-5 star reviews) or has significant issues (many 1-2 star reviews)."
+            )
             if not chart_data.empty:
                 # Prepare data and calculate percentages
                 rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
@@ -182,7 +187,12 @@ def main():
                 st.altair_chart(final_chart, use_container_width=True)
 
         with dist_col2:
-            st.markdown("**Sentiment Distribution**")
+            render_help_popover(
+                title="Sentiment Distribution",
+                what="This chart shows the breakdown of reviews by their automatically detected sentiment (Positive, Negative, or Neutral).",
+                how="Hover over the bars to see the exact number and percentage of reviews for each sentiment category.",
+                learn="Understand the overall feeling of the reviews. A high percentage of 'Negative' sentiment might indicate widespread problems, even if the star rating is okay."
+            )
             if not chart_data.empty:
                 # Prepare data and calculate percentages
                 sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
@@ -290,6 +300,13 @@ def main():
     # --- Column 2: Aspect Sentiment Analysis ---
     with col2:
         st.markdown("### 🔎 Key Aspect Sentiment Analysis")
+                # --- MODIFIED: Use popover in the main header for this section ---
+        render_help_popover(
+            title="🔎 Key Aspect Sentiment Analysis",
+            what="This chart identifies key product features (aspects) and shows the sentiment breakdown for each.",
+            how="Use the dropdowns to sort aspects by how much they are discussed, or by which are most positive or negative. Hover over the bars for detailed counts.",
+            learn="Pinpoint specific product strengths and weaknesses. An aspect with a large red bar (e.g., 'battery life') is a clear area for concern."
+        )
         st.info("Sentiment breakdown for key product features.")
         aspect_col1, aspect_col2 = st.columns(2)
         with aspect_col1:
