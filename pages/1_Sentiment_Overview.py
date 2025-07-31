@@ -156,6 +156,13 @@ def main():
         with row2_col1:
              if not chart_data.empty and len(chart_data) > 1:
                 rating_std_dev = chart_data['rating'].std()
+                 
+                def get_rating_consensus(std_dev):
+                    if std_dev < 1.1:
+                        return "✅ Consistent"  # Low deviation = high agreement
+                    elif std_dev < 1.4:
+                        return "↔️ Mixed"      # Medium deviation = some disagreement
+                        
                 consensus_text = get_rating_consensus(rating_std_dev)
                 st.metric(
                     "Reviewer Consensus",
