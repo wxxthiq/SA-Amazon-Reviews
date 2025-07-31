@@ -141,8 +141,7 @@ def main():
                 return "↔️ Mixed"      # Medium deviation = some disagreement
             else:
                 return "⚠️ Polarizing" # High deviation = strong disagreement
-            # --- NEW: Calculate and display Rating Standard Deviation ---
-        # --- NEW: Calculate and display Rating Consensus with a tooltip ---
+   
         if not chart_data.empty and len(chart_data) > 1:
             rating_std_dev = chart_data['rating'].std()
             consensus_text = get_rating_consensus(rating_std_dev)
@@ -154,18 +153,28 @@ def main():
                 help="This measures how much agreement there is in the star ratings. 'Consistent' means most ratings are similar, while 'Polarizing' means there are many high and low ratings with few in the middle."
             )
         st.markdown("---")
-        # --- MODIFIED: Create a 3-column layout for charts and help panel ---
-        chart_col1, chart_col2, help_col = st.columns([0.35, 0.35, 0.3])
-
-        # --- Column 1: Rating Distribution Chart ---
-        with chart_col1:
-            # --- MODIFIED: Title and clickable icon in a new layout ---
+        # --- MODIFIED: Back to a 2-column layout ---
+        dist_col1, dist_col2 = st.columns(2)
+        # --- Column 1: Rating Distribution ---
+        with dist_col1:
+            # --- Title and Icon ---
             title_c1, icon_c1 = st.columns([0.9, 0.1])
             with title_c1:
                 st.markdown("**⭐ Rating Distribution**")
             with icon_c1:
-                clickable_help_icon("Rating")
+                clickable_help_icon("Rating") # The button to toggle the help text
 
+            # --- Conditional Help Text Container ---
+            if st.session_state.get('active_help_topic') == "Rating":
+                with st.container(border=True):
+                    st.markdown("##### What am I looking at?")
+                    st.markdown("This donut chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.")
+                    st.markdown("##### How do I use it?")
+                    st.markdown("Hover over a segment to see the specific rating, the number of reviews, and its percentage of the total.")
+                    st.markdown("##### What can I learn?")
+                    st.markdown("Quickly see if a product is generally well-liked (large green segments) or has significant issues (visible red segments).")
+
+            # --- Chart Display ---
             if not chart_data.empty:
                 # This is the donut chart code from our previous step. No changes needed here.
                 rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
@@ -176,19 +185,30 @@ def main():
                 donut_chart = alt.Chart(rating_counts_df).mark_arc(innerRadius=70, outerRadius=110).encode(
                     theta=alt.Theta(field="count", type="quantitative"),
                     color=alt.Color('rating_cat:N', scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']), legend=alt.Legend(title="Rating", orient="right")),
-                    tooltip=[alt.Tooltip('rating_cat', title='Rating'), alt.Tooltip('count', title='Reviews'), alt.Tooltip('percentage:Q', title='Share', format='.1%')]
+                    tooltip=[alt.Tooltip('rating_cat', title='Rating'), alt.Tooltip('count', title='Reviews'), alt.Tooltip('percentage', title='Share', format='.1%')]
                 ).properties(height=250)
                 st.altair_chart(donut_chart, use_container_width=True)
 
-        # --- Column 2: Sentiment Distribution Chart ---
-        with chart_col2:
-            # --- MODIFIED: Title and clickable icon in a new layout ---
+        # --- Column 2: Sentiment Distribution ---
+        with dist_col2:
+            # --- Title and Icon ---
             title_c2, icon_c2 = st.columns([0.9, 0.1])
             with title_c2:
                 st.markdown("**😊 Sentiment Distribution**")
             with icon_c2:
-                clickable_help_icon("Sentiment")
+                clickable_help_icon("Sentiment") # The button to toggle the help text
 
+            # --- Conditional Help Text Container ---
+            if st.session_state.get('active_help_topic') == "Sentiment":
+                with st.container(border=True):
+                    st.markdown("##### What am I looking at?")
+                    st.markdown("This chart shows the breakdown of reviews by their automatically detected sentiment (Positive, Negative, or Neutral).")
+                    st.markdown("##### How do I use it?")
+                    st.markdown("Hover over a segment to see the sentiment, the number of reviews, and its percentage of the total.")
+                    st.markdown("##### What can I learn?")
+                    st.markdown("Understand the overall feeling of the reviews. A large red segment might indicate widespread problems.")
+
+            # --- Chart Display ---
             if not chart_data.empty:
                 # This is the donut chart code from our previous step. No changes needed here.
                 sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
@@ -198,33 +218,10 @@ def main():
                 donut_chart = alt.Chart(sentiment_counts_df).mark_arc(innerRadius=70, outerRadius=110).encode(
                     theta=alt.Theta(field="count", type="quantitative"),
                     color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment", orient="right")),
-                    tooltip=[alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('count', title='Reviews'), alt.Tooltip('percentage:Q', title='Share', format='.1%')]
+                    tooltip=[alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('count', title='Reviews'), alt.Tooltip('percentage', title='Share', format='.1%')]
                 ).properties(height=250)
                 st.altair_chart(donut_chart, use_container_width=True)
-
-        # --- Column 3: Context-Sensitive Help Panel ---
-        with help_col:
-            st.markdown("##### ") # Vertical spacer
-            active_topic = st.session_state.get('active_help_topic')
-            if active_topic == "Rating":
-                with st.container(border=True):
-                    st.markdown("##### What am I looking at?")
-                    st.markdown("This donut chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.")
-                    st.markdown("##### How do I use it?")
-                    st.markdown("Hover over a segment to see the specific rating, the number of reviews, and its percentage of the total.")
-                    st.markdown("##### What can I learn?")
-                    st.markdown("Quickly see if a product is generally well-liked (large green segments) or has significant issues (visible red segments).")
-            elif active_topic == "Sentiment":
-                with st.container(border=True):
-                    st.markdown("##### What am I looking at?")
-                    st.markdown("This chart shows the breakdown of reviews by their automatically detected sentiment (Positive, Negative, or Neutral).")
-                    st.markdown("##### How do I use it?")
-                    st.markdown("Hover over a segment to see the sentiment, the number of reviews, and its percentage of the total.")
-                    st.markdown("##### What can I learn?")
-                    st.markdown("Understand the overall feeling of the reviews. A large red segment might indicate widespread problems.")
-            else:
-                 st.info("Click an 'ⓘ' icon next to a chart to see details here.")
-
+                
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
         st.stop()
