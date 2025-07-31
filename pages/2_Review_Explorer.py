@@ -25,11 +25,21 @@ def convert_df_to_csv(df):
 
 # --- Main App Logic ---
 def main():
-    st.title("📝 Review Explorer")
 
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
-
+    title_col, help_col = st.columns([0.9, 0.1])
+    with title_col:
+        st.markdown("# 📝 Review Explorer") # Use markdown for H1 title
+    with help_col:
+        with st.popover("ⓘ"):
+            st.markdown("##### What is this page for?")
+            st.markdown("This page allows you to dive into the individual reviews. You can search for specific keywords, apply detailed filters, and sort the results to find the exact feedback you're looking for.")
+            st.markdown("##### How do I use it?")
+            st.markdown("Use the **sidebar** to filter reviews by date, rating, sentiment, or purchase status. Use the **search bar** below to find reviews containing a specific word or phrase.")
+            st.markdown("##### Pro Tip:")
+            st.markdown("Scroll down to the 'Advanced Analysis' section to find reviews where the star rating and the written sentiment don't match up!")
+            
     # --- Check for Selected Product ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
         st.warning("Please select a product from the main search page first.")
