@@ -24,14 +24,23 @@ from utils.database_utils import (
     get_aspects_for_product # --- IMPORT THE NEW FUNCTION ---
 )
 
-def render_help_popover(title, content):
-    """Renders a help icon with a popover."""
-    with st.popover("❓", use_container_width=False):
-        st.markdown(f"##### {title}")
-        st.markdown(content)
-# --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
 
+def render_help_popover(title, what, how, learn):
+    """Creates a standardized help popover next to a title."""
+    with st.container():
+        c1, c2 = st.columns([0.9, 0.1])
+        with c1:
+            st.markdown(f"**{title}**")
+        with c2:
+            with st.popover("ⓘ"):
+                st.markdown("##### What am I looking at?")
+                st.markdown(what)
+                st.markdown("##### How do I use it?")
+                st.markdown(how)
+                st.markdown("##### What can I learn?")
+                st.markdown(learn)
+                
 @st.cache_resource
 def load_spacy_model():
     return spacy.load("en_core_web_sm")
@@ -110,8 +119,9 @@ def main():
         st.header(product_details['product_title'])
         st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
         m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-        m_col2.metric("Filtered Reviews", f"{len(chart_data):,}")
+        # --- MODIFIED: Added help tooltips ---
+        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐", help="The average star rating for this product across all reviews.")
+        m_col2.metric("Filtered Reviews", f"{len(chart_data):,}", help="The total number of reviews that match your current filter settings in the sidebar.")
         # Helper function to interpret standard deviation
         def get_rating_consensus(std_dev):
             if std_dev < 1.1:
@@ -135,18 +145,7 @@ def main():
         st.markdown("---")
         dist_col1, dist_col2, dist_col3 = st.columns(3)
         with dist_col1:
-            col_title, col_help = st.columns([0.85, 0.15])
-            with col_title:
-                st.markdown("**Rating Distribution**")
-            with col_help:
-                render_help_popover(
-                    title="Rating Distribution",
-                    content="""
-                    - **What am I looking at?** This chart shows the breakdown of star ratings (1 to 5) for the currently filtered reviews.
-                    - **How do I use it?** Hover over a bar to see the exact number of reviews and its percentage of the total.
-                    - **What can I learn?** Quickly see if the product is generally well-rated (lots of 4-5 stars) or poorly-rated (lots of 1-2 stars). A large number of 3-star reviews might indicate a mixed or average experience.
-                    """
-                )
+            st.markdown("**Rating Distribution**")
             if not chart_data.empty:
                 # Prepare data and calculate percentages
                 rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
