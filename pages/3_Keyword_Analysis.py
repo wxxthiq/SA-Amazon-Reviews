@@ -38,15 +38,13 @@ def convert_df_to_csv(df):
 def main():
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
-
-    # --- MODIFIED: Custom title with correctly positioned help popover ---
-    col1, col2 = st.columns([0.9, 0.1])
-    with col1:
-        st.markdown("""
-        <div style="display: flex; align-items: center;">
-            <h1 style="margin: 0;">🔑 Detailed Keyword & Phrase Analysis</h1>
-            <div style="margin-left: 10px;">
-        """, unsafe_allow_html=True)
+        
+    # --- MODIFIED: Title with correctly aligned help icon ---
+    # Use a tight gap and vertical alignment for perfect positioning
+    title_col, help_col = st.columns(2, gap="small", vertical_alignment="center")
+    with title_col:
+        st.markdown("# 🔑 Detailed Keyword & Phrase Analysis")
+    with help_col:
         with st.popover("ⓘ"):
             st.markdown("##### What is this page for?")
             st.markdown("This page allows for a deep-dive analysis of specific words and phrases found within the reviews.")
@@ -54,7 +52,6 @@ def main():
             st.markdown("1.  **Use the sidebar** to filter the reviews you want to analyze.")
             st.markdown("2.  **Select a Term Type** (e.g., 'Bigrams' for two-word phrases).")
             st.markdown("3.  **Choose a specific term** from the dropdown menu to see its detailed rating, sentiment, and trend distribution.")
-        st.markdown("</div></div>", unsafe_allow_html=True)
         
     # --- Check for Selected Product ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
