@@ -41,6 +41,16 @@ def render_help_popover(title, what, how, learn):
                 st.markdown("##### What can I learn?")
                 st.markdown(learn)
                 
+def render_help_expander(icon, title, what, how, learn):
+    """Creates a standardized, collapsible help section with an icon."""
+    with st.expander(f"{icon} **{title}**"):
+        st.markdown("##### What am I looking at?")
+        st.markdown(what)
+        st.markdown("##### How do I use it?")
+        st.markdown(how)
+        st.markdown("##### What can I learn?")
+        st.markdown(learn)    
+        
 @st.cache_resource
 def load_spacy_model():
     return spacy.load("en_core_web_sm")
