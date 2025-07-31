@@ -176,18 +176,20 @@ def main():
 
             # --- Chart Display ---
             if not chart_data.empty:
-                # This is the donut chart code from our previous step. No changes needed here.
-                rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
+                rating_counts_df = chart_data['rating'].value_counts().reset_index()
                 rating_counts_df.columns = ['rating', 'count']
-                total_reviews = rating_counts_df['count'].sum()
-                rating_counts_df['percentage'] = (rating_counts_df['count'] / total_reviews)
                 rating_counts_df['rating_cat'] = rating_counts_df['rating'].astype(str) + ' ⭐'
-                donut_chart = alt.Chart(rating_counts_df).mark_arc(innerRadius=70, outerRadius=110).encode(
-                    theta=alt.Theta(field="count", type="quantitative"),
-                    color=alt.Color('rating_cat:N', scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']), legend=alt.Legend(title="Rating", orient="right")),
-                    tooltip=[alt.Tooltip('rating_cat', title='Rating'), alt.Tooltip('count', title='Reviews'), alt.Tooltip('percentage', title='Share', format='.1%')]
-                ).properties(height=250)
-                st.altair_chart(donut_chart, use_container_width=True)
+            
+                bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                    x=alt.X('sum(count)', stack='normalize', axis=alt.Axis(title='Percentage', format='%')),
+                    color=alt.Color('rating_cat:N',
+                                    scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'],
+                                                    range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
+                                    legend=alt.Legend(title="Rating")),
+                    order=alt.Order('rating_cat', sort='descending'),
+                    tooltip=[alt.Tooltip('rating_cat', title='Rating'), alt.Tooltip('count', title='Reviews')]
+                ).properties(height=100)
+                st.altair_chart(bar_chart, use_container_width=True)
 
         # --- Column 2: Sentiment Distribution ---
         with dist_col2:
@@ -210,17 +212,19 @@ def main():
 
             # --- Chart Display ---
             if not chart_data.empty:
-                # This is the donut chart code from our previous step. No changes needed here.
-                sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
+                sentiment_counts_df = chart_data['sentiment'].value_counts().reset_index()
                 sentiment_counts_df.columns = ['sentiment', 'count']
-                total_sentiments = sentiment_counts_df['count'].sum()
-                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / total_sentiments)
-                donut_chart = alt.Chart(sentiment_counts_df).mark_arc(innerRadius=70, outerRadius=110).encode(
-                    theta=alt.Theta(field="count", type="quantitative"),
-                    color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment", orient="right")),
-                    tooltip=[alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('count', title='Reviews'), alt.Tooltip('percentage', title='Share', format='.1%')]
-                ).properties(height=250)
-                st.altair_chart(donut_chart, use_container_width=True)
+            
+                bar_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
+                    x=alt.X('sum(count)', stack='normalize', axis=alt.Axis(title='Percentage', format='%')),
+                    color=alt.Color('sentiment:N',
+                                    scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
+                                                    range=['#1a9850', '#cccccc', '#d73027']),
+                                    legend=alt.Legend(title="Sentiment")),
+                    order=alt.Order('sentiment', sort='descending'),
+                    tooltip=[alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('count', title='Reviews')]
+                ).properties(height=100)
+                st.altair_chart(bar_chart, use_container_width=True)
                 
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
