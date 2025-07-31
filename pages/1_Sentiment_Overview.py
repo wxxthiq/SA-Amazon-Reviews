@@ -450,12 +450,19 @@ def main():
 
     # --- TRENDS OVER TIME ---
     st.markdown("---")
-    st.markdown("### 🗓️ Trends Over Time")
-    st.info(
-        "Analyze how review ratings and sentiment have evolved. Use the time period selector to "
-        "change the granularity and the toggles to show an average trendline. The Line Chart view is best for "
-        "comparing individual trends."
-    )
+    # --- MODIFIED: Title with an integrated help popover ---
+    title_c, popover_c = st.columns([0.9, 0.1])
+    with title_c:
+        st.markdown("### 🗓️ Trends Over Time")
+    with popover_c:
+        with st.popover("ⓘ"):
+            st.markdown("##### What am I looking at?")
+            st.markdown("These charts analyze how the volume of review ratings and sentiment has evolved over time.")
+            st.markdown("##### How do I use it?")
+            st.markdown("Use the 'Select time period' radio buttons to change the granularity (e.g., from monthly to weekly). Use the toggles to overlay an average trendline. The 'Line Chart' view is best for comparing individual trends, while the 'Area Chart' view shows the overall distribution.")
+            st.markdown("##### What can I learn?")
+            st.markdown("Spot seasonal patterns, the impact of a product change, or whether sentiment is generally improving or declining over time.")
+            
     time_granularity = st.radio(
         "Select time period:",
         ("Monthly", "Weekly", "Daily"),
