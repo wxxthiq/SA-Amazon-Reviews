@@ -236,7 +236,7 @@ def main():
     col1, col2 = st.columns([3, 2])
     with col1:
         render_help_popover(
-            title="### ☁️ Keyword & Phrase Summary",
+            title="☁️ Keyword & Phrase Summary",
             what="A word cloud of the most frequent words and phrases found in both Positive and Negative reviews.",
             how="Use the 'Advanced Settings' above to switch between single words, bigrams (two-word phrases), and trigrams (three-word phrases).",
             learn="Identify the specific terms and features that customers consistently praise."
