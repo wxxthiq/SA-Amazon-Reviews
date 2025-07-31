@@ -350,27 +350,25 @@ def main():
             how="Use the dropdowns to sort aspects by how much they are discussed, or by which are most positive or negative. Hover over the bars for detailed counts.",
             learn="Pinpoint specific product strengths and weaknesses. An aspect with a large red bar (e.g., 'battery life') is a clear area for concern."
         )
-        aspect_col1, aspect_col2 = st.columns(2)
-        with aspect_col1:
+
+        with st.expander("Advanced Settings"):
             sort_option = st.selectbox(
                 "Sort aspects by:",
                 ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
                 key="aspect_sort_selector"
             )
-        with aspect_col2:
-            with st.expander("Advanced Settings"):
-                num_aspects_to_show = st.slider(
-                    "Select number of top aspects to display:",
-                    min_value=3, max_value=15, value=5, key="overview_aspect_slider"
-                )
-                smart_threshold = max(3, min(10, int(len(chart_data) * 0.01)))
-                min_mentions = st.slider(
-                    "Aspect Mention Threshold",
-                    min_value=1,
-                    max_value=50,
-                    value=smart_threshold,
-                    help="Filters out aspects mentioned fewer than this many times to reduce noise."
-                )
+            num_aspects_to_show = st.slider(
+                "Select number of top aspects to display:",
+                min_value=3, max_value=15, value=5, key="overview_aspect_slider"
+            )
+            smart_threshold = max(3, min(10, int(len(chart_data) * 0.01)))
+            min_mentions = st.slider(
+                "Aspect Mention Threshold",
+                min_value=1,
+                max_value=50,
+                value=smart_threshold,
+                help="Filters out aspects mentioned fewer than this many times to reduce noise."
+            )
         aspect_df = get_aspects_for_product(
         conn, selected_asin, selected_date_range,
         tuple(selected_ratings), tuple(selected_sentiments), selected_verified
