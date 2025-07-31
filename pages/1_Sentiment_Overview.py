@@ -214,14 +214,14 @@ def main():
     # --- Column 1: Keyword & Phrase Summary ---
     with col1:
         st.markdown("### ☁️ Keyword & Phrase Summary")
-        st.info("Frequent terms in positive vs. negative reviews.")
+        st.info("Commonly Used Words and Phrases")
 
         with st.expander("Advanced Settings"):
             control_col1, control_col2 = st.columns(2)
             with control_col1:
                 max_words = st.slider("Max Terms in Cloud:", min_value=5, max_value=50, value=15, key="keyword_slider")
             with control_col2:
-                ngram_level = st.radio("Term Type:", ("Single Words", "Bigrams", "Trigrams"), index=0, horizontal=True, key="ngram_radio")
+                ngram_level = st.radio("Term Type:", ("Single Words", "2 Words", "3 Words"), index=0, horizontal=True, key="ngram_radio")
 
         # Helper function to generate n-grams (remains the same)
         def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
