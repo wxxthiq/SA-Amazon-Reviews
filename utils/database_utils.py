@@ -199,47 +199,86 @@ def get_single_review_details(_conn, review_id):
     except Exception:
         return None
 
-def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter, search_term, sort_by, limit, offset):
+# In utils/database_utils.py
+
+# Keep your existing get_paginated_reviews, but we will create a new one for bulk data.
+# This function is specifically for fetching the full dataset for export and plotting.
+@st.cache_data
+def get_all_filtered_reviews(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter, search_term):
     """
-    Fetches paginated reviews with updated sorting, search, and returns the full dataset for export.
+    Fetches the complete set of filtered reviews for exporting and advanced plotting.
+    This function is cached to prevent re-running the query unnecessarily.
     """
     query = "FROM reviews WHERE parent_asin = ?"
     params = [asin]
 
-    # --- Add filters to the query ---
     if date_range and len(date_range) == 2:
         start_date, end_date = date_range
         query += " AND date BETWEEN ? AND ?"
         params.extend([start_date, end_date])
-    
+
     if rating_filter:
         placeholders = ', '.join(['?'] * len(rating_filter))
         query += f" AND rating IN ({placeholders})"
         params.extend(rating_filter)
-        
+
     if sentiment_filter:
         placeholders = ', '.join(['?'] * len(sentiment_filter))
         query += f" AND sentiment IN ({placeholders})"
         params.extend(sentiment_filter)
-        
+
     if verified_filter == "Verified Only":
         query += " AND verified_purchase = TRUE"
     elif verified_filter == "Not Verified":
         query += " AND verified_purchase = FALSE"
-        
-    # --- NEW: Add keyword search functionality ---
+
     if search_term:
         query += " AND text ILIKE ?"
         params.append(f"%{search_term}%")
 
-    # --- Fetch the full, filtered dataset for the export button ---
-    full_filtered_query = f"SELECT * {query}"
-    # We apply a reasonable limit for export to prevent memory issues
-    all_filtered_df = _conn.execute(full_filtered_query + " LIMIT 5000", params).fetchdf() 
-    
-    total_reviews = len(all_filtered_df)
+    full_filtered_query = f"SELECT * {query} LIMIT 5000" # Keep the safety limit
+    return _conn.execute(full_filtered_query, params).fetchdf()
 
-    # --- Sorting logic ---
+
+# Now, simplify the original get_paginated_reviews function so it no longer returns all_filtered_df
+def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter, search_term, sort_by, limit, offset):
+    """
+    Fetches ONLY paginated reviews and the total count.
+    """
+    query = "FROM reviews WHERE parent_asin = ?"
+    params = [asin]
+
+    # ... (all the filter logic is the same as before) ...
+    if date_range and len(date_range) == 2:
+        start_date, end_date = date_range
+        query += " AND date BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
+
+    if rating_filter:
+        placeholders = ', '.join(['?'] * len(rating_filter))
+        query += f" AND rating IN ({placeholders})"
+        params.extend(rating_filter)
+
+    if sentiment_filter:
+        placeholders = ', '.join(['?'] * len(sentiment_filter))
+        query += f" AND sentiment IN ({placeholders})"
+        params.extend(sentiment_filter)
+
+    if verified_filter == "Verified Only":
+        query += " AND verified_purchase = TRUE"
+    elif verified_filter == "Not Verified":
+        query += " AND verified_purchase = FALSE"
+
+    if search_term:
+        query += " AND text ILIKE ?"
+        params.append(f"%{search_term}%")
+
+
+    # --- MODIFIED: Get total count directly ---
+    count_query = f"SELECT COUNT(*) {query}"
+    total_reviews = _conn.execute(count_query, params).fetchone()[0]
+
+    # --- Sorting logic (remains the same) ---
     sort_logic = {
         "Newest First": "verified_purchase DESC, date DESC",
         "Oldest First": "verified_purchase DESC, date ASC",
@@ -249,14 +288,69 @@ def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filt
     }
     order_by_sql = sort_logic.get(sort_by, "verified_purchase DESC, date DESC")
 
-    # --- Final paginated query ---
+    # --- Final paginated query (remains the same) ---
     final_query = f"SELECT * {query} ORDER BY {order_by_sql} LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     paginated_reviews_df = _conn.execute(final_query, params).fetchdf()
 
-    # --- RETURN a tuple with all the necessary data ---
-    return paginated_reviews_df, total_reviews, all_filtered_df
+    # --- RETURN only the paginated data and total count ---
+    return paginated_reviews_df, total_reviews
+    
+# Now, simplify the original get_paginated_reviews function so it no longer returns all_filtered_df
+def get_paginated_reviews(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter, search_term, sort_by, limit, offset):
+    """
+    Fetches ONLY paginated reviews and the total count.
+    """
+    query = "FROM reviews WHERE parent_asin = ?"
+    params = [asin]
 
+    # ... (all the filter logic is the same as before) ...
+    if date_range and len(date_range) == 2:
+        start_date, end_date = date_range
+        query += " AND date BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
+
+    if rating_filter:
+        placeholders = ', '.join(['?'] * len(rating_filter))
+        query += f" AND rating IN ({placeholders})"
+        params.extend(rating_filter)
+
+    if sentiment_filter:
+        placeholders = ', '.join(['?'] * len(sentiment_filter))
+        query += f" AND sentiment IN ({placeholders})"
+        params.extend(sentiment_filter)
+
+    if verified_filter == "Verified Only":
+        query += " AND verified_purchase = TRUE"
+    elif verified_filter == "Not Verified":
+        query += " AND verified_purchase = FALSE"
+
+    if search_term:
+        query += " AND text ILIKE ?"
+        params.append(f"%{search_term}%")
+
+
+    # --- MODIFIED: Get total count directly ---
+    count_query = f"SELECT COUNT(*) {query}"
+    total_reviews = _conn.execute(count_query, params).fetchone()[0]
+
+    # --- Sorting logic (remains the same) ---
+    sort_logic = {
+        "Newest First": "verified_purchase DESC, date DESC",
+        "Oldest First": "verified_purchase DESC, date ASC",
+        "Highest Rating": "verified_purchase DESC, rating DESC, helpful_vote DESC",
+        "Lowest Rating": "verified_purchase DESC, rating ASC, helpful_vote DESC",
+        "Most Helpful": "helpful_vote DESC, rating DESC"
+    }
+    order_by_sql = sort_logic.get(sort_by, "verified_purchase DESC, date DESC")
+
+    # --- Final paginated query (remains the same) ---
+    final_query = f"SELECT * {query} ORDER BY {order_by_sql} LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    paginated_reviews_df = _conn.execute(final_query, params).fetchdf()
+
+    # --- RETURN only the paginated data and total count ---
+    return paginated_reviews_df, total_reviews
 # --- NEW FUNCTION TO GET PRE-COMPUTED ASPECTS ---
 @st.cache_data
 def get_aspects_for_product(_conn, asin, date_range, rating_filter, sentiment_filter, verified_filter):
