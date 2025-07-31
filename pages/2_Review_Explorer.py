@@ -160,48 +160,57 @@ def main():
     st.markdown("### Rating vs. Text Discrepancy")
     st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Click a point to read the review.")
 
-    if all_filtered_df.empty:
-        st.warning("No review data available for the selected filters to generate this plot.")
-    else:
-        # Add necessary columns for plotting
-        rng = np.random.default_rng(seed=42)
-        all_filtered_df['rating_jittered'] = all_filtered_df['rating'] + rng.uniform(-0.1, 0.1, size=len(all_filtered_df))
-        all_filtered_df['text_polarity_jittered'] = all_filtered_df['sentiment_score'] + rng.uniform(-0.02, 0.02, size=len(all_filtered_df))
-        all_filtered_df['text_polarity'] = all_filtered_df['sentiment_score']
-        all_filtered_df['discrepancy'] = (all_filtered_df['text_polarity'] - ((all_filtered_df['rating'] - 3) / 2.0)).abs()
-
-        plot_col, review_col = st.columns([2, 1])
-        with plot_col:
-            fig = px.scatter(
-                all_filtered_df, x="rating_jittered", y="text_polarity_jittered", color="discrepancy",
-                color_continuous_scale=px.colors.sequential.Viridis,
-                labels={"rating_jittered": "Star Rating", "text_polarity_jittered": "Sentiment Score", "discrepancy": "Discrepancy Score"},
-                hover_name="review_title",
-                hover_data={"rating": True, "sentiment": True, "discrepancy": ":.2f", "rating_jittered": False, "text_polarity_jittered": False}
-            )
-            fig.update_layout(clickmode='event+select')
-            fig.update_traces(marker_size=10)
-            selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
-            if selected_points and 'pointIndex' in selected_points[0]:
-                point_index = selected_points[0]['pointIndex']
-                if point_index < len(all_filtered_df):
-                    clicked_id = all_filtered_df.iloc[point_index]['review_id']
-                    if st.session_state.selected_review_id != clicked_id:
-                        st.session_state.selected_review_id = clicked_id
-                        st.rerun()
-        with review_col:
-            if st.session_state.selected_review_id:
-                if st.session_state.selected_review_id in all_filtered_df['review_id'].values:
-                    st.markdown("#### Selected Review Details")
-                    review_details = get_single_review_details(conn, st.session_state.selected_review_id)
-                    if review_details is not None:
-                        st.subheader(review_details.get('review_title', 'No Title'))
-                        caption_parts = [f"Reviewed on: {review_details.get('date', 'N/A')}", f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"]
-                        st.caption(" | ".join(caption_parts))
-                        st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
-                    if st.button("Close Review", key="close_review_button"):
-                        st.session_state.selected_review_id = None
-                        st.rerun()
-                        
+    with st.expander("🔬 Advanced Analysis: Find Mismatched Reviews"):
+        st.markdown("##### What is this?")
+        st.markdown(
+            "This scatter plot helps you find reviews where the **star rating might not match the sentiment of the written text**. For example, a 5-star review with negative language ('The product is great, *but the battery life is terrible*') or a 1-star review with positive language ('I hated it, *but the design was beautiful*')."
+        )
+        st.markdown("##### How do I use it?")
+        st.markdown(
+            "Each dot is a review. **Click on any dot** to see the full review text on the right. The color indicates the 'Discrepancy Score'—brighter dots have a bigger mismatch between their rating and text sentiment."
+        )
+        if all_filtered_df.empty:
+            st.warning("No review data available for the selected filters to generate this plot.")
+        else:
+            # Add necessary columns for plotting
+            rng = np.random.default_rng(seed=42)
+            all_filtered_df['rating_jittered'] = all_filtered_df['rating'] + rng.uniform(-0.1, 0.1, size=len(all_filtered_df))
+            all_filtered_df['text_polarity_jittered'] = all_filtered_df['sentiment_score'] + rng.uniform(-0.02, 0.02, size=len(all_filtered_df))
+            all_filtered_df['text_polarity'] = all_filtered_df['sentiment_score']
+            all_filtered_df['discrepancy'] = (all_filtered_df['text_polarity'] - ((all_filtered_df['rating'] - 3) / 2.0)).abs()
+    
+            plot_col, review_col = st.columns([2, 1])
+            with plot_col:
+                fig = px.scatter(
+                    all_filtered_df, x="rating_jittered", y="text_polarity_jittered", color="discrepancy",
+                    color_continuous_scale=px.colors.sequential.Viridis,
+                    labels={"rating_jittered": "Star Rating", "text_polarity_jittered": "Sentiment Score", "discrepancy": "Discrepancy Score"},
+                    hover_name="review_title",
+                    hover_data={"rating": True, "sentiment": True, "discrepancy": ":.2f", "rating_jittered": False, "text_polarity_jittered": False}
+                )
+                fig.update_layout(clickmode='event+select')
+                fig.update_traces(marker_size=10)
+                selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
+                if selected_points and 'pointIndex' in selected_points[0]:
+                    point_index = selected_points[0]['pointIndex']
+                    if point_index < len(all_filtered_df):
+                        clicked_id = all_filtered_df.iloc[point_index]['review_id']
+                        if st.session_state.selected_review_id != clicked_id:
+                            st.session_state.selected_review_id = clicked_id
+                            st.rerun()
+            with review_col:
+                if st.session_state.selected_review_id:
+                    if st.session_state.selected_review_id in all_filtered_df['review_id'].values:
+                        st.markdown("#### Selected Review Details")
+                        review_details = get_single_review_details(conn, st.session_state.selected_review_id)
+                        if review_details is not None:
+                            st.subheader(review_details.get('review_title', 'No Title'))
+                            caption_parts = [f"Reviewed on: {review_details.get('date', 'N/A')}", f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"]
+                            st.caption(" | ".join(caption_parts))
+                            st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
+                        if st.button("Close Review", key="close_review_button"):
+                            st.session_state.selected_review_id = None
+                            st.rerun()
+                            
 if __name__ == "__main__":
     main()
