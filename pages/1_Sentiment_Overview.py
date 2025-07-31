@@ -129,29 +129,56 @@ def main():
     with right_col:
         st.header(product_details['product_title'])
         st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
-        m_col1, m_col2, m_col3 = st.columns(3)
-        # --- MODIFIED: Added help tooltips ---
-        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐", help="The average star rating for this product across all reviews.")
-        m_col2.metric("Filtered Reviews", f"{len(chart_data):,}", help="The total number of reviews that match your current filter settings in the sidebar.")
-        # Helper function to interpret standard deviation
-        def get_rating_consensus(std_dev):
-            if std_dev < 1.1:
-                return "✅ Consistent"  # Low deviation = high agreement
-            elif std_dev < 1.4:
-                return "↔️ Mixed"      # Medium deviation = some disagreement
+        # In main() -> with right_col:
+        # --- NEW: 2x2 Grid for Metrics ---
+        row1_col1, row1_col2 = st.columns(2)
+        row2_col1, row2_col2 = st.columns(2)
+
+        # --- Row 1, Col 1: Average Rating (Existing) ---
+        with row1_col1:
+            st.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐", help="The average star rating for this product across all reviews.")
+
+        # --- Row 1, Col 2: Average Sentiment Score (New) ---
+        with row1_col2:
+            if not chart_data.empty:
+                avg_sentiment_score = chart_data['sentiment_score'].mean()
+                # Use an emoji to represent the score
+                emoji = "😊" if avg_sentiment_score > 0.3 else "😐" if avg_sentiment_score > -0.3 else "😞"
+                st.metric(
+                    "Average Sentiment",
+                    f"{avg_sentiment_score:.2f} {emoji}",
+                    help="The average sentiment score of the review text, from -1.0 (very negative) to 1.0 (very positive)."
+                )
             else:
-                return "⚠️ Polarizing" # High deviation = strong disagreement
-   
-        if not chart_data.empty and len(chart_data) > 1:
-            rating_std_dev = chart_data['rating'].std()
-            consensus_text = get_rating_consensus(rating_std_dev)
-            
-            # Add the 'help' parameter to create a tooltip
-            m_col3.metric(
-                "Reviewer Consensus",
-                consensus_text,
-                help="This measures how much agreement there is in the star ratings. 'Consistent' means most ratings are similar, while 'Polarizing' means there are many high and low ratings with few in the middle."
-            )
+                st.metric("Average Sentiment", "N/A")
+
+        # --- Row 2, Col 1: Reviewer Consensus (Existing) ---
+        with row2_col1:
+             if not chart_data.empty and len(chart_data) > 1:
+                rating_std_dev = chart_data['rating'].std()
+                consensus_text = get_rating_consensus(rating_std_dev)
+                st.metric(
+                    "Reviewer Consensus",
+                    consensus_text,
+                    help="Measures agreement in star ratings. 'Consistent' means ratings are similar; 'Polarizing' means there are many high and low ratings."
+                )
+             else:
+                 st.metric("Reviewer Consensus", "N/A")
+
+
+        # --- Row 2, Col 2: Verified Purchases (New) ---
+        with row2_col2:
+            if not chart_data.empty:
+                verified_percentage = (chart_data['verified_purchase'].sum() / len(chart_data)) * 100
+                st.metric(
+                    "Verified Purchases",
+                    f"{verified_percentage:.1f}%",
+                    help="The percentage of reviews left by customers with a confirmed purchase of this product."
+                )
+            else:
+                st.metric("Verified Purchases", "N/A")
+
+        st.markdown(f"*{len(chart_data):,} reviews match your current filters.*") # Replaces the "Filtered Reviews" metric
         st.markdown("---")
         # --- MODIFIED: Back to a 2-column layout ---
         dist_col1, dist_col2 = st.columns(2)
