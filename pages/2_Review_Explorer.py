@@ -9,7 +9,8 @@ from utils.database_utils import (
     get_product_details,
     get_product_date_range,
     get_paginated_reviews,
-    get_single_review_details # Import this function
+    get_single_review_details,
+    get_all_filtered_reviews 
 )
 
 # --- Page Configuration and Constants ---
@@ -108,7 +109,7 @@ def main():
         )
 
     # --- Data Fetching ---
-    paginated_reviews_df, total_reviews, all_filtered_df = get_paginated_reviews(
+    paginated_reviews_df, total_reviews = get_paginated_reviews(
         _conn=conn,
         asin=selected_asin,
         date_range=st.session_state.explorer_date_filter,
@@ -133,9 +134,15 @@ def main():
             total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
             st.info(f"Showing **{len(paginated_reviews_df)}** of **{total_reviews}** matching reviews. (Page **{st.session_state.review_page + 1}** of **{total_pages}**)")
         with export_c2:
+            # MODIFIED: Fetch the full data only when the button is being prepared
+            all_filtered_df_for_export = get_all_filtered_reviews(
+                _conn=conn, asin=selected_asin, date_range=st.session_state.explorer_date_filter,
+                rating_filter=tuple(st.session_state.explorer_rating_filter), sentiment_filter=tuple(st.session_state.explorer_sentiment_filter),
+                verified_filter=st.session_state.explorer_verified_filter, search_term=st.session_state.explorer_search_term
+            )
             st.download_button(
                label="📥 Export to CSV",
-               data=convert_df_to_csv(all_filtered_df),
+               data=convert_df_to_csv(all_filtered_df_for_export),
                file_name=f"{selected_asin}_reviews.csv",
                mime="text/csv",
                use_container_width=True
@@ -184,20 +191,25 @@ def main():
         st.markdown(
             "Each dot is a review. **Click on any dot** to see the full review text on the right. The color indicates the 'Discrepancy Score'—brighter dots have a bigger mismatch between their rating and text sentiment."
         )
-        if all_filtered_df.empty:
+        all_filtered_df_for_plot = get_all_filtered_reviews(
+        _conn=conn, asin=selected_asin, date_range=st.session_state.explorer_date_filter,
+        rating_filter=tuple(st.session_state.explorer_rating_filter), sentiment_filter=tuple(st.session_state.explorer_sentiment_filter),
+        verified_filter=st.session_state.explorer_verified_filter, search_term=st.session_state.explorer_search_term
+        )
+        if all_filtered_df_for_plot.empty:
             st.warning("No review data available for the selected filters to generate this plot.")
         else:
             # Add necessary columns for plotting
             rng = np.random.default_rng(seed=42)
-            all_filtered_df['rating_jittered'] = all_filtered_df['rating'] + rng.uniform(-0.1, 0.1, size=len(all_filtered_df))
-            all_filtered_df['text_polarity_jittered'] = all_filtered_df['sentiment_score'] + rng.uniform(-0.02, 0.02, size=len(all_filtered_df))
-            all_filtered_df['text_polarity'] = all_filtered_df['sentiment_score']
-            all_filtered_df['discrepancy'] = (all_filtered_df['text_polarity'] - ((all_filtered_df['rating'] - 3) / 2.0)).abs()
+            all_filtered_df_for_plot['rating_jittered'] = all_filtered_df_for_plot['rating'] + rng.uniform(-0.1, 0.1, size=len(all_filtered_df_for_plot))
+            all_filtered_df_for_plot['text_polarity_jittered'] = all_filtered_df_for_plot['sentiment_score'] + rng.uniform(-0.02, 0.02, size=len(all_filtered_df_for_plot))
+            all_filtered_df_for_plot['text_polarity'] = all_filtered_df_for_plot['sentiment_score']
+            all_filtered_df['discrepancy'] = (all_filtered_df_for_plot['text_polarity'] - ((all_filtered_df_for_plot['rating'] - 3) / 2.0)).abs()
     
             plot_col, review_col = st.columns([2, 1])
             with plot_col:
                 fig = px.scatter(
-                    all_filtered_df, x="rating_jittered", y="text_polarity_jittered", color="discrepancy",
+                    all_filtered_df_for_plot, x="rating_jittered", y="text_polarity_jittered", color="discrepancy",
                     color_continuous_scale=px.colors.sequential.Viridis,
                     labels={"rating_jittered": "Star Rating", "text_polarity_jittered": "Sentiment Score", "discrepancy": "Discrepancy Score"},
                     hover_name="review_title",
@@ -208,14 +220,14 @@ def main():
                 selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
                 if selected_points and 'pointIndex' in selected_points[0]:
                     point_index = selected_points[0]['pointIndex']
-                    if point_index < len(all_filtered_df):
-                        clicked_id = all_filtered_df.iloc[point_index]['review_id']
+                    if point_index < len(all_filtered_df_for_plot):
+                        clicked_id = all_filtered_df_for_plot.iloc[point_index]['review_id']
                         if st.session_state.selected_review_id != clicked_id:
                             st.session_state.selected_review_id = clicked_id
                             st.rerun()
             with review_col:
                 if st.session_state.selected_review_id:
-                    if st.session_state.selected_review_id in all_filtered_df['review_id'].values:
+                    if st.session_state.selected_review_id in all_filtered_df_for_plot['review_id'].values:
                         st.markdown("#### Selected Review Details")
                         review_details = get_single_review_details(conn, st.session_state.selected_review_id)
                         if review_details is not None:
