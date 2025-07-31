@@ -290,7 +290,6 @@ def main():
             how="Use the 'Advanced Settings' above to switch between single words, bigrams (two-word phrases), and trigrams (three-word phrases).",
             learn="Identify the specific terms and features that customers consistently praise."
         )
-
         with st.expander("Advanced Settings"):
             control_col1, control_col2 = st.columns(2)
             with control_col1:
@@ -344,12 +343,25 @@ def main():
 
     # --- Column 2: Aspect Sentiment Analysis ---
     with col2:
-        render_help_popover(
-            title="🔎 Key Aspect Sentiment Analysis",
-            what="This chart identifies key product features (aspects) and shows the sentiment breakdown for each.",
-            how="Use the dropdowns to sort aspects by how much they are discussed, or by which are most positive or negative. Hover over the bars for detailed counts.",
-            learn="Pinpoint specific product strengths and weaknesses. An aspect with a large red bar (e.g., 'battery life') is a clear area for concern."
-        )
+        # --- MODIFIED: Title and Icon ---
+        title_c, icon_c = st.columns([0.9, 0.1])
+        with title_c:
+            st.markdown("### 🔎 Key Aspect Sentiment Analysis")
+        with icon_c:
+            # This button will toggle the help text below
+            clickable_help_icon("Aspect")
+
+        # --- MODIFIED: Conditional Help Text Container ---
+        if st.session_state.get('active_help_topic') == "Aspect":
+            with st.container(border=True):
+                st.markdown("##### What am I looking at?")
+                st.markdown("This chart identifies key product features (aspects) and shows the sentiment breakdown for each.")
+                st.markdown("##### How do I use it?")
+                st.markdown("Use the dropdown to sort aspects by popularity, or by which are most positive or negative. The sliders let you change how many aspects are displayed and filter out rarely-mentioned terms.")
+                st.markdown("##### What can I learn?")
+                st.markdown("Pinpoint specific product strengths and weaknesses. An aspect with a large red bar is a clear area for concern.")
+
+        # --- Original Controls and Chart Logic (no changes needed below this line) ---
 
         with st.expander("Advanced Settings"):
             sort_option = st.selectbox(
@@ -417,7 +429,7 @@ def main():
                 tooltip=[alt.Tooltip('aspect', title='Aspect'), alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('sum(count):Q', title='Review Count')]
             ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})")
             st.altair_chart(chart, use_container_width=True)
-
+            
         else:
             st.info("No aspect data found for the selected filters.")
             
