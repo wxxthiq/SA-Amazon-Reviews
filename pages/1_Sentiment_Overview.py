@@ -145,45 +145,48 @@ def main():
         st.markdown("---")
         dist_col1, dist_col2, dist_col3 = st.columns(3)
         with dist_col1:
-            # --- NEW LAYOUT: Title and Help Toggle on one line ---
-            title_col, toggle_col = st.columns([0.7, 0.3])
-            with title_col:
-                st.markdown("**Rating Distribution**")
-            with toggle_col:
-                show_rating_help = st.toggle("ⓘ Help", key="rating_help")
-
+            render_help_expander(
+                icon="⭐",
+                title="Rating Distribution",
+                what="This donut chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.",
+                how="Hover over a segment to see the specific rating, the number of reviews, and its percentage of the total.",
+                learn="Quickly see if a product is generally well-liked (large green segments) or has significant issues (visible red segments)."
+            )
             if not chart_data.empty:
-                # --- (This donut chart code remains the same as your current version) ---
                 rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
                 rating_counts_df.columns = ['rating', 'count']
+                
+                # --- NEW: Calculate percentage ---
                 total_reviews = rating_counts_df['count'].sum()
                 rating_counts_df['percentage'] = (rating_counts_df['count'] / total_reviews) * 100
                 rating_counts_df['rating_cat'] = rating_counts_df['rating'].astype(str) + ' ⭐'
-                donut_chart = alt.Chart(rating_counts_df).mark_arc(innerRadius=70, outerRadius=110).encode(
+
+                donut_chart = alt.Chart(rating_counts_df).mark_arc(
+                    # --- MODIFIED: Explicitly set outerRadius for consistent thickness ---
+                    innerRadius=70,
+                    outerRadius=110 
+                ).encode(
                     theta=alt.Theta(field="count", type="quantitative"),
                     color=alt.Color('rating_cat:N',
                                     scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'],
                                                     range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
                                     legend=alt.Legend(title="Rating", orient="right")),
-                    tooltip=[alt.Tooltip('rating_cat', title='Rating'), alt.Tooltip('count', title='Reviews'), alt.Tooltip('percentage', title='Share', format='.1f%')]
+                    # --- MODIFIED: Added percentage to tooltip ---
+                    tooltip=[
+                        alt.Tooltip('rating_cat', title='Rating'),
+                        alt.Tooltip('count', title='Reviews'),
+                        alt.Tooltip('percentage:Q', title='Share', format='.1f')
+                    ]
                 ).properties(height=250)
-                st.altair_chart(donut_chart, use_container_width=True)
 
-                # --- NEW: Collapsible help text appears below the chart ---
-                if show_rating_help:
-                    with st.expander("Understanding the Rating Distribution Chart", expanded=True):
-                        st.markdown("##### What am I looking at?")
-                        st.markdown("This donut chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.")
-                        st.markdown("##### How do I use it?")
-                        st.markdown("Hover over a segment to see the specific rating, the number of reviews, and its percentage of the total.")
-                        st.markdown("##### What can I learn?")
-                        st.markdown("Quickly see if a product is generally well-liked (large green segments) or has significant issues (visible red segments).")
+                st.altair_chart(donut_chart, use_container_width=True)
         with dist_col2:
-            render_help_popover(
+            render_help_expander(
+                icon="😊",
                 title="Sentiment Distribution",
                 what="This chart shows the breakdown of reviews by their automatically detected sentiment (Positive, Negative, or Neutral).",
-                how="Hover over the bars to see the exact number and percentage of reviews for each sentiment category.",
-                learn="Understand the overall feeling of the reviews. A high percentage of 'Negative' sentiment might indicate widespread problems, even if the star rating is okay."
+                how="Hover over a segment to see the sentiment, the number of reviews, and its percentage of the total.",
+                learn="Understand the overall feeling of the reviews. A large red segment might indicate widespread problems."
             )
             if not chart_data.empty:
                 sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
