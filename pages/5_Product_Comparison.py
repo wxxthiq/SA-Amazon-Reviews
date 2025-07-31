@@ -28,6 +28,16 @@ nlp = load_spacy_model()
 DB_PATH = "amazon_reviews_final.duckdb"
 conn = connect_to_db(DB_PATH)
 
+# --- Helper Functions ---
+def get_rating_consensus(std_dev):
+    """Helper function to interpret standard deviation."""
+    if std_dev < 1.1:
+        return "✅ Consistent"
+    elif std_dev < 1.4:
+        return "↔️ Mixed"
+    else:
+        return "⚠️ Polarizing"
+        
 # --- Definitive Aspect Extraction Function ---
 @st.cache_data
 def extract_aspects_with_sentiment(dataf):
