@@ -157,8 +157,6 @@ def main():
 
      # --- MOVED: RATING VS TEXT DISCREPANCY PLOT ---
     st.markdown("---")
-    st.markdown("### Rating vs. Text Discrepancy")
-    st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Click a point to read the review.")
 
     with st.expander("🔬 Advanced Analysis: Find Mismatched Reviews"):
         st.markdown("##### What is this?")
