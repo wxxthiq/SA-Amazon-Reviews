@@ -201,7 +201,7 @@ def main():
             if st.session_state.get('active_help_topic') == "Rating":
                 with st.container(border=True):
                     st.markdown("##### What am I looking at?")
-                    st.markdown("This donut chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.")
+                    st.markdown("This chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.")
                     st.markdown("##### How do I use it?")
                     st.markdown("Hover over a segment to see the specific rating, the number of reviews, and its percentage of the total.")
                     st.markdown("##### What can I learn?")
