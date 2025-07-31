@@ -152,20 +152,30 @@ def main():
                 learn="Quickly see if a product is generally well-liked (many 4-5 star reviews) or has significant issues (many 1-2 star reviews)."
             )
             if not chart_data.empty:
-                # --- NEW: Donut Chart Logic ---
                 rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
                 rating_counts_df.columns = ['rating', 'count']
                 
-                # Use category for proper coloring and ordering
+                # --- NEW: Calculate percentage ---
+                total_reviews = rating_counts_df['count'].sum()
+                rating_counts_df['percentage'] = (rating_counts_df['count'] / total_reviews) * 100
                 rating_counts_df['rating_cat'] = rating_counts_df['rating'].astype(str) + ' ⭐'
-                
-                donut_chart = alt.Chart(rating_counts_df).mark_arc(innerRadius=70).encode(
-                    theta=alt.Theta(field="count", type="quantitative", stack=True),
+
+                donut_chart = alt.Chart(rating_counts_df).mark_arc(
+                    # --- MODIFIED: Explicitly set outerRadius for consistent thickness ---
+                    innerRadius=70,
+                    outerRadius=110 
+                ).encode(
+                    theta=alt.Theta(field="count", type="quantitative"),
                     color=alt.Color('rating_cat:N',
                                     scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'],
                                                     range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
                                     legend=alt.Legend(title="Rating", orient="right")),
-                    tooltip=[alt.Tooltip('rating_cat', title='Rating'), alt.Tooltip('count', title='Reviews')]
+                    # --- MODIFIED: Added percentage to tooltip ---
+                    tooltip=[
+                        alt.Tooltip('rating_cat', title='Rating'),
+                        alt.Tooltip('count', title='Reviews'),
+                        alt.Tooltip('percentage:Q', title='Share', format='.1f')
+                    ]
                 ).properties(height=250)
 
                 st.altair_chart(donut_chart, use_container_width=True)
@@ -177,17 +187,29 @@ def main():
                 learn="Understand the overall feeling of the reviews. A high percentage of 'Negative' sentiment might indicate widespread problems, even if the star rating is okay."
             )
             if not chart_data.empty:
-                # --- NEW: Donut Chart Logic ---
                 sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
                 sentiment_counts_df.columns = ['sentiment', 'count']
 
-                donut_chart = alt.Chart(sentiment_counts_df).mark_arc(innerRadius=70).encode(
-                    theta=alt.Theta(field="count", type="quantitative", stack=True),
+                # --- NEW: Calculate percentage ---
+                total_sentiments = sentiment_counts_df['count'].sum()
+                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / total_sentiments) * 100
+
+                donut_chart = alt.Chart(sentiment_counts_df).mark_arc(
+                    # --- MODIFIED: Explicitly set outerRadius for consistent thickness ---
+                    innerRadius=70,
+                    outerRadius=110
+                ).encode(
+                    theta=alt.Theta(field="count", type="quantitative"),
                     color=alt.Color('sentiment:N',
                                     scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
                                                     range=['#1a9850', '#cccccc', '#d73027']),
                                     legend=alt.Legend(title="Sentiment", orient="right")),
-                    tooltip=[alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('count', title='Reviews')]
+                    # --- MODIFIED: Added percentage to tooltip ---
+                    tooltip=[
+                        alt.Tooltip('sentiment', title='Sentiment'),
+                        alt.Tooltip('count', 'Reviews'),
+                        alt.Tooltip('percentage:Q', title='Share', format='.1f')
+                    ]
                 ).properties(height=250)
                 
                 st.altair_chart(donut_chart, use_container_width=True) 
