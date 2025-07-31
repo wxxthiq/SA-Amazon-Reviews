@@ -37,6 +37,31 @@ def get_rating_consensus(std_dev):
         return "↔️ Mixed"
     else:
         return "⚠️ Polarizing"
+# In pages/5_Product_Comparison.py
+# Add this helper function near the top of the file
+
+def render_custom_metric(label, value, delta=None):
+    """Renders a custom metric with a visual indicator on the left."""
+    icon = ""
+    color = "gray"
+
+    if delta is not None:
+        if delta > 0:
+            icon = "▲"
+            color = "green"
+        elif delta < 0:
+            icon = "▼"
+            color = "red"
+
+    # Use columns for layout: [icon] [label & value]
+    icon_col, content_col = st.columns([0.1, 0.9], gap="small")
+
+    with icon_col:
+        st.markdown(f'<p style="color:{color}; font-size: 24px; text-align: right; margin-top: -10px;">{icon}</p>', unsafe_allow_html=True)
+
+    with content_col:
+        st.markdown(f"**{label}**")
+        st.markdown(f"### {value}")
         
 # --- Definitive Aspect Extraction Function ---
 @st.cache_data
@@ -141,18 +166,18 @@ def main():
         image_url_a = (product_a_details.get('image_urls') or '').split(',')[0]
         if image_url_a: st.image(image_url_a, use_container_width=True)
 
-        # 2x2 grid for metrics
+        # 2x2 grid for metrics using the new custom function
         row1_c1, row1_c2 = st.columns(2)
         with row1_c1:
-            st.metric("Average Rating", f"{avg_rating_a:.2f} ⭐", delta=f"{avg_rating_a - avg_rating_b:.2f}")
+            render_custom_metric("Average Rating", f"{avg_rating_a:.2f} ⭐", delta=avg_rating_a - avg_rating_b)
         with row1_c2:
-            st.metric("Avg. Sentiment", f"{avg_sentiment_a:.2f}", delta=f"{avg_sentiment_a - avg_sentiment_b:.2f}")
+            render_custom_metric("Avg. Sentiment", f"{avg_sentiment_a:.2f}", delta=avg_sentiment_a - avg_sentiment_b)
 
         row2_c1, row2_c2 = st.columns(2)
         with row2_c1:
-            st.metric("Reviewer Consensus", consensus_a)
+            render_custom_metric("Reviewer Consensus", consensus_a) # No delta for this one
         with row2_c2:
-            st.metric("Verified Purchases", f"{verified_a:.1f}%", delta=f"{verified_a - verified_b:.1f}%")
+            render_custom_metric("Verified Purchases", f"{verified_a:.1f}%", delta=verified_a - verified_b)
 
     # --- Column 2: Product B ---
     with col2:
@@ -160,18 +185,18 @@ def main():
         image_url_b = (product_b_details.get('image_urls') or '').split(',')[0]
         if image_url_b: st.image(image_url_b, use_container_width=True)
 
-        # 2x2 grid for metrics
+        # 2x2 grid for metrics using the new custom function
         row1_c1, row1_c2 = st.columns(2)
         with row1_c1:
-            st.metric("Average Rating", f"{avg_rating_b:.2f} ⭐", delta=f"{avg_rating_b - avg_rating_a:.2f}")
+            render_custom_metric("Average Rating", f"{avg_rating_b:.2f} ⭐", delta=avg_rating_b - avg_rating_a)
         with row1_c2:
-            st.metric("Avg. Sentiment", f"{avg_sentiment_b:.2f}", delta=f"{avg_sentiment_b - avg_sentiment_a:.2f}")
+            render_custom_metric("Avg. Sentiment", f"{avg_sentiment_b:.2f}", delta=avg_sentiment_b - avg_sentiment_a)
 
         row2_c1, row2_c2 = st.columns(2)
         with row2_c1:
-            st.metric("Reviewer Consensus", consensus_b)
+            render_custom_metric("Reviewer Consensus", consensus_b) # No delta for this one
         with row2_c2:
-            st.metric("Verified Purchases", f"{verified_b:.1f}%", delta=f"{verified_b - verified_a:.1f}%")
+            render_custom_metric("Verified Purchases", f"{verified_b:.1f}%", delta=verified_b - verified_a)
         
     st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
