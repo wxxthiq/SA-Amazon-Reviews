@@ -163,8 +163,7 @@ def main():
                 st.markdown("**⭐ Rating Distribution**")
             with icon_c1:
                 clickable_help_icon("Rating") # The button to toggle the help text
-
-            # --- Conditional Help Text Container ---
+     -
             if st.session_state.get('active_help_topic') == "Rating":
                 with st.container(border=True):
                     st.markdown("##### What am I looking at?")
@@ -179,6 +178,10 @@ def main():
                 rating_counts_df = chart_data['rating'].value_counts().reset_index()
                 rating_counts_df.columns = ['rating', 'count']
                 rating_counts_df['rating_cat'] = rating_counts_df['rating'].astype(str) + ' ⭐'
+                
+                # --- NEW: Calculate percentage for tooltip ---
+                total_reviews = rating_counts_df['count'].sum()
+                rating_counts_df['percentage'] = rating_counts_df['count'] / total_reviews if total_reviews > 0 else 0
             
                 bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(
                     x=alt.X('sum(count)', stack='normalize', axis=alt.Axis(title='Percentage', format='%')),
@@ -187,7 +190,12 @@ def main():
                                                     range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
                                     legend=alt.Legend(title="Rating")),
                     order=alt.Order('rating_cat', sort='descending'),
-                    tooltip=[alt.Tooltip('rating_cat', title='Rating'), alt.Tooltip('count', title='Reviews')]
+                    # --- MODIFIED: Added percentage to tooltip ---
+                    tooltip=[
+                        alt.Tooltip('rating_cat', title='Rating'),
+                        alt.Tooltip('count', title='Reviews'),
+                        alt.Tooltip('percentage:Q', title='Share', format='.1%')
+                    ]
                 ).properties(height=100)
                 st.altair_chart(bar_chart, use_container_width=True)
 
@@ -214,6 +222,10 @@ def main():
             if not chart_data.empty:
                 sentiment_counts_df = chart_data['sentiment'].value_counts().reset_index()
                 sentiment_counts_df.columns = ['sentiment', 'count']
+                
+                # --- NEW: Calculate percentage for tooltip ---
+                total_sentiments = sentiment_counts_df['count'].sum()
+                sentiment_counts_df['percentage'] = sentiment_counts_df['count'] / total_sentiments if total_sentiments > 0 else 0
             
                 bar_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
                     x=alt.X('sum(count)', stack='normalize', axis=alt.Axis(title='Percentage', format='%')),
@@ -222,7 +234,12 @@ def main():
                                                     range=['#1a9850', '#cccccc', '#d73027']),
                                     legend=alt.Legend(title="Sentiment")),
                     order=alt.Order('sentiment', sort='descending'),
-                    tooltip=[alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('count', title='Reviews')]
+                    # --- MODIFIED: Added percentage to tooltip ---
+                    tooltip=[
+                        alt.Tooltip('sentiment', title='Sentiment'),
+                        alt.Tooltip('count', title='Reviews'),
+                        alt.Tooltip('percentage:Q', title='Share', format='.1%')
+                    ]
                 ).properties(height=100)
                 st.altair_chart(bar_chart, use_container_width=True)
                 
