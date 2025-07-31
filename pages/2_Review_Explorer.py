@@ -204,7 +204,7 @@ def main():
             all_filtered_df_for_plot['rating_jittered'] = all_filtered_df_for_plot['rating'] + rng.uniform(-0.1, 0.1, size=len(all_filtered_df_for_plot))
             all_filtered_df_for_plot['text_polarity_jittered'] = all_filtered_df_for_plot['sentiment_score'] + rng.uniform(-0.02, 0.02, size=len(all_filtered_df_for_plot))
             all_filtered_df_for_plot['text_polarity'] = all_filtered_df_for_plot['sentiment_score']
-            all_filtered_df['discrepancy'] = (all_filtered_df_for_plot['text_polarity'] - ((all_filtered_df_for_plot['rating'] - 3) / 2.0)).abs()
+            all_filtered_df_for_plot['discrepancy'] = (all_filtered_df_for_plot['text_polarity'] - ((all_filtered_df_for_plot['rating'] - 3) / 2.0)).abs()
     
             plot_col, review_col = st.columns([2, 1])
             with plot_col:
