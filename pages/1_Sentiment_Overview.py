@@ -41,15 +41,16 @@ def render_help_popover(title, what, how, learn):
                 st.markdown("##### What can I learn?")
                 st.markdown(learn)
                 
-def render_help_expander(icon, title, what, how, learn):
-    """Creates a standardized, collapsible help section with an icon."""
-    with st.expander(f"{icon} **{title}**"):
-        st.markdown("##### What am I looking at?")
-        st.markdown(what)
-        st.markdown("##### How do I use it?")
-        st.markdown(how)
-        st.markdown("##### What can I learn?")
-        st.markdown(learn)    
+# --- NEW: Clickable Icon and State Management Function ---
+def clickable_help_icon(topic: str):
+    """Creates a clickable help icon that toggles a help topic in session state."""
+    # Use a unique key for each button
+    if st.button("ⓘ", key=f"help_{topic}", help=f"Click to see details about the {topic} chart"):
+        # If the button is clicked, toggle the state for this topic
+        if st.session_state.get('active_help_topic') == topic:
+            st.session_state['active_help_topic'] = None # Hide if it's already active
+        else:
+            st.session_state['active_help_topic'] = topic # Show this topic
         
 @st.cache_resource
 def load_spacy_model():
@@ -153,79 +154,77 @@ def main():
                 help="This measures how much agreement there is in the star ratings. 'Consistent' means most ratings are similar, while 'Polarizing' means there are many high and low ratings with few in the middle."
             )
         st.markdown("---")
-        dist_col1, dist_col2, dist_col3 = st.columns(3)
-        with dist_col1:
-            render_help_expander(
-                icon="⭐",
-                title="Rating Distribution",
-                what="This donut chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.",
-                how="Hover over a segment to see the specific rating, the number of reviews, and its percentage of the total.",
-                learn="Quickly see if a product is generally well-liked (large green segments) or has significant issues (visible red segments)."
-            )
+        # --- MODIFIED: Create a 3-column layout for charts and help panel ---
+        chart_col1, chart_col2, help_col = st.columns([0.35, 0.35, 0.3])
+
+        # --- Column 1: Rating Distribution Chart ---
+        with chart_col1:
+            # --- MODIFIED: Title and clickable icon in a new layout ---
+            title_c1, icon_c1 = st.columns([0.9, 0.1])
+            with title_c1:
+                st.markdown("**⭐ Rating Distribution**")
+            with icon_c1:
+                clickable_help_icon("Rating")
+
             if not chart_data.empty:
+                # This is the donut chart code from our previous step. No changes needed here.
                 rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
                 rating_counts_df.columns = ['rating', 'count']
-                
-                # --- NEW: Calculate percentage ---
                 total_reviews = rating_counts_df['count'].sum()
-                rating_counts_df['percentage'] = (rating_counts_df['count'] / total_reviews) * 100
+                rating_counts_df['percentage'] = (rating_counts_df['count'] / total_reviews)
                 rating_counts_df['rating_cat'] = rating_counts_df['rating'].astype(str) + ' ⭐'
-
-                donut_chart = alt.Chart(rating_counts_df).mark_arc(
-                    # --- MODIFIED: Explicitly set outerRadius for consistent thickness ---
-                    innerRadius=70,
-                    outerRadius=110 
-                ).encode(
+                donut_chart = alt.Chart(rating_counts_df).mark_arc(innerRadius=70, outerRadius=110).encode(
                     theta=alt.Theta(field="count", type="quantitative"),
-                    color=alt.Color('rating_cat:N',
-                                    scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'],
-                                                    range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
-                                    legend=alt.Legend(title="Rating", orient="right")),
-                    # --- MODIFIED: Added percentage to tooltip ---
-                    tooltip=[
-                        alt.Tooltip('rating_cat', title='Rating'),
-                        alt.Tooltip('count', title='Reviews'),
-                        alt.Tooltip('percentage:Q', title='Share', format='.1f')
-                    ]
+                    color=alt.Color('rating_cat:N', scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']), legend=alt.Legend(title="Rating", orient="right")),
+                    tooltip=[alt.Tooltip('rating_cat', title='Rating'), alt.Tooltip('count', title='Reviews'), alt.Tooltip('percentage:Q', title='Share', format='.1%')]
                 ).properties(height=250)
-
                 st.altair_chart(donut_chart, use_container_width=True)
-        with dist_col2:
-            render_help_expander(
-                icon="😊",
-                title="Sentiment Distribution",
-                what="This chart shows the breakdown of reviews by their automatically detected sentiment (Positive, Negative, or Neutral).",
-                how="Hover over a segment to see the sentiment, the number of reviews, and its percentage of the total.",
-                learn="Understand the overall feeling of the reviews. A large red segment might indicate widespread problems."
-            )
+
+        # --- Column 2: Sentiment Distribution Chart ---
+        with chart_col2:
+            # --- MODIFIED: Title and clickable icon in a new layout ---
+            title_c2, icon_c2 = st.columns([0.9, 0.1])
+            with title_c2:
+                st.markdown("**😊 Sentiment Distribution**")
+            with icon_c2:
+                clickable_help_icon("Sentiment")
+
             if not chart_data.empty:
+                # This is the donut chart code from our previous step. No changes needed here.
                 sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
                 sentiment_counts_df.columns = ['sentiment', 'count']
-
-                # --- NEW: Calculate percentage ---
                 total_sentiments = sentiment_counts_df['count'].sum()
-                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / total_sentiments) * 100
-
-                donut_chart = alt.Chart(sentiment_counts_df).mark_arc(
-                    # --- MODIFIED: Explicitly set outerRadius for consistent thickness ---
-                    innerRadius=70,
-                    outerRadius=110
-                ).encode(
+                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / total_sentiments)
+                donut_chart = alt.Chart(sentiment_counts_df).mark_arc(innerRadius=70, outerRadius=110).encode(
                     theta=alt.Theta(field="count", type="quantitative"),
-                    color=alt.Color('sentiment:N',
-                                    scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
-                                                    range=['#1a9850', '#cccccc', '#d73027']),
-                                    legend=alt.Legend(title="Sentiment", orient="right")),
-                    # --- MODIFIED: Added percentage to tooltip ---
-                    tooltip=[
-                        alt.Tooltip('sentiment', title='Sentiment'),
-                        alt.Tooltip('count', title= 'Reviews'),
-                        alt.Tooltip('percentage:Q', title='Share', format='.1f')
-                    ]
+                    color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment", orient="right")),
+                    tooltip=[alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('count', title='Reviews'), alt.Tooltip('percentage:Q', title='Share', format='.1%')]
                 ).properties(height=250)
-                
-                st.altair_chart(donut_chart, use_container_width=True) 
-                
+                st.altair_chart(donut_chart, use_container_width=True)
+
+        # --- Column 3: Context-Sensitive Help Panel ---
+        with help_col:
+            st.markdown("##### ") # Vertical spacer
+            active_topic = st.session_state.get('active_help_topic')
+            if active_topic == "Rating":
+                with st.container(border=True):
+                    st.markdown("##### What am I looking at?")
+                    st.markdown("This donut chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.")
+                    st.markdown("##### How do I use it?")
+                    st.markdown("Hover over a segment to see the specific rating, the number of reviews, and its percentage of the total.")
+                    st.markdown("##### What can I learn?")
+                    st.markdown("Quickly see if a product is generally well-liked (large green segments) or has significant issues (visible red segments).")
+            elif active_topic == "Sentiment":
+                with st.container(border=True):
+                    st.markdown("##### What am I looking at?")
+                    st.markdown("This chart shows the breakdown of reviews by their automatically detected sentiment (Positive, Negative, or Neutral).")
+                    st.markdown("##### How do I use it?")
+                    st.markdown("Hover over a segment to see the sentiment, the number of reviews, and its percentage of the total.")
+                    st.markdown("##### What can I learn?")
+                    st.markdown("Understand the overall feeling of the reviews. A large red segment might indicate widespread problems.")
+            else:
+                 st.info("Click an 'ⓘ' icon next to a chart to see details here.")
+
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
         st.stop()
