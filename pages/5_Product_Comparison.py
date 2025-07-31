@@ -65,91 +65,103 @@ def main():
         # --- Add the back button here ---
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
+    # --- 1. Load Product A (from session state) ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
-        st.warning("Please select a product from the main search page first to begin a comparison.")
+        st.warning("Please select a product from the main search page first.")
         st.stop()
-    
     product_a_asin = st.session_state.selected_product
     product_a_details = get_product_details(conn, product_a_asin).iloc[0]
 
-    # --- Product B Selection ---
+    # --- 2. Product B Selection UI in Sidebar ---
     st.sidebar.header("Select Product to Compare")
-    all_products_df = get_filtered_products(conn, product_a_details['category'], "", "Popularity (Most Reviews)", None, None, 1000, 0)[0]
+    all_products_df, _ = get_filtered_products(conn, product_a_details['category'], "", "Popularity (Most Reviews)", None, None, 1000, 0)
     product_b_options = all_products_df[all_products_df['parent_asin'] != product_a_asin]
+
     selected_product_b_title = st.sidebar.selectbox(
         f"Select a product from the '{product_a_details['category']}' category:",
-        options=product_b_options['product_title'].tolist(),
-        index=0, key="product_b_selector"
+        options=["--- Select a Product ---"] + product_b_options['product_title'].tolist(),
+        key="product_b_selector"
     )
+
+    # --- Only render the comparison if Product B has been selected ---
+    if selected_product_b_title == "--- Select a Product ---":
+        st.info("Select a product from the sidebar to begin the comparison.")
+        st.stop()
+
+    # --- Load Product B Details ---
     product_b_asin = product_b_options[product_b_options['product_title'] == selected_product_b_title]['parent_asin'].iloc[0]
     product_b_details = get_product_details(conn, product_b_asin).iloc[0]
 
-    # --- Consistent Sidebar Filters ---
+    # Use a shared set of filters for a fair comparison
     st.sidebar.header("🔬 Comparison Filters")
     min_date_a, max_date_a = get_product_date_range(conn, product_a_asin)
     min_date_b, max_date_b = get_product_date_range(conn, product_b_asin)
-    
     selected_date_range = st.sidebar.date_input("Filter by Date Range", value=(min(min_date_a, min_date_b), max(max_date_a, max_date_b)), key='compare_date_filter')
     selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=[1, 2, 3, 4, 5], default=[1, 2, 3, 4, 5], key='compare_rating_filter')
-    selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=['Positive', 'Negative', 'Neutral'], default=['Positive', 'Negative', 'Neutral'], key='compare_sentiment_filter')
-    selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='compare_verified_filter')
 
-    # --- Load Filtered Data for Both Products ---
-    product_a_reviews = get_reviews_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
-    product_b_reviews = get_reviews_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+    # Load review data for both products using the shared filters
+    product_a_reviews = get_reviews_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), (), "All")
+    product_b_reviews = get_reviews_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), (), "All")
 
-# Helper function to interpret standard deviation
-    def get_rating_consensus(std_dev):
-        if std_dev is None or pd.isna(std_dev):
-            return "N/A"
-        if std_dev < 1.1:
-            return "✅ Consistent"
-        elif std_dev < 1.4:
-            return "↔️ Mixed"
-        else:
-            return "⚠️ Polarizing"
+    # =================================================================
+    # SECTION 1: AT A GLANCE
+    # =================================================================
+    st.markdown("---")
+    st.header("⭐ At a Glance")
 
+    # --- Data Calculation ---
+    # Product A
+    avg_rating_a = product_a_details.get('average_rating', 0)
+    avg_sentiment_a = product_a_reviews['sentiment_score'].mean() if not product_a_reviews.empty else 0
+    consensus_a = get_rating_consensus(product_a_reviews['rating'].std()) if not product_a_reviews.empty and len(product_a_reviews) > 1 else "N/A"
+    verified_a = (product_a_reviews['verified_purchase'].sum() / len(product_a_reviews)) * 100 if not product_a_reviews.empty else 0
+
+    # Product B
+    avg_rating_b = product_b_details.get('average_rating', 0)
+    avg_sentiment_b = product_b_reviews['sentiment_score'].mean() if not product_b_reviews.empty else 0
+    consensus_b = get_rating_consensus(product_b_reviews['rating'].std()) if not product_b_reviews.empty and len(product_b_reviews) > 1 else "N/A"
+    verified_b = (product_b_reviews['verified_purchase'].sum() / len(product_b_reviews)) * 100 if not product_b_reviews.empty else 0
+
+    # --- Display Layout ---
     col1, col2 = st.columns(2)
 
-    # --- Product A Display ---
+    # --- Column 1: Product A ---
     with col1:
         st.subheader(product_a_details['product_title'])
-        
-        # Image Display
-        image_urls_str_a = product_a_details.get('image_urls')
-        image_urls_a = image_urls_str_a.split(',') if pd.notna(image_urls_str_a) and image_urls_str_a else []
-        if image_urls_a:
-            st.image(image_urls_a[0], use_container_width=True)
+        image_url_a = (product_a_details.get('image_urls') or '').split(',')[0]
+        if image_url_a: st.image(image_url_a, use_container_width=True)
 
-        # Metrics Display
-        m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Average Rating", f"{product_a_details.get('average_rating', 0):.2f} ⭐")
-        m_col2.metric("Filtered Reviews", f"{len(product_a_reviews):,}")
-        
-        if not product_a_reviews.empty and len(product_a_reviews) > 1:
-            std_dev_a = product_a_reviews['rating'].std()
-            consensus_a = get_rating_consensus(std_dev_a)
-            m_col3.metric("Consensus", consensus_a, help=f"Std. Dev: {std_dev_a:.2f}")
+        # 2x2 grid for metrics
+        row1_c1, row1_c2 = st.columns(2)
+        with row1_c1:
+            st.metric("Average Rating", f"{avg_rating_a:.2f} ⭐", delta=f"{avg_rating_a - avg_rating_b:.2f}")
+        with row1_c2:
+            st.metric("Avg. Sentiment", f"{avg_sentiment_a:.2f}", delta=f"{avg_sentiment_a - avg_sentiment_b:.2f}")
 
-    # --- Product B Display ---
+        row2_c1, row2_c2 = st.columns(2)
+        with row2_c1:
+            st.metric("Reviewer Consensus", consensus_a)
+        with row2_c2:
+            st.metric("Verified Purchases", f"{verified_a:.1f}%", delta=f"{verified_a - verified_b:.1f}%")
+
+    # --- Column 2: Product B ---
     with col2:
         st.subheader(product_b_details['product_title'])
+        image_url_b = (product_b_details.get('image_urls') or '').split(',')[0]
+        if image_url_b: st.image(image_url_b, use_container_width=True)
 
-        # Image Display
-        image_urls_str_b = product_b_details.get('image_urls')
-        image_urls_b = image_urls_str_b.split(',') if pd.notna(image_urls_str_b) and image_urls_str_b else []
-        if image_urls_b:
-            st.image(image_urls_b[0], use_container_width=True)
-            
-        # Metrics Display
-        m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Average Rating", f"{product_b_details.get('average_rating', 0):.2f} ⭐")
-        m_col2.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
+        # 2x2 grid for metrics
+        row1_c1, row1_c2 = st.columns(2)
+        with row1_c1:
+            st.metric("Average Rating", f"{avg_rating_b:.2f} ⭐", delta=f"{avg_rating_b - avg_rating_a:.2f}")
+        with row1_c2:
+            st.metric("Avg. Sentiment", f"{avg_sentiment_b:.2f}", delta=f"{avg_sentiment_b - avg_sentiment_a:.2f}")
 
-        if not product_b_reviews.empty and len(product_b_reviews) > 1:
-            std_dev_b = product_b_reviews['rating'].std()
-            consensus_b = get_rating_consensus(std_dev_b)
-            m_col3.metric("Consensus", consensus_b, help=f"Std. Dev: {std_dev_b:.2f}")
+        row2_c1, row2_c2 = st.columns(2)
+        with row2_c1:
+            st.metric("Reviewer Consensus", consensus_b)
+        with row2_c2:
+            st.metric("Verified Purchases", f"{verified_b:.1f}%", delta=f"{verified_b - verified_a:.1f}%")
         
     st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
