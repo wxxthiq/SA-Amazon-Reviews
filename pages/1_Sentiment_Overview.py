@@ -207,7 +207,7 @@ def main():
                     # --- MODIFIED: Added percentage to tooltip ---
                     tooltip=[
                         alt.Tooltip('sentiment', title='Sentiment'),
-                        alt.Tooltip('count', 'Reviews'),
+                        alt.Tooltip('count', title= 'Reviews'),
                         alt.Tooltip('percentage:Q', title='Share', format='.1f')
                     ]
                 ).properties(height=250)
