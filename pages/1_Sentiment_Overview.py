@@ -160,7 +160,7 @@ def main():
                 rating_counts_df['rating_cat'] = rating_counts_df['rating'].astype(str) + ' ⭐'
                 
                 donut_chart = alt.Chart(rating_counts_df).mark_arc(innerRadius=70).encode(
-                    theta=alt.Theta(field="count", type="quantitative"),
+                    theta=alt.Theta(field="count", type="quantitative", stack=True),
                     color=alt.Color('rating_cat:N',
                                     scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'],
                                                     range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
@@ -182,7 +182,7 @@ def main():
                 sentiment_counts_df.columns = ['sentiment', 'count']
 
                 donut_chart = alt.Chart(sentiment_counts_df).mark_arc(innerRadius=70).encode(
-                    theta=alt.Theta(field="count", type="quantitative"),
+                    theta=alt.Theta(field="count", type="quantitative", stack=True),
                     color=alt.Color('sentiment:N',
                                     scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
                                                     range=['#1a9850', '#cccccc', '#d73027']),
