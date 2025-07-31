@@ -149,16 +149,20 @@ def main():
                 st.session_state.product_b_asin = None
                 st.rerun()
     if st.session_state.product_b_asin:
+        # --- Load Product B Details here, so it's available for all sub-sections ---
+        product_b_details = get_product_details(conn, st.session_state.product_b_asin).iloc[0]
+    
         # Use a shared set of filters for a fair comparison
         st.sidebar.header("🔬 Comparison Filters")
         min_date_a, max_date_a = get_product_date_range(conn, product_a_asin)
-        min_date_b, max_date_b = get_product_date_range(conn, product_b_asin)
+        # --- FIXED: Use the session_state variable ---
+        min_date_b, max_date_b = get_product_date_range(conn, st.session_state.product_b_asin)
         selected_date_range = st.sidebar.date_input("Filter by Date Range", value=(min(min_date_a, min_date_b), max(max_date_a, max_date_b)), key='compare_date_filter')
         selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=[1, 2, 3, 4, 5], default=[1, 2, 3, 4, 5], key='compare_rating_filter')
     
         # Load review data for both products using the shared filters
         product_a_reviews = get_reviews_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), (), "All")
-        product_b_reviews = get_reviews_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), (), "All")
+        product_b_reviews = get_reviews_for_product(conn, st.session_state.product_b_asin, selected_date_range, tuple(selected_ratings), (), "All")
     
         # =================================================================
         # SECTION 1: AT A GLANCE
