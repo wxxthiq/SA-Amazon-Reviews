@@ -28,7 +28,7 @@ def main():
 
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
-    title_col, help_col = st.columns([0.9, 0.1])
+    title_col, help_col = st.columns([10, 1])
     with title_col:
         st.markdown("# 📝 Review Explorer") # Use markdown for H1 title
     with help_col:
