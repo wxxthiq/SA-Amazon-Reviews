@@ -433,7 +433,7 @@ def main():
                 x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
                 color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
                 tooltip=[alt.Tooltip('aspect', title='Aspect'), alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('sum(count):Q', title='Review Count')]
-            ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})", height = 200)
+            ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})", height = 400)
             st.altair_chart(chart, use_container_width=True)
             
         else:
