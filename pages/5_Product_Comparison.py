@@ -75,8 +75,6 @@ def display_product_metadata(column, product_details, metrics, other_metrics, ti
         
         # --- CHANGE 1: Set a fixed height for the image ---
         st.markdown(f'<div class="product-image"><img src="{image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL}" width="100%"></div>', unsafe_allow_html=True)
-
-        st.markdown("**Performance Summary (based on filters)**")
         
        # --- METRICS WITH HELP ICONS ---
         m_col1, m_col2, m_col3 = st.columns(3)
@@ -314,46 +312,57 @@ def main():
         st.info("These charts directly compare the proportion of sentiments and star ratings for each product based on your filters. Hover over the bars to see the raw counts.")
 
         chart_col1, chart_col2 = st.columns(2)
-        
+
         # --- Sentiment Comparison Chart ---
         with chart_col1:
-            counts_a = product_a_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-            dist_a = counts_a / counts_a.sum() if counts_a.sum() > 0 else counts_a
-            counts_b = product_b_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-            dist_b = counts_b / counts_b.sum() if counts_b.sum() > 0 else counts_b
-            
-            df_a = pd.DataFrame({'Proportion': dist_a, 'Count': counts_a}).reset_index(); df_a.columns = ['Sentiment', 'Proportion', 'Count']; df_a['Product'] = truncate_text(product_a_details['product_title'])
-            df_b = pd.DataFrame({'Proportion': dist_b, 'Count': counts_b}).reset_index(); df_b.columns = ['Sentiment', 'Proportion', 'Count']; df_b['Product'] = truncate_text(product_b_details['product_title'])
-            plot_df = pd.concat([df_a, df_b])
+            if not product_a_reviews.empty or not product_b_reviews.empty:
+                # Calculate proportions for each product
+                dist_a = product_a_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
+                counts_a = product_a_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
+                df_a = pd.DataFrame({'Proportion': dist_a, 'Count': counts_a}).reset_index(); df_a.columns = ['Sentiment', 'Proportion', 'Count']; df_a['Product'] = truncate_text(product_a_details['product_title'])
 
-            sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
-                x=alt.X('Sentiment:N', title="Sentiment", sort=['Positive', 'Neutral', 'Negative']),
-                y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
-                color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])),
-                xOffset='Product:N',
-                tooltip=[alt.Tooltip('Product:N'), alt.Tooltip('Sentiment:N'), alt.Tooltip('Count:Q', title='Review Count'), alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')]
-            ).properties(title="Sentiment Comparison")
-            st.altair_chart(sentiment_chart, use_container_width=True)
+                dist_b = product_b_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
+                counts_b = product_b_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
+                df_b = pd.DataFrame({'Proportion': dist_b, 'Count': counts_b}).reset_index(); df_b.columns = ['Sentiment', 'Proportion', 'Count']; df_b['Product'] = truncate_text(product_b_details['product_title'])
+
+                plot_df = pd.concat([df_a, df_b])
+
+                sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
+                    x=alt.X('Sentiment:N', title="Sentiment", sort=['Positive', 'Neutral', 'Negative']),
+                    y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
+                    color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518']), legend=alt.Legend(title="Product")),
+                    xOffset='Product:N',
+                    tooltip=[alt.Tooltip('Product:N'), alt.Tooltip('Sentiment:N'), alt.Tooltip('Count:Q', title='Review Count'), alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')]
+                ).properties(title="Sentiment Comparison")
+                st.altair_chart(sentiment_chart, use_container_width=True)
+            else:
+                st.warning("No sentiment data to display for the selected filters.")
+
 
         # --- Rating Comparison Chart ---
         with chart_col2:
-            rating_counts_a = product_a_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
-            rating_dist_a = rating_counts_a / rating_counts_a.sum() if rating_counts_a.sum() > 0 else rating_counts_a
-            rating_counts_b = product_b_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
-            rating_dist_b = rating_counts_b / rating_counts_b.sum() if rating_counts_b.sum() > 0 else rating_counts_b
-            
-            df_a_ratings = pd.DataFrame({'Proportion': rating_dist_a, 'Count': rating_counts_a}).reset_index(); df_a_ratings.columns = ['Rating', 'Proportion', 'Count']; df_a_ratings['Product'] = truncate_text(product_a_details['product_title'])
-            df_b_ratings = pd.DataFrame({'Proportion': rating_dist_b, 'Count': rating_counts_b}).reset_index(); df_b_ratings.columns = ['Rating', 'Proportion', 'Count']; df_b_ratings['Product'] = truncate_text(product_b_details['product_title'])
-            plot_df_ratings = pd.concat([df_a_ratings, df_b_ratings])
+            if not product_a_reviews.empty or not product_b_reviews.empty:
+                # Calculate proportions for each product
+                dist_a_ratings = product_a_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
+                counts_a_ratings = product_a_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
+                df_a_ratings = pd.DataFrame({'Proportion': dist_a_ratings, 'Count': counts_a_ratings}).reset_index(); df_a_ratings.columns = ['Rating', 'Proportion', 'Count']; df_a_ratings['Product'] = truncate_text(product_a_details['product_title'])
 
-            rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
-                x=alt.X('Rating:O', title="Star Rating", sort=alt.EncodingSortField(field="Rating", order="descending")),
-                y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
-                color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])),
-                xOffset='Product:N',
-                tooltip=[alt.Tooltip('Product:N'), alt.Tooltip('Rating:O'), alt.Tooltip('Count:Q', title='Review Count'), alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')]
-            ).properties(title="Rating Comparison")
-            st.altair_chart(rating_chart, use_container_width=True)
+                dist_b_ratings = product_b_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
+                counts_b_ratings = product_b_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
+                df_b_ratings = pd.DataFrame({'Proportion': dist_b_ratings, 'Count': counts_b_ratings}).reset_index(); df_b_ratings.columns = ['Rating', 'Proportion', 'Count']; df_b_ratings['Product'] = truncate_text(product_b_details['product_title'])
+
+                plot_df_ratings = pd.concat([df_a_ratings, df_b_ratings])
+
+                rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
+                    x=alt.X('Rating:O', title="Star Rating", sort=alt.EncodingSortField(field="Rating", order="descending")),
+                    y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
+                    color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518']), legend=alt.Legend(title="Product")),
+                    xOffset='Product:N',
+                    tooltip=[alt.Tooltip('Product:N'), alt.Tooltip('Rating:O'), alt.Tooltip('Count:Q', title='Review Count'), alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')]
+                ).properties(title="Rating Comparison")
+                st.altair_chart(rating_chart, use_container_width=True)
+            else:
+                st.warning("No rating data to display for the selected filters.")
             
         # --- Feature-Level Performance: Comparative Radar Chart ---
         st.markdown("---")
