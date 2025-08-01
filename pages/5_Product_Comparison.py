@@ -307,12 +307,12 @@ def main():
 
         
         # --- RENDER COMPARISON CHARTS BELOW THE METADATA ---
-                # --- FEATURE-LEVEL PERFORMANCE (FINAL REVISION) ---
+                # --- FEATURE-LEVEL PERFORMANCE (FINAL LAYOUT) ---
         st.markdown("---")
         st.subheader("🔎 Feature-Level Performance")
         st.info(
             "This section compares sentiment towards features that are **common to both products**. "
-            "Use the controls to filter and select the features you want to compare."
+            "Expand the controls to filter and select the features you want to compare."
         )
 
         aspects_a = get_aspects_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
@@ -335,32 +335,24 @@ def main():
             common_aspects_b['Product'] = product_b_title
             combined_common_aspects_df = pd.concat([common_aspects_a, common_aspects_b])
 
-            # --- Main layout: 1/3 for controls, 2/3 for charts ---
-            control_col, chart_area_col = st.columns([1, 2])
-
-            with control_col:
-                st.markdown("**Comparison Controls**")
+            # --- Controls are now in an Expander on top ---
+            with st.expander("⚙️ Comparison Controls & Filters"):
                 min_mentions = st.slider(
                     "Minimum Mention Threshold:", 1, 100, 1,
                     key="aspect_mention_threshold",
                     help="Only show aspects with at least this many total mentions."
                 )
                 
-                # --- Filter aspects based on threshold BEFORE showing selection ---
                 total_counts = combined_common_aspects_df['aspect'].value_counts()
                 aspects_to_show = total_counts[total_counts >= min_mentions].index.tolist()
-
-                # --- Create formatted options for the multiselect ---
                 options_with_counts = {f"{aspect} ({total_counts[aspect]})": aspect for aspect in aspects_to_show}
 
-                # --- REPLACED SLIDER WITH MULTISELECT ---
                 selected_options = st.multiselect(
                     "Select aspects to display:",
                     options=options_with_counts.keys(),
-                    default=list(options_with_counts.keys())[:5], # Default to top 5
+                    default=list(options_with_counts.keys())[:5],
                     key="aspect_selector"
                 )
-                # Get the actual aspect names from the user's selection
                 final_aspects_to_display = [options_with_counts[key] for key in selected_options]
 
             # --- Data processing for charts ---
@@ -368,22 +360,41 @@ def main():
             if not chart_df.empty:
                 chart_df['Product'] = pd.Categorical(chart_df['Product'], categories=[product_a_title, product_b_title], ordered=True)
 
-            with chart_area_col:
-                if not chart_df.empty:
-                    bar_chart_col, radar_chart_col = st.columns(2)
-                    with bar_chart_col:
-                        st.markdown("**Aspect Sentiment Summary**")
+                # --- Chart Layout ---
+                bar_chart_col, radar_chart_col = st.columns(2)
+
+                with bar_chart_col:
+                    st.markdown("**Aspect Sentiment Summary**")
+                    if not chart_df.empty:
                         aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
                             x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
                             y=alt.Y('aspect:N', title=None, sort='-x'),
                             color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
                             row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=5)),
-                            tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
-                        ).properties(height=150).resolve_axis(y='independent')
+                            
+                            # --- ADDED PROPORTION TO TOOLTIP ---
+                            tooltip=[
+                                'Product', 'aspect', 'sentiment',
+                                alt.Tooltip('count()', title='Mentions'),
+                                alt.Tooltip('proportion:Q', title='Proportion', format='.1%')
+                            ]
+                        ).transform_joinaggregate(
+                            # Calculate the total mentions for each product's aspect bar
+                            total_in_bar='count()',
+                            groupby=['Product', 'aspect']
+                        ).transform_calculate(
+                            # Calculate the proportion for each sentiment within that bar
+                            proportion='1 / datum.total_in_bar'
+                        ).properties(
+                            height=150
+                        ).resolve_axis(
+                            y='independent'
+                        )
                         st.altair_chart(aspect_summary_chart, use_container_width=True)
 
-                    with radar_chart_col:
-                        st.markdown("**Sentiment Score Comparison**")
+                with radar_chart_col:
+                    st.markdown("**Sentiment Score Comparison**")
+                    if final_aspects_to_display:
                         aspects_a_with_scores = common_aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
                         aspects_b_with_scores = common_aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
                         
@@ -395,8 +406,8 @@ def main():
                         fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=product_b_title, marker_color='#f58518', opacity=0.7))
                         fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True, legend=dict(yanchor="bottom", y=-0.2, xanchor="center", x=0.5), margin=dict(l=20, r=20, t=40, b=20), height=350)
                         st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("Select one or more aspects from the list to display the charts.")
+            else:
+                st.warning("Select one or more aspects from the list to display the charts.")
         else:
             st.warning("Not enough aspect data for one or both products to generate a feature-level comparison.")
             
