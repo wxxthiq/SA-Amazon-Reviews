@@ -119,8 +119,31 @@ def main():
         if image_urls:
             with st.popover("🖼️ View Image Gallery"):
                 st.image(image_urls, use_container_width=True)
+                
+        # --- Start of Inserted Code ---
+        st.markdown("---")
+    
+        if pd.notna(product_details.get('description')):
+            with st.expander("Description"):
+                st.write(product_details['description'])
+    
+        if pd.notna(product_details.get('features')):
+            with st.expander("Features"):
+                features_list = json.loads(product_details['features'])
+                if features_list:
+                    for feature in features_list:
+                        st.markdown(f"- {feature}")
+    
+        if pd.notna(product_details.get('details')):
+                with st.expander("Product Details"):
+                    details_dict = json.loads(product_details['details'])
+                    if details_dict:
+                        st.json(details_dict)
+        
+        st.markdown("---")
+        # --- End of Inserted Code ---
+    
         # --- Navigation to Review Explorer ---
-        #st.subheader("📝 Browse Individual Reviews")
         if st.button("📝 Explore All Reviews"):
             st.switch_page("pages/2_Review_Explorer.py")
         if st.button("⚖️ Compare this Product"):
