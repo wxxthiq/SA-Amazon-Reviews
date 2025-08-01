@@ -484,100 +484,102 @@ def main():
                 st.plotly_chart(fig_sentiment_line, use_container_width=True)
 
         # --- Tab 2: Area Chart View ---
+        # --- Tab 2: Area Chart View (with corrected layout) ---
         with tab2:
-            st.markdown(
-                "<h5 style='text-align: center;'>Rating Distribution Over Time</h5>",
-                unsafe_allow_html=True,
-            )
-            rating_dist_trend = (
-                time_df.groupby(["period", "Product", "rating"])
-                .size()
-                .reset_index(name="count")
-            )
-            # Create a shared Y-axis scale
-            max_rating_count = rating_dist_trend["count"].max()
-            y_scale_rating = alt.Scale(domain=(0, max_rating_count))
+            # --- NEW: Create two columns for the charts ---
+            area_col1, area_col2 = st.columns(2)
 
-            rating_area_chart = (
-                alt.Chart(rating_dist_trend)
-                .mark_area()
-                .encode(
-                    x=alt.X("period:T", title="Date"),
-                    y=alt.Y(
-                        "count:Q",
-                        title="Number of Reviews",
-                        scale=y_scale_rating,
-                        stack=None,
-                    ),
-                    color=alt.Color(
-                        "rating:N",
-                        scale=alt.Scale(
-                            domain=[5, 4, 3, 2, 1],
-                            range=["#2ca02c", "#98df8a", "#ffdd71", "#ff9896", "#d62728"],
-                        ),
-                        legend=alt.Legend(title="Rating", orient="top"),
-                    ),
-                    facet=alt.Facet(
-                        "Product:N",
-                        title=None,
-                        header=alt.Header(labelOrient="top", labelFontSize=14),
-                    ),
-                    tooltip=["Product", "period", "rating", "count"],
+            with area_col1:
+                st.markdown(
+                    "<h5 style='text-align: center;'>Rating Distribution</h5>",
+                    unsafe_allow_html=True,
                 )
-                .properties(width=500, height=200)
-                .resolve_scale(y="shared")
-            )
-            st.altair_chart(rating_area_chart)
-
-            st.markdown("---")
-            st.markdown(
-                "<h5 style='text-align: center;'>Sentiment Distribution Over Time</h5>",
-                unsafe_allow_html=True,
-            )
-            sentiment_dist_trend = (
-                time_df.groupby(["period", "Product", "sentiment_score"])
-                .size()
-                .reset_index(name="count")
-            )
-            sentiment_dist_trend["sentiment"] = pd.cut(
-                sentiment_dist_trend["sentiment_score"],
-                bins=[-1.1, -0.3, 0.3, 1.1],
-                labels=["Negative", "Neutral", "Positive"],
-            )
-            # Create a shared Y-axis scale
-            max_sentiment_count = sentiment_dist_trend["count"].max()
-            y_scale_sentiment = alt.Scale(domain=(0, max_sentiment_count))
-
-            sentiment_area_chart = (
-                alt.Chart(sentiment_dist_trend)
-                .mark_area()
-                .encode(
-                    x=alt.X("period:T", title="Date"),
-                    y=alt.Y(
-                        "count:Q",
-                        title="Number of Reviews",
-                        scale=y_scale_sentiment,
-                        stack=None,
-                    ),
-                    color=alt.Color(
-                        "sentiment:N",
-                        scale=alt.Scale(
-                            domain=["Positive", "Neutral", "Negative"],
-                            range=["#1a9850", "#cccccc", "#d73027"],
-                        ),
-                        legend=alt.Legend(title="Sentiment", orient="top"),
-                    ),
-                    facet=alt.Facet(
-                        "Product:N",
-                        title=None,
-                        header=alt.Header(labelOrient="top", labelFontSize=14),
-                    ),
-                    tooltip=["Product", "period", "sentiment", "count"],
+                rating_dist_trend = (
+                    time_df.groupby(["period", "Product", "rating"])
+                    .size()
+                    .reset_index(name="count")
                 )
-                .properties(width=500, height=200)
-                .resolve_scale(y="shared")
-            )
+                max_rating_count = rating_dist_trend["count"].max()
+                y_scale_rating = alt.Scale(domain=(0, max_rating_count))
 
-            st.altair_chart(sentiment_area_chart)
+                rating_area_chart = (
+                    alt.Chart(rating_dist_trend)
+                    .mark_area(opacity=0.7)
+                    .encode(
+                        x=alt.X("period:T", title="Date"),
+                        y=alt.Y(
+                            "count:Q",
+                            title="Number of Reviews",
+                            scale=y_scale_rating,
+                            stack=None,
+                        ),
+                        color=alt.Color(
+                            "rating:N",
+                            scale=alt.Scale(
+                                domain=[5, 4, 3, 2, 1],
+                                range=["#2ca02c", "#98df8a", "#ffdd71", "#ff9896", "#d62728"],
+                            ),
+                            legend=alt.Legend(title="Rating", orient="top"),
+                        ),
+                        facet=alt.Facet(
+                            "Product:N",
+                            title=None,
+                            header=alt.Header(labelOrient="top", labelFontSize=14),
+                        ),
+                        tooltip=["Product", "period", "rating", "count"],
+                    )
+                    .properties(height=200)
+                    .resolve_scale(y="shared")
+                )
+                st.altair_chart(rating_area_chart, use_container_width=True)
+
+            with area_col2:
+                st.markdown(
+                    "<h5 style='text-align: center;'>Sentiment Distribution</h5>",
+                    unsafe_allow_html=True,
+                )
+                sentiment_dist_trend = (
+                    time_df.groupby(["period", "Product", "sentiment_score"])
+                    .size()
+                    .reset_index(name="count")
+                )
+                sentiment_dist_trend["sentiment"] = pd.cut(
+                    sentiment_dist_trend["sentiment_score"],
+                    bins=[-1.1, -0.3, 0.3, 1.1],
+                    labels=["Negative", "Neutral", "Positive"],
+                )
+                max_sentiment_count = sentiment_dist_trend["count"].max()
+                y_scale_sentiment = alt.Scale(domain=(0, max_sentiment_count))
+
+                sentiment_area_chart = (
+                    alt.Chart(sentiment_dist_trend)
+                    .mark_area(opacity=0.7)
+                    .encode(
+                        x=alt.X("period:T", title="Date"),
+                        y=alt.Y(
+                            "count:Q",
+                            title="Number of Reviews",
+                            scale=y_scale_sentiment,
+                            stack=None,
+                        ),
+                        color=alt.Color(
+                            "sentiment:N",
+                            scale=alt.Scale(
+                                domain=["Positive", "Neutral", "Negative"],
+                                range=["#1a9850", "#cccccc", "#d73027"],
+                            ),
+                            legend=alt.Legend(title="Sentiment", orient="top"),
+                        ),
+                        facet=alt.Facet(
+                            "Product:N",
+                            title=None,
+                            header=alt.Header(labelOrient="top", labelFontSize=14),
+                        ),
+                        tooltip=["Product", "period", "sentiment", "count"],
+                    )
+                    .properties(height=200)
+                    .resolve_scale(y="shared")
+                )
+                st.altair_chart(sentiment_area_chart, use_container_width=True)
 if __name__ == "__main__":
     main()
