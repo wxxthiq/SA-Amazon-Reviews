@@ -122,11 +122,10 @@ def main():
     
         if pd.notna(product_details.get('description')):
             with st.expander("Descripion & Features"):
-                st.write("Description:")
                 st.write(product_details['description'])
-                if pd.notna(product_details.get('features')):
-                    st.write("Features:")
-                    st.markdown(f"- {feature}")
+                # if pd.notna(product_details.get('features')):
+                #     st.write("Features:")
+                #     st.markdown(f"- {feature}")
     
         # --- Navigation to Review Explorer ---
         if st.button("📝 Explore All Reviews"):
