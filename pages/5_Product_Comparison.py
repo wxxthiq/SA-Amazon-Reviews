@@ -78,20 +78,23 @@ def display_product_metadata(column, product_details, metrics, other_metrics, ti
 
         st.markdown("**Performance Summary (based on filters)**")
         
-        # --- METRICS WITH DIFFERENTIALS ---
+       # --- METRICS WITH HELP ICONS ---
         m_col1, m_col2, m_col3 = st.columns(3)
 
         # Avg Rating
         delta_rating = None
         if other_metrics and metrics['avg_rating'] is not None and other_metrics['avg_rating'] is not None:
             delta_rating = metrics['avg_rating'] - other_metrics['avg_rating']
-        m_col1.metric("Avg. Rating", f"{metrics.get('avg_rating', 0):.2f} ⭐", delta=f"{delta_rating:.2f}" if delta_rating is not None else None)
+        m_col1.metric("Avg. Rating", f"{metrics.get('avg_rating', 0):.2f} ⭐", delta=f"{delta_rating:.2f}" if delta_rating is not None else None,
+                      help="The average star rating from all reviews for this product.")
 
         # Filtered Reviews
-        m_col2.metric("Filtered Reviews", f"{metrics.get('review_count', 0):,} 📝")
+        m_col2.metric("Filtered Reviews", f"{metrics.get('review_count', 0):,} 📝",
+                      help="The number of reviews that match the current filter settings in the sidebar.")
 
-        # Reviewer Consensus (no delta for text)
-        m_col3.metric("Reviewer Consensus", metrics.get('consensus', 'N/A'))
+        # Reviewer Consensus
+        m_col3.metric("Reviewer Consensus", metrics.get('consensus', 'N/A'),
+                      help="Measures agreement in star ratings. 'Consistent' means ratings are similar, while 'Polarizing' suggests many high and low ratings with few in the middle.")
         
         m_col4, m_col5 = st.columns(2)
         
@@ -99,16 +102,16 @@ def display_product_metadata(column, product_details, metrics, other_metrics, ti
         delta_verified = None
         if other_metrics and metrics['verified_rate'] is not None and other_metrics['verified_rate'] is not None:
             delta_verified = metrics['verified_rate'] - other_metrics['verified_rate']
-        m_col4.metric("Verified Rate", f"{metrics.get('verified_rate', 0):.1f}%", delta=f"{delta_verified:.1f}%" if delta_verified is not None else None)
+        m_col4.metric("Verified Rate", f"{metrics.get('verified_rate', 0):.1f}%", delta=f"{delta_verified:.1f}%" if delta_verified is not None else None,
+                      help="The percentage of filtered reviews that are from 'Verified Purchases'.")
 
         # Avg Sentiment
         sentiment_icon = get_sentiment_icon(metrics.get('avg_sentiment'))
         delta_sentiment = None
         if other_metrics and metrics['avg_sentiment'] is not None and other_metrics['avg_sentiment'] is not None:
             delta_sentiment = metrics['avg_sentiment'] - other_metrics['avg_sentiment']
-        
-        # --- CHANGE 2: Moved the icon from the label to the value string ---
-        m_col5.metric("Avg. Sentiment", f"{metrics.get('avg_sentiment', 0):.2f} {sentiment_icon}", delta=f"{delta_sentiment:.2f}" if delta_sentiment is not None else None)
+        m_col5.metric("Avg. Sentiment", f"{metrics.get('avg_sentiment', 0):.2f} {sentiment_icon}", delta=f"{delta_sentiment:.2f}" if delta_sentiment is not None else None,
+                      help="The average sentiment score of review text, from -1 (very negative) to +1 (very positive).")
 
 
         # --- CONSOLIDATED PRODUCT SPECIFICATIONS ---
