@@ -484,6 +484,7 @@ def main():
                 st.plotly_chart(fig_sentiment_line, use_container_width=True)
 
         # --- Tab 2: Area Chart View (with final bug fixes) ---
+                # --- Tab 2: Area Chart View (using Plotly Express) ---
         with tab2:
             area_col1, area_col2 = st.columns(2)
 
@@ -497,93 +498,64 @@ def main():
                     .size()
                     .reset_index(name="count")
                 )
-                max_rating_count = rating_dist_trend["count"].max()
-                y_scale_rating = alt.Scale(domain=(0, max_rating_count))
-
-                rating_area_chart = (
-                    alt.Chart(rating_dist_trend)
-                    .mark_area(opacity=0.7)
-                    .encode(
-                        # --- FIX 1: Corrected X-axis date format ---
-                        x=alt.X("period:T", title="Date", axis=alt.Axis(format="%b %Y")), # e.g., "Jan 2023"
-                        y=alt.Y(
-                            "count:Q",
-                            title="Number of Reviews",
-                            scale=y_scale_rating,
-                            stack=None,
-                        ),
-                        color=alt.Color(
-                            "rating:N",
-                            scale=alt.Scale(
-                                domain=[5, 4, 3, 2, 1],
-                                range=["#2ca02c", "#98df8a", "#ffdd71", "#ff9896", "#d62728"],
-                            ),
-                            legend=alt.Legend(title="Rating", orient="top"),
-                        ),
-                        facet=alt.Facet(
-                            "Product:N",
-                            title=None,
-                            header=alt.Header(labelOrient="top", labelFontSize=14),
-                        ),
-                        tooltip=["Product", "period", "rating", "count"],
-                    )
-                    .properties(height=200)
-                    .resolve_scale(y="shared")
+                
+                fig_rating_area = px.area(
+                    rating_dist_trend,
+                    x="period",
+                    y="count",
+                    color="rating",
+                    facet_row="Product",
+                    labels={"period": "Date", "count": "Number of Reviews", "rating": "Rating"},
+                    color_discrete_map={ # Using the same consistent color scheme
+                        5: "#2ca02c",
+                        4: "#98df8a",
+                        3: "#ffdd71",
+                        2: "#ff9896",
+                        1: "#d62728",
+                    },
+                    category_orders={"rating": [5, 4, 3, 2, 1]} # Ensures legend is sorted
                 )
-                st.altair_chart(rating_area_chart, use_container_width=True)
+                # Clean up the layout
+                fig_rating_area.update_layout(showlegend=True, legend_title_text='Rating', legend_orientation="h", legend_y=1.15)
+                fig_rating_area.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1])) # Clean facet titles
+                st.plotly_chart(fig_rating_area, use_container_width=True)
+
 
             with area_col2:
                 st.markdown(
                     "<h5 style='text-align: center;'>Sentiment Distribution</h5>",
                     unsafe_allow_html=True,
                 )
-                # --- FIX 2: Corrected data aggregation for sentiment ---
                 sentiment_dist_trend = time_df.copy()
                 sentiment_dist_trend["sentiment"] = pd.cut(
                     sentiment_dist_trend["sentiment_score"],
                     bins=[-1.1, -0.3, 0.3, 1.1],
                     labels=["Negative", "Neutral", "Positive"],
                 )
-                # Now group by the correct categorical 'sentiment' column
                 sentiment_agg_trend = (
                     sentiment_dist_trend.groupby(["period", "Product", "sentiment"])
                     .size()
                     .reset_index(name="count")
                 )
                 
-                max_sentiment_count = sentiment_agg_trend["count"].max()
-                y_scale_sentiment = alt.Scale(domain=(0, max_sentiment_count))
-
-                sentiment_area_chart = (
-                    alt.Chart(sentiment_agg_trend) # Use the correctly aggregated dataframe
-                    .mark_area(opacity=0.7)
-                    .encode(
-                        # --- FIX 1: Corrected X-axis date format ---
-                        x=alt.X("period:T", title="Date", axis=alt.Axis(format="%b %Y")),
-                        y=alt.Y(
-                            "count:Q",
-                            title="Number of Reviews",
-                            scale=y_scale_sentiment,
-                            stack=None,
-                        ),
-                        color=alt.Color(
-                            "sentiment:N",
-                            scale=alt.Scale(
-                                domain=["Positive", "Neutral", "Negative"],
-                                range=["#1a9850", "#cccccc", "#d73027"],
-                            ),
-                            legend=alt.Legend(title="Sentiment", orient="top"),
-                        ),
-                        facet=alt.Facet(
-                            "Product:N",
-                            title=None,
-                            header=alt.Header(labelOrient="top", labelFontSize=14),
-                        ),
-                        tooltip=["Product", "period", "sentiment", "count"],
-                    )
-                    .properties(height=200)
-                    .resolve_scale(y="shared")
+                fig_sentiment_area = px.area(
+                    sentiment_agg_trend,
+                    x="period",
+                    y="count",
+                    color="sentiment",
+                    facet_row="Product",
+                    labels={"period": "Date", "count": "Number of Reviews", "sentiment": "Sentiment"},
+                    color_discrete_map={ # Using the same consistent color scheme
+                        "Positive": "#1a9850",
+                        "Neutral": "#cccccc",
+                        "Negative": "#d73027",
+                    },
+                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
                 )
-                st.altair_chart(sentiment_area_chart, use_container_width=True)
+                # Clean up the layout
+                fig_sentiment_area.update_layout(showlegend=True, legend_title_text='Sentiment', legend_orientation="h", legend_y=1.15)
+                fig_sentiment_area.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1])) # Clean facet titles
+                st.plotly_chart(fig_sentiment_area, use_container_width=True)
+
 if __name__ == "__main__":
     main()
