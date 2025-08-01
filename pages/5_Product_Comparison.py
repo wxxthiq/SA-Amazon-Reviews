@@ -17,7 +17,7 @@ from utils.database_utils import (
 # --- Page Config & Constants ---
 st.set_page_config(layout="wide", page_title="Product Comparison")
 DB_PATH = "amazon_reviews_final.duckdb"
-PRODUCTS_PER_PAGE_COMPARE = 9
+PRODUCTS_PER_PAGE_COMPARE = 6
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 conn = connect_to_db(DB_PATH)
 
