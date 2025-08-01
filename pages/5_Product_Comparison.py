@@ -72,7 +72,9 @@ def display_product_metadata(column, product_details, metrics, other_metrics, ti
 
         image_urls_str = product_details.get('image_urls')
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
-        st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, use_container_width=True)
+        
+        # --- CHANGE 1: Set a fixed height for the image ---
+        st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, height=250)
 
         st.markdown("**Performance Summary (based on filters)**")
         
@@ -104,7 +106,9 @@ def display_product_metadata(column, product_details, metrics, other_metrics, ti
         delta_sentiment = None
         if other_metrics and metrics['avg_sentiment'] is not None and other_metrics['avg_sentiment'] is not None:
             delta_sentiment = metrics['avg_sentiment'] - other_metrics['avg_sentiment']
-        m_col5.metric(f"Avg. Sentiment {sentiment_icon}", f"{metrics.get('avg_sentiment', 0):.2f}", delta=f"{delta_sentiment:.2f}" if delta_sentiment is not None else None)
+        
+        # --- CHANGE 2: Moved the icon from the label to the value string ---
+        m_col5.metric("Avg. Sentiment", f"{metrics.get('avg_sentiment', 0):.2f} {sentiment_icon}", delta=f"{delta_sentiment:.2f}" if delta_sentiment is not None else None)
 
 
         # --- CONSOLIDATED PRODUCT SPECIFICATIONS ---
