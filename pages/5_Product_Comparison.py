@@ -136,13 +136,18 @@ def main():
     # --- Product A Display ---
     with col1:
         st.subheader(product_a_details['product_title'])
+
+        # Image Display
         image_urls_str_a = product_a_details.get('image_urls')
         image_urls_a = image_urls_str_a.split(',') if pd.notna(image_urls_str_a) and image_urls_str_a else []
         if image_urls_a:
             st.image(image_urls_a[0], use_container_width=True)
+
+        # Metrics Display
         m_col1, m_col2, m_col3 = st.columns(3)
         m_col1.metric("Average Rating", f"{product_a_details.get('average_rating', 0):.2f} ⭐")
         m_col2.metric("Filtered Reviews", f"{len(product_a_reviews):,}")
+
         if not product_a_reviews.empty and len(product_a_reviews) > 1:
             std_dev_a = product_a_reviews['rating'].std()
             consensus_a = get_rating_consensus(std_dev_a)
@@ -151,13 +156,18 @@ def main():
     # --- Product B Display ---
     with col2:
         st.subheader(product_b_details['product_title'])
+
+        # Image Display
         image_urls_str_b = product_b_details.get('image_urls')
         image_urls_b = image_urls_str_b.split(',') if pd.notna(image_urls_str_b) and image_urls_str_b else []
         if image_urls_b:
             st.image(image_urls_b[0], use_container_width=True)
+
+        # Metrics Display
         m_col1, m_col2, m_col3 = st.columns(3)
         m_col1.metric("Average Rating", f"{product_b_details.get('average_rating', 0):.2f} ⭐")
         m_col2.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
+
         if not product_b_reviews.empty and len(product_b_reviews) > 1:
             std_dev_b = product_b_reviews['rating'].std()
             consensus_b = get_rating_consensus(std_dev_b)
@@ -165,9 +175,9 @@ def main():
 
     st.markdown("---")
     st.markdown("### Overall Sentiment and Rating Comparison")
-    st.info("These charts directly compare the proportion of sentiments and star ratings for each product. Hover over the bars to see the raw counts and proportions.")
+    st.info("These charts directly compare the proportion of sentiments and star ratings for each product. Hover over the bars to see the raw counts.")
 
-    def truncate_text(text, max_length=25):
+    def truncate_text(text, max_length=10):
         """Helper function to truncate long text."""
         return text if len(text) <= max_length else text[:max_length] + "..."
 
@@ -176,47 +186,48 @@ def main():
 
     col1, col2 = st.columns(2)
 
-    # --- Grouped-Stacked Sentiment Bar Chart ---
     with col1:
         counts_a = product_a_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
+        dist_a = counts_a / counts_a.sum() if counts_a.sum() > 0 else counts_a
         counts_b = product_b_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
+        dist_b = counts_b / counts_b.sum() if counts_b.sum() > 0 else counts_b
 
-        df_a = pd.DataFrame({'Count': counts_a}).reset_index(); df_a.columns = ['Sentiment', 'Count']; df_a['Product'] = product_a_title
-        df_b = pd.DataFrame({'Count': counts_b}).reset_index(); df_b.columns = ['Sentiment', 'Count']; df_b['Product'] = product_b_title
+        df_a = pd.DataFrame({'Proportion': dist_a, 'Count': counts_a}).reset_index(); df_a.columns = ['Sentiment', 'Proportion', 'Count']; df_a['Product'] = product_a_title
+        df_b = pd.DataFrame({'Proportion': dist_b, 'Count': counts_b}).reset_index(); df_b.columns = ['Sentiment', 'Proportion', 'Count']; df_b['Product'] = product_b_title
         plot_df = pd.concat([df_a, df_b])
 
         sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
-            x=alt.X('Product:N', title=None, axis=alt.Axis(labels=False, ticks=False)),
-            y=alt.Y('sum(Count):Q', stack="normalize", title="Proportion of Reviews", axis=alt.Axis(format='%')),
-            color=alt.Color('Sentiment:N',
-                            scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']),
-                            legend=alt.Legend(title="Sentiment")),
+            x=alt.X('Sentiment:N', title="Sentiment", sort=['Positive', 'Neutral', 'Negative']),
+            y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
+            color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])),
+            xOffset='Product:N',
             tooltip=[
                 alt.Tooltip('Product:N'), alt.Tooltip('Sentiment:N'),
-                alt.Tooltip('sum(Count):Q', title='Review Count')
+                alt.Tooltip('Count:Q', title='Review Count'),
+                alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')
             ]
         ).properties(title="Sentiment Comparison")
         st.altair_chart(sentiment_chart, use_container_width=True)
 
-
-    # --- Grouped-Stacked Rating Bar Chart ---
     with col2:
         rating_counts_a = product_a_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
+        rating_dist_a = rating_counts_a / rating_counts_a.sum() if rating_counts_a.sum() > 0 else rating_counts_a
         rating_counts_b = product_b_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
+        rating_dist_b = rating_counts_b / rating_counts_b.sum() if rating_counts_b.sum() > 0 else rating_counts_b
 
-        df_a_ratings = pd.DataFrame({'Count': rating_counts_a}).reset_index(); df_a_ratings.columns = ['Rating', 'Count']; df_a_ratings['Product'] = product_a_title
-        df_b_ratings = pd.DataFrame({'Count': rating_counts_b}).reset_index(); df_b_ratings.columns = ['Rating', 'Count']; df_b_ratings['Product'] = product_b_title
+        df_a_ratings = pd.DataFrame({'Proportion': rating_dist_a, 'Count': rating_counts_a}).reset_index(); df_a_ratings.columns = ['Rating', 'Proportion', 'Count']; df_a_ratings['Product'] = product_a_title
+        df_b_ratings = pd.DataFrame({'Proportion': rating_dist_b, 'Count': rating_counts_b}).reset_index(); df_b_ratings.columns = ['Rating', 'Proportion', 'Count']; df_b_ratings['Product'] = product_b_title
         plot_df_ratings = pd.concat([df_a_ratings, df_b_ratings])
 
         rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
-            x=alt.X('Product:N', title=None, axis=alt.Axis(labels=False, ticks=False)),
-            y=alt.Y('sum(Count):Q', stack="normalize", title="Proportion of Reviews", axis=alt.Axis(format='%')),
-            color=alt.Color('Rating:O',
-                            scale=alt.Scale(domain=[5, 4, 3, 2, 1], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
-                            legend=alt.Legend(title="Star Rating")),
+            x=alt.X('Rating:O', title="Star Rating", sort=alt.EncodingSortField(field="Rating", order="descending")),
+            y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
+            color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])),
+            xOffset='Product:N',
             tooltip=[
                 alt.Tooltip('Product:N'), alt.Tooltip('Rating:O'),
-                alt.Tooltip('sum(Count):Q', title='Review Count')
+                alt.Tooltip('Count:Q', title='Review Count'),
+                alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')
             ]
         ).properties(title="Rating Comparison")
         st.altair_chart(rating_chart, use_container_width=True)
@@ -252,8 +263,8 @@ def main():
             avg_sent_a = aspects_a.groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
             avg_sent_b = aspects_b.groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
 
-            product_a_title_radar = truncate_text(product_a_details['product_title'])
-            product_b_title_radar = truncate_text(product_b_details['product_title'])
+            product_a_title = truncate_text(product_a_details['product_title'])
+            product_b_title = truncate_text(product_b_details['product_title'])
 
             fig = go.Figure()
 
@@ -261,7 +272,7 @@ def main():
                 r=avg_sent_a.values,
                 theta=avg_sent_a.index,
                 fill='toself',
-                name=product_a_title_radar,
+                name=product_a_title,
                 marker_color='#4c78a8',
                 opacity=0.7
             ))
@@ -269,7 +280,7 @@ def main():
                 r=avg_sent_b.values,
                 theta=avg_sent_b.index,
                 fill='toself',
-                name=product_b_title_radar,
+                name=product_b_title,
                 marker_color='#f58518',
                 opacity=0.7
             ))
