@@ -471,8 +471,6 @@ def main():
                 else:
                     st.warning("Not enough common features found to generate a radar chart comparison.")
 
-        else:
-            st.warning("Not enough aspect data for one or both products to generate a feature-level comparison.")
         # --- 2. Find Unique Aspects ---
         st.markdown("**Unique Differentiators**")
         st.info("These are the most frequently mentioned positive and negative features for one product that are **not** mentioned for the other.")
