@@ -393,7 +393,7 @@ def main():
                         
                         fig = go.Figure()
 
-                        # --- FIX: Added custom hovertemplate ---
+                        # --- FINAL FIX: Added Product Name to hovertemplate ---
                         fig.add_trace(go.Scatterpolar(
                             r=avg_sent_a.values,
                             theta=avg_sent_a.index,
@@ -401,7 +401,7 @@ def main():
                             name=product_a_title,
                             marker_color='#4c78a8',
                             opacity=0.7,
-                            hovertemplate='<b>Aspect</b>: %{theta}<br><b>Sentiment Score</b>: %{r:.2f}<extra></extra>'
+                            hovertemplate='<b>Product</b>: %{fullData.name}<br><b>Aspect</b>: %{theta}<br><b>Sentiment Score</b>: %{r:.2f}<extra></extra>'
                         ))
                         fig.add_trace(go.Scatterpolar(
                             r=avg_sent_b.values,
@@ -410,7 +410,7 @@ def main():
                             name=product_b_title,
                             marker_color='#f58518',
                             opacity=0.7,
-                            hovertemplate='<b>Aspect</b>: %{theta}<br><b>Sentiment Score</b>: %{r:.2f}<extra></extra>'
+                            hovertemplate='<b>Product</b>: %{fullData.name}<br><b>Aspect</b>: %{theta}<br><b>Sentiment Score</b>: %{r:.2f}<extra></extra>'
                         ))
                         
                         fig.update_layout(
