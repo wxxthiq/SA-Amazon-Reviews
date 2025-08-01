@@ -120,12 +120,13 @@ def main():
             with st.popover("🖼️ View Image Gallery"):
                 st.image(image_urls, use_container_width=True)
     
-        if pd.notna(product_details.get('description')):
-            with st.expander("Descripion & Features"):
-                st.write(product_details['description'])
-                # if pd.notna(product_details.get('features')):
-                #     st.write("Features:")
-                #     st.markdown(f"- {feature}")
+        
+        with st.expander("Descripion & Features"):
+            if pd.notna(product_details.get('description')):
+            st.write(product_details['description'])
+                if pd.notna(product_details.get('features')):
+                st.write("Features:")
+                st.markdown(f"- {feature}")
     
         # --- Navigation to Review Explorer ---
         if st.button("📝 Explore All Reviews"):
