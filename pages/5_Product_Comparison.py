@@ -392,9 +392,34 @@ def main():
                         avg_sent_b = aspects_b_with_scores[aspects_b_with_scores['aspect'].isin(final_aspects_to_display)].groupby('aspect')['sentiment_score'].mean().reindex(final_aspects_to_display, fill_value=0)
                         
                         fig = go.Figure()
-                        fig.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself', name=product_a_title, marker_color='#4c78a8', opacity=0.7))
-                        fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=product_b_title, marker_color='#f58518', opacity=0.7))
-                        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True, legend=dict(yanchor="bottom", y=-0.2, xanchor="center", x=0.5), margin=dict(l=20, r=20, t=40, b=20), height=350)
+
+                        # --- FIX: Added custom hovertemplate ---
+                        fig.add_trace(go.Scatterpolar(
+                            r=avg_sent_a.values,
+                            theta=avg_sent_a.index,
+                            fill='toself',
+                            name=product_a_title,
+                            marker_color='#4c78a8',
+                            opacity=0.7,
+                            hovertemplate='<b>Aspect</b>: %{theta}<br><b>Sentiment Score</b>: %{r:.2f}<extra></extra>'
+                        ))
+                        fig.add_trace(go.Scatterpolar(
+                            r=avg_sent_b.values,
+                            theta=avg_sent_b.index,
+                            fill='toself',
+                            name=product_b_title,
+                            marker_color='#f58518',
+                            opacity=0.7,
+                            hovertemplate='<b>Aspect</b>: %{theta}<br><b>Sentiment Score</b>: %{r:.2f}<extra></extra>'
+                        ))
+                        
+                        fig.update_layout(
+                            polar=dict(radialaxis=dict(visible=True, range=[-1, 1])),
+                            showlegend=True,
+                            legend=dict(yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            height=350
+                        )
                         st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("Select one or more aspects from the list to display the charts.")
