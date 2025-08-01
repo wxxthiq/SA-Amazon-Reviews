@@ -33,7 +33,7 @@ def init_session_state():
         st.session_state.compare_page = 0
 
 def display_product_metadata(column, product_details, reviews_df, title):
-    """Displays the complete metadata for a single product in a given column."""
+    """Displays the complete metadata for a single product, mirroring the overview page metrics."""
     with column:
         st.subheader(title)
         st.markdown(f"**{product_details['product_title']}**")
@@ -43,24 +43,27 @@ def display_product_metadata(column, product_details, reviews_df, title):
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
         st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, use_container_width=True)
 
-        # --- EXPANDED METRICS ---
-        st.markdown("**Overall Performance**")
+        # --- METRICS ALIGNED WITH OVERVIEW PAGE ---
+        st.markdown("**Performance Summary (based on filters)**")
         m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Avg. Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
         
-        # Calculate Verified Purchase Rate
-        if not reviews_df.empty:
-            verified_rate = (reviews_df['verified_purchase'].sum() / len(reviews_df)) * 100
-            m_col2.metric("Verified Rate", f"{verified_rate:.1f}%", help="The percentage of reviews from verified purchases.")
+        # Metric 1: Average Rating (from all reviews for the product)
+        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
+        
+        # Metric 2: Filtered Reviews Count
+        m_col2.metric("Filtered Reviews", f"{len(reviews_df):,} 📝")
+        
+        # Metric 3: Reviewer Consensus (calculated from filtered reviews)
+        if not reviews_df.empty and len(reviews_df) > 1:
+            rating_std_dev = reviews_df['rating'].std()
+            consensus_text = get_rating_consensus(rating_std_dev)
+            m_col3.metric(
+                "Reviewer Consensus",
+                consensus_text,
+                help="This measures how much agreement there is in the star ratings. 'Consistent' means most ratings are similar, while 'Polarizing' means there are many high and low ratings with few in the middle."
+            )
         else:
-            m_col2.metric("Verified Rate", "N/A")
-
-        # Calculate Average Sentiment Score
-        if not reviews_df.empty and 'sentiment_score' in reviews_df.columns:
-            avg_sentiment = reviews_df['sentiment_score'].mean()
-            m_col3.metric("Avg. Sentiment", f"{avg_sentiment:.2f}", help="The average sentiment score of review text, from -1 (Negative) to +1 (Positive).")
-        else:
-            m_col3.metric("Avg. Sentiment", "N/A")
+            m_col3.metric("Reviewer Consensus", "N/A")
 
 
         # --- CONSOLIDATED PRODUCT SPECIFICATIONS ---
@@ -76,20 +79,21 @@ def display_product_metadata(column, product_details, reviews_df, title):
                 st.markdown("---")
                 st.markdown("**Features**")
                 try:
-                    features_list = json.loads(product_details['features'])
+                    # Safely load JSON data
+                    features_list = json.loads(product_details['features']) if isinstance(product_details['features'], str) else product_details['features']
                     if features_list:
                         for feature in features_list:
                             st.markdown(f"- {feature}")
                 except (json.JSONDecodeError, TypeError):
                     st.write("Could not parse features.")
 
-
             # Details (e.g., tech specs)
             if pd.notna(product_details.get('details')):
                 st.markdown("---")
                 st.markdown("**Technical Details**")
                 try:
-                    details_dict = json.loads(product_details['details'])
+                    # Safely load JSON data
+                    details_dict = json.loads(product_details['details']) if isinstance(product_details['details'], str) else product_details['details']
                     if details_dict:
                         st.json(details_dict)
                 except (json.JSONDecodeError, TypeError):
@@ -97,7 +101,7 @@ def display_product_metadata(column, product_details, reviews_df, title):
 
 
         if st.session_state.product_b_asin and title == "Comparison Product":
-            if st.button("Change Product B", use_container_width=True, key="change_product_b"):
+            if st.button("Change Comparison Product", use_container_width=True, key="change_product_b"):
                 st.session_state.product_b_asin = None
                 st.session_state.compare_page = 0
                 st.rerun()
