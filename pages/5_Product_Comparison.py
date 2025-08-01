@@ -483,10 +483,8 @@ def main():
                 fig_sentiment_line.update_layout(yaxis_range=[-1,1])
                 st.plotly_chart(fig_sentiment_line, use_container_width=True)
 
-        # --- Tab 2: Area Chart View ---
-        # --- Tab 2: Area Chart View (with corrected layout) ---
+        # --- Tab 2: Area Chart View (with final bug fixes) ---
         with tab2:
-            # --- NEW: Create two columns for the charts ---
             area_col1, area_col2 = st.columns(2)
 
             with area_col1:
@@ -506,7 +504,8 @@ def main():
                     alt.Chart(rating_dist_trend)
                     .mark_area(opacity=0.7)
                     .encode(
-                        x=alt.X("period:T", title="Date"),
+                        # --- FIX 1: Corrected X-axis date format ---
+                        x=alt.X("period:T", title="Date", axis=alt.Axis(format="%b %Y")), # e.g., "Jan 2023"
                         y=alt.Y(
                             "count:Q",
                             title="Number of Reviews",
@@ -538,24 +537,29 @@ def main():
                     "<h5 style='text-align: center;'>Sentiment Distribution</h5>",
                     unsafe_allow_html=True,
                 )
-                sentiment_dist_trend = (
-                    time_df.groupby(["period", "Product", "sentiment_score"])
-                    .size()
-                    .reset_index(name="count")
-                )
+                # --- FIX 2: Corrected data aggregation for sentiment ---
+                sentiment_dist_trend = time_df.copy()
                 sentiment_dist_trend["sentiment"] = pd.cut(
                     sentiment_dist_trend["sentiment_score"],
                     bins=[-1.1, -0.3, 0.3, 1.1],
                     labels=["Negative", "Neutral", "Positive"],
                 )
-                max_sentiment_count = sentiment_dist_trend["count"].max()
+                # Now group by the correct categorical 'sentiment' column
+                sentiment_agg_trend = (
+                    sentiment_dist_trend.groupby(["period", "Product", "sentiment"])
+                    .size()
+                    .reset_index(name="count")
+                )
+                
+                max_sentiment_count = sentiment_agg_trend["count"].max()
                 y_scale_sentiment = alt.Scale(domain=(0, max_sentiment_count))
 
                 sentiment_area_chart = (
-                    alt.Chart(sentiment_dist_trend)
+                    alt.Chart(sentiment_agg_trend) # Use the correctly aggregated dataframe
                     .mark_area(opacity=0.7)
                     .encode(
-                        x=alt.X("period:T", title="Date"),
+                        # --- FIX 1: Corrected X-axis date format ---
+                        x=alt.X("period:T", title="Date", axis=alt.Axis(format="%b %Y")),
                         y=alt.Y(
                             "count:Q",
                             title="Number of Reviews",
