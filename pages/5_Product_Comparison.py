@@ -32,8 +32,39 @@ def init_session_state():
     if 'compare_page' not in st.session_state:
         st.session_state.compare_page = 0
 
-def display_product_metadata(column, product_details, reviews_df, title):
-    """Displays the complete and consolidated metadata for a single product."""
+def get_sentiment_icon(score):
+    """Returns an icon based on the sentiment score."""
+    if score is None or pd.isna(score):
+        return ""
+    if score > 0.3:
+        return "😊"
+    elif score < -0.3:
+        return "😞"
+    else:
+        return "😐"
+
+def calculate_metrics(product_details, reviews_df):
+    """Calculates all performance metrics for a product and returns them in a dictionary."""
+    metrics = {
+        'avg_rating': product_details.get('average_rating', 0),
+        'review_count': len(reviews_df),
+        'consensus': "N/A",
+        'verified_rate': None,
+        'avg_sentiment': None
+    }
+    if not reviews_df.empty:
+        if len(reviews_df) > 1:
+            metrics['consensus'] = get_rating_consensus(reviews_df['rating'].std())
+        
+        metrics['verified_rate'] = (reviews_df['verified_purchase'].sum() / len(reviews_df)) * 100
+        
+        if 'sentiment_score' in reviews_df.columns:
+            metrics['avg_sentiment'] = reviews_df['sentiment_score'].mean()
+            
+    return metrics
+    
+def display_product_metadata(column, product_details, metrics, other_metrics, title):
+    """Displays metadata and compares metrics against another product."""
     with column:
         st.subheader(title)
         st.markdown(f"**{product_details['product_title']}**")
@@ -43,46 +74,46 @@ def display_product_metadata(column, product_details, reviews_df, title):
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
         st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, use_container_width=True)
 
-        # --- COMPLETE METRICS SUITE ---
         st.markdown("**Performance Summary (based on filters)**")
         
-        # --- Row 1 of Metrics ---
+        # --- METRICS WITH DIFFERENTIALS ---
         m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-        m_col2.metric("Filtered Reviews", f"{len(reviews_df):,} 📝")
 
-        if not reviews_df.empty and len(reviews_df) > 1:
-            rating_std_dev = reviews_df['rating'].std()
-            consensus_text = get_rating_consensus(rating_std_dev)
-            m_col3.metric("Reviewer Consensus", consensus_text)
-        else:
-            m_col3.metric("Reviewer Consensus", "N/A")
-            
-        # --- Row 2 of Metrics ---
+        # Avg Rating
+        delta_rating = None
+        if other_metrics and metrics['avg_rating'] is not None and other_metrics['avg_rating'] is not None:
+            delta_rating = metrics['avg_rating'] - other_metrics['avg_rating']
+        m_col1.metric("Avg. Rating", f"{metrics.get('avg_rating', 0):.2f} ⭐", delta=f"{delta_rating:.2f}" if delta_rating is not None else None)
+
+        # Filtered Reviews
+        m_col2.metric("Filtered Reviews", f"{metrics.get('review_count', 0):,} 📝")
+
+        # Reviewer Consensus (no delta for text)
+        m_col3.metric("Reviewer Consensus", metrics.get('consensus', 'N/A'))
+        
         m_col4, m_col5 = st.columns(2)
-        if not reviews_df.empty:
-            verified_rate = (reviews_df['verified_purchase'].sum() / len(reviews_df)) * 100
-            m_col4.metric("Verified Rate", f"{verified_rate:.1f}%", help="The percentage of reviews from verified purchases.")
-            
-            if 'sentiment_score' in reviews_df.columns:
-                avg_sentiment = reviews_df['sentiment_score'].mean()
-                m_col5.metric("Avg. Sentiment", f"{avg_sentiment:.2f}", help="The average sentiment score of review text, from -1 (Negative) to +1 (Positive).")
-            else:
-                m_col5.metric("Avg. Sentiment", "N/A")
-        else:
-            m_col4.metric("Verified Rate", "N/A")
-            m_col5.metric("Avg. Sentiment", "N/A")
+        
+        # Verified Rate
+        delta_verified = None
+        if other_metrics and metrics['verified_rate'] is not None and other_metrics['verified_rate'] is not None:
+            delta_verified = metrics['verified_rate'] - other_metrics['verified_rate']
+        m_col4.metric("Verified Rate", f"{metrics.get('verified_rate', 0):.1f}%", delta=f"{delta_verified:.1f}%" if delta_verified is not None else None)
+
+        # Avg Sentiment
+        sentiment_icon = get_sentiment_icon(metrics.get('avg_sentiment'))
+        delta_sentiment = None
+        if other_metrics and metrics['avg_sentiment'] is not None and other_metrics['avg_sentiment'] is not None:
+            delta_sentiment = metrics['avg_sentiment'] - other_metrics['avg_sentiment']
+        m_col5.metric(f"Avg. Sentiment {sentiment_icon}", f"{metrics.get('avg_sentiment', 0):.2f}", delta=f"{delta_sentiment:.2f}" if delta_sentiment is not None else None)
 
 
         # --- CONSOLIDATED PRODUCT SPECIFICATIONS ---
         with st.expander("View Product Specifications"):
-            # Description
+            # (This part remains the same)
             if pd.notna(product_details.get('description')):
                 st.markdown("---")
                 st.markdown("**Description**")
                 st.write(product_details['description'])
-
-            # Features
             if pd.notna(product_details.get('features')):
                 st.markdown("---")
                 st.markdown("**Features**")
@@ -93,8 +124,6 @@ def display_product_metadata(column, product_details, reviews_df, title):
                             st.markdown(f"- {feature}")
                 except (json.JSONDecodeError, TypeError):
                     st.write("Could not parse features.")
-
-            # Details (e.g., tech specs)
             if pd.notna(product_details.get('details')):
                 st.markdown("---")
                 st.markdown("**Technical Details**")
@@ -105,13 +134,12 @@ def display_product_metadata(column, product_details, reviews_df, title):
                 except (json.JSONDecodeError, TypeError):
                     st.write("Could not parse product details.")
 
-        # --- Button to change the compared product ---
         if st.session_state.product_b_asin and title == "Comparison Product":
             if st.button("Change Comparison Product", use_container_width=True, key="change_product_b"):
                 st.session_state.product_b_asin = None
                 st.session_state.compare_page = 0
                 st.rerun()
-
+                
 def show_product_selection_pane(column, category, product_a_asin):
     """Displays the UI for searching, sorting, and selecting a product."""
     with column:
@@ -233,16 +261,26 @@ def main():
 
     # --- Main Two-Column Layout ---
     col1, col2 = st.columns(2)
+    
+    # --- Calculate metrics for Product A ---
+    metrics_a = calculate_metrics(product_a_details, product_a_reviews)
+    
     display_product_metadata(col1, product_a_details, product_a_reviews, "Original Product")
 
     if not st.session_state.product_b_asin:
+        # If no product B, display A's metadata without comparison
+        display_product_metadata(col1, product_a_details, metrics_a, None, "Original Product")
         show_product_selection_pane(col2, product_a_details['category'], product_a_asin)
     else:
         # --- Product B is Selected, Show Metadata and Comparison ---
         product_b_asin = st.session_state.product_b_asin
         product_b_details = get_product_details(conn, product_b_asin).iloc[0]
         product_b_reviews = get_reviews_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
-        display_product_metadata(col2, product_b_details, product_b_reviews, "Comparison Product")
+        metrics_b = calculate_metrics(product_b_details, product_b_reviews)
+
+        # Display both products with comparison data
+        display_product_metadata(col1, product_a_details, metrics_a, metrics_b, "Original Product")
+        display_product_metadata(col2, product_b_details, metrics_b, metrics_a, "Comparison Product")
         
         # --- RENDER COMPARISON CHARTS BELOW THE METADATA ---
         st.markdown("---")
