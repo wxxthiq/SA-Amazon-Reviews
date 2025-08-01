@@ -374,86 +374,105 @@ def main():
                 )
                 st.altair_chart(sentiment_chart, use_container_width=True)
         
-        # --- FEATURE-LEVEL PERFORMANCE (IMPROVED LOGIC) ---
+        # --- FEATURE-LEVEL PERFORMANCE (REVISED LAYOUT) ---
         st.markdown("---")
         st.subheader("🔎 Feature-Level Performance")
-        
+        st.info(
+            "This section compares the sentiment towards specific product features (aspects). "
+            "Use the controls to sort the summary chart and select features for a direct sentiment score comparison in the radar chart."
+        )
+
         aspects_a = get_aspects_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
         aspects_b = get_aspects_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
 
         if not aspects_a.empty and not aspects_b.empty:
-            aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score', 'text', 'helpful_vote']], on='review_id', how='inner')
-            aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score', 'text', 'helpful_vote']], on='review_id', how='inner')
+            # Add product titles for faceting
+            aspects_a['Product'] = product_a_title
+            aspects_b['Product'] = product_b_title
+            combined_aspects_df = pd.concat([aspects_a, aspects_b])
 
-            # --- 1. Interactive Comparison on Common Features ---
-            counts_a = aspects_a['aspect'].value_counts()
-            counts_b = aspects_b['aspect'].value_counts()
-            common_aspects_list = sorted(list(set(counts_a.index).intersection(set(counts_b.index))))
+            # --- Create a two-column layout for the charts ---
+            chart_col1, chart_col2 = st.columns(2)
 
-            st.markdown("**Direct Comparison on Common Features**")
-            st.info("Use the dropdown below to add or remove features from the radar chart comparison.")
-
-            if len(common_aspects_list) >= 3:
-                # --- REPLACED SLIDER WITH MULTISELECT ---
-                top_5_common = (counts_a + counts_b).reindex(common_aspects_list).nlargest(5).index.tolist()
-                selected_aspects = st.multiselect(
-                    "Select features to compare:",
-                    options=common_aspects_list,
-                    default=top_5_common,
-                    key="aspect_multiselect"
+            with chart_col1:
+                st.markdown("**Aspect Sentiment Summary**")
+                
+                # --- Controls for the summary chart ---
+                sort_option = st.selectbox(
+                    "Sort aspects by:",
+                    ("Most Discussed", "Most Positive", "Most Negative"),
+                    key="aspect_sort_selector"
+                )
+                num_aspects_to_show = st.slider(
+                    "Number of aspects to show:", 3, 15, 7,
+                    key="aspect_num_slider"
                 )
 
-                if len(selected_aspects) >= 1:
-                    avg_sent_a = aspects_a[aspects_a['aspect'].isin(selected_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(selected_aspects)
-                    avg_sent_b = aspects_b[aspects_b['aspect'].isin(selected_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(selected_aspects)
+                # --- Data processing for the summary chart ---
+                sentiment_counts = combined_aspects_df.groupby(['Product', 'aspect', 'sentiment']).size().unstack(fill_value=0)
+                pivot_df = sentiment_counts.groupby(['Product', 'aspect']).sum()
+                
+                # Ensure all sentiment columns exist
+                for col in ['Positive', 'Neutral', 'Negative']:
+                    if col not in pivot_df.columns: pivot_df[col] = 0
+                
+                pivot_df['total'] = pivot_df.sum(axis=1)
+                pivot_df['positive_pct'] = pivot_df['Positive'] / pivot_df['total']
+                pivot_df['negative_pct'] = pivot_df['Negative'] / pivot_df['total']
+                
+                # Determine which aspects to show based on sorting
+                if sort_option == "Most Positive":
+                    top_aspects = pivot_df.sort_values('positive_pct', ascending=False).groupby('Product').head(num_aspects_to_show).index.get_level_values('aspect').unique()
+                elif sort_option == "Most Negative":
+                    top_aspects = pivot_df.sort_values('negative_pct', ascending=False).groupby('Product').head(num_aspects_to_show).index.get_level_values('aspect').unique()
+                else: # Most Discussed
+                    top_aspects = pivot_df.sort_values('total', ascending=False).groupby('Product').head(num_aspects_to_show).index.get_level_values('aspect').unique()
 
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself', name=product_a_title, marker_color='#4c78a8', opacity=0.7))
-                    fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=product_b_title, marker_color='#f58518', opacity=0.7))
-                    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True, height=400)
-                    st.plotly_chart(fig, use_container_width=True)
+                chart_df = combined_aspects_df[combined_aspects_df['aspect'].isin(top_aspects)]
 
-                    # --- NEW FEATURE: FEATURE DEEP DIVE ---
-                    st.markdown("**Feature Deep Dive**")
-                    st.info("Select a single feature from your comparison to see relevant review snippets.")
-                    
-                    deep_dive_aspect = st.selectbox(
-                        "Choose a feature to see example reviews:",
-                        options=selected_aspects,
-                        index=0,
-                        key="deep_dive_selector"
+                # --- Grouped Stacked Bar Chart ---
+                aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
+                    x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
+                    y=alt.Y('aspect:N', title=None, sort='-x'),
+                    color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
+                    row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=10)),
+                    tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
+                ).properties(height=200)
+
+                st.altair_chart(aspect_summary_chart, use_container_width=True)
+
+            with chart_col2:
+                st.markdown("**Direct Sentiment Score Comparison**")
+
+                # --- Controls for the radar chart ---
+                aspects_a_with_scores = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
+                aspects_b_with_scores = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
+                common_aspects = set(aspects_a_with_scores['aspect']).intersection(set(aspects_b_with_scores['aspect']))
+                
+                if len(common_aspects) >= 3:
+                    selected_for_radar = st.multiselect(
+                        "Select features for radar chart:",
+                        options=sorted(list(common_aspects)),
+                        default=list(top_aspects.intersection(common_aspects))[:5] # Default to common top aspects
                     )
 
-                    if deep_dive_aspect:
-                        dd_col1, dd_col2 = st.columns(2)
+                    if selected_for_radar:
+                        avg_sent_a = aspects_a_with_scores[aspects_a_with_scores['aspect'].isin(selected_for_radar)].groupby('aspect')['sentiment_score'].mean().reindex(selected_for_radar)
+                        avg_sent_b = aspects_b_with_scores[aspects_b_with_scores['aspect'].isin(selected_for_radar)].groupby('aspect')['sentiment_score'].mean().reindex(selected_for_radar)
                         
-                        # Function to get and display review snippets
-                        def display_snippets(column, product_title, aspect_df, aspect_name):
-                            with column:
-                                st.markdown(f"**{product_title}**")
-                                relevant_reviews = aspect_df[aspect_df['aspect'] == aspect_name].sort_values('helpful_vote', ascending=False)
-                                
-                                pos_reviews = relevant_reviews[relevant_reviews['sentiment_score'] > 0.3]
-                                neg_reviews = relevant_reviews[relevant_reviews['sentiment_score'] < -0.3]
+                        # --- Radar Chart ---
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself', name=product_a_title, marker_color='#4c78a8', opacity=0.7))
+                        fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=product_b_title, marker_color='#f58518', opacity=0.7))
+                        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True, margin=dict(l=40, r=40, t=40, b=40))
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("Select one or more features to display the radar chart.")
+                else:
+                    st.warning("Not enough common features found to generate a radar chart comparison.")
 
-                                st.success("👍 Most Helpful Positive Snippet:")
-                                if not pos_reviews.empty:
-                                    st.markdown(f"> *{pos_reviews.iloc[0]['text'][:200]}...*")
-                                else:
-                                    st.caption("No positive reviews found for this aspect.")
-
-                                st.error("👎 Most Helpful Negative Snippet:")
-                                if not neg_reviews.empty:
-                                    st.markdown(f"> *{neg_reviews.iloc[0]['text'][:200]}...*")
-                                else:
-                                    st.caption("No negative reviews found for this aspect.")
-
-                        display_snippets(dd_col1, product_a_title, aspects_a, deep_dive_aspect)
-                        display_snippets(dd_col2, product_b_title, aspects_b, deep_dive_aspect)
-
-            else:
-                st.warning("Not enough common aspects (at least 3) found between the products to generate a comparison chart.")
-
+        else:
+            st.warning("Not enough aspect data for one or both products to generate a feature-level comparison.")
             # --- 2. Find Unique Aspects ---
             st.markdown("**Unique Differentiators**")
             st.info("These are the most frequently mentioned positive and negative features for one product that are **not** mentioned for the other.")
