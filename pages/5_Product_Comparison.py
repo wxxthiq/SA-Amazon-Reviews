@@ -329,6 +329,9 @@ def main():
                 st.warning("No common features were found between these two products with the current filters.")
                 st.stop()
 
+            common_aspects_a = aspects_a[aspects_a['aspect'].isin(common_aspects_list)].copy()
+            common_aspects_b = aspects_b[aspects_b['aspect'].isin(common_aspects_list)].copy()
+
             # Filter the original dataframes to only include common aspects
             # --- FIX IS HERE: Add the 'Product' column before concatenation ---
             common_aspects_a['Product'] = product_a_title
