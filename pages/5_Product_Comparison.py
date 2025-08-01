@@ -426,5 +426,84 @@ def main():
         else:
             st.warning("Not enough aspect data for one or both products to generate a feature-level comparison.")
             
+        # --- TRENDS OVER TIME ---
+        st.markdown("---")
+        st.subheader("🗓️ Trends Over Time")
+        st.info(
+            "Analyze how the average rating and sentiment for each product have evolved. "
+            "The 'Line Chart' view is best for direct comparison, while the 'Area Chart' view shows the distribution within each product."
+        )
+
+        time_granularity = st.radio(
+            "Select time period:",
+            ("Monthly", "Weekly", "Daily"),
+            index=0, horizontal=True, key="trends_time_granularity"
+        )
+        
+        # Prepare the combined data for time series analysis
+        time_df_a = product_a_reviews[['date', 'rating', 'sentiment_score']].copy()
+        time_df_a['Product'] = product_a_title
+        time_df_b = product_b_reviews[['date', 'rating', 'sentiment_score']].copy()
+        time_df_b['Product'] = product_b_title
+        time_df = pd.concat([time_df_a, time_df_b])
+        
+        time_df['date'] = pd.to_datetime(time_df['date'])
+        if time_granularity == 'Monthly':
+            time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
+        elif time_granularity == 'Weekly':
+            time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
+        else: # Daily
+            time_df['period'] = time_df['date'].dt.date
+
+        tab1, tab2 = st.tabs(["📈 Line Chart View (Direct Comparison)", "📊 Area Chart View (Distribution)"])
+
+        # --- Tab 1: Line Chart View ---
+        with tab1:
+            line_col1, line_col2 = st.columns(2)
+            with line_col1:
+                st.markdown("**Average Rating Trend**")
+                avg_rating_trend = time_df.groupby(['period', 'Product'])['rating'].mean().reset_index()
+                fig_rating_line = px.line(
+                    avg_rating_trend, x='period', y='rating', color='Product',
+                    labels={'period': 'Date', 'rating': 'Average Rating'},
+                    color_discrete_map={product_a_title: '#4c78a8', product_b_title: '#f58518'}
+                )
+                fig_rating_line.update_layout(yaxis_range=[1,5])
+                st.plotly_chart(fig_rating_line, use_container_width=True)
+
+            with line_col2:
+                st.markdown("**Average Sentiment Trend**")
+                avg_sentiment_trend = time_df.groupby(['period', 'Product'])['sentiment_score'].mean().reset_index()
+                fig_sentiment_line = px.line(
+                    avg_sentiment_trend, x='period', y='sentiment_score', color='Product',
+                    labels={'period': 'Date', 'sentiment_score': 'Average Sentiment Score'},
+                    color_discrete_map={product_a_title: '#4c78a8', product_b_title: '#f58518'}
+                )
+                fig_sentiment_line.update_layout(yaxis_range=[-1,1])
+                st.plotly_chart(fig_sentiment_line, use_container_width=True)
+
+        # --- Tab 2: Area Chart View ---
+        with tab2:
+            area_col1, area_col2 = st.columns(2)
+            with area_col1:
+                st.markdown("**Rating Distribution Over Time**")
+                rating_dist_trend = time_df.groupby(['period', 'Product', 'rating']).size().reset_index(name='count')
+                fig_rating_area = px.area(
+                    rating_dist_trend, x='period', y='count', color='rating', facet_row='Product',
+                    labels={'period': 'Date', 'count': 'Number of Reviews'},
+                    color_discrete_map={5: '#2ca02c', 4: '#98df8a', 3: '#ffdd71', 2: '#ff9896', 1: '#d62728'}
+                )
+                st.plotly_chart(fig_rating_area, use_container_width=True)
+
+            with area_col2:
+                st.markdown("**Sentiment Distribution Over Time**")
+                sentiment_dist_trend = time_df.groupby(['period', 'Product', 'sentiment_score']).size().reset_index(name='count')
+                sentiment_dist_trend['sentiment'] = pd.cut(sentiment_dist_trend['sentiment_score'], bins=[-1.1, -0.3, 0.3, 1.1], labels=['Negative', 'Neutral', 'Positive'])
+                fig_sentiment_area = px.area(
+                    sentiment_dist_trend, x='period', y='count', color='sentiment', facet_row='Product',
+                    labels={'period': 'Date', 'count': 'Number of Reviews'},
+                    color_discrete_map={'Positive': '#1a9850', 'Neutral': '#cccccc', 'Negative': '#d73027'}
+                )
+                st.plotly_chart(fig_sentiment_area, use_container_width=True)
 if __name__ == "__main__":
     main()
