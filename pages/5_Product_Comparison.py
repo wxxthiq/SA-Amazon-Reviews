@@ -238,8 +238,17 @@ def main():
 
     st.markdown("""
         <style>
-        .product-image {
-            height: 250px;
+        .product-image-container {
+            width: 100%;
+            height: 250px; /* Explicitly set the container height */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 1rem; /* Add some space below the image container */
+        }
+        .product-image-container img {
+            max-width: 100%;
+            max-height: 100%;
             object-fit: contain;
         }
         </style>
