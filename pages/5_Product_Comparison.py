@@ -307,12 +307,12 @@ def main():
 
         
         # --- RENDER COMPARISON CHARTS BELOW THE METADATA ---
-        # --- FEATURE-LEVEL PERFORMANCE (FINAL REVISION) ---
+                # --- FEATURE-LEVEL PERFORMANCE (FINAL REVISION) ---
         st.markdown("---")
         st.subheader("🔎 Feature-Level Performance")
         st.info(
             "This section compares sentiment towards features that are **common to both products**. "
-            "Expand the controls to filter and sort the comparison charts below."
+            "Use the controls to filter and select the features you want to compare."
         )
 
         aspects_a = get_aspects_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
@@ -335,102 +335,70 @@ def main():
             common_aspects_b['Product'] = product_b_title
             combined_common_aspects_df = pd.concat([common_aspects_a, common_aspects_b])
 
-            # --- Controls are now in an Expander ---
-            with st.expander("⚙️ Comparison Controls & Filters"):
-                sort_option = st.selectbox(
-                    "Sort common aspects by:",
-                    ("Total Mentions", "Most Positive", "Most Negative", "Most Controversial"), # Added new option
-                    key="aspect_sort_selector"
-                )
-                num_aspects_to_show = st.slider(
-                    "Number of aspects to display:", 3, 15, 5,
-                    key="aspect_num_slider"
-                )
-                total_counts = combined_common_aspects_df['aspect'].value_counts()
-                max_threshold = int(total_counts.max()) if not total_counts.empty else 1
+            # --- Main layout: 1/3 for controls, 2/3 for charts ---
+            control_col, chart_area_col = st.columns([1, 2])
+
+            with control_col:
+                st.markdown("**Comparison Controls**")
                 min_mentions = st.slider(
-                    "Minimum Mention Threshold:", 1, max(1, max_threshold), 1,
+                    "Minimum Mention Threshold:", 1, 100, 1,
                     key="aspect_mention_threshold",
                     help="Only show aspects with at least this many total mentions."
                 )
+                
+                # --- Filter aspects based on threshold BEFORE showing selection ---
+                total_counts = combined_common_aspects_df['aspect'].value_counts()
+                aspects_to_show = total_counts[total_counts >= min_mentions].index.tolist()
 
-            # --- Data processing based on all controls ---
-            aspects_to_keep = total_counts[total_counts >= min_mentions].index
-            pivot_df = combined_common_aspects_df.groupby(['aspect', 'sentiment']).size().unstack(fill_value=0)
-            for col in ['Positive', 'Negative', 'Neutral']:
-                if col not in pivot_df: pivot_df[col] = 0
-            pivot_df['total'] = pivot_df.sum(axis=1)
-            pivot_df['positive_pct'] = pivot_df['Positive'] / pivot_df['total']
-            pivot_df['negative_pct'] = pivot_df['Negative'] / pivot_df['total']
-            # --- Calculate Controversy Score ---
-            pivot_df['controversy'] = pivot_df['positive_pct'] * pivot_df['negative_pct']
-            
-            pivot_df = pivot_df[pivot_df.index.isin(aspects_to_keep)]
-            
-            if sort_option == "Most Positive":
-                sorted_aspects = pivot_df.sort_values('positive_pct', ascending=False).index
-            elif sort_option == "Most Negative":
-                sorted_aspects = pivot_df.sort_values('negative_pct', ascending=False).index
-            elif sort_option == "Most Controversial":
-                sorted_aspects = pivot_df.sort_values('controversy', ascending=False).index
-            else: # Total Mentions
-                sorted_aspects = pivot_df.sort_values('total', ascending=False).index
-            
-            final_aspects_to_display = sorted_aspects[:num_aspects_to_show].tolist()
+                # --- Create formatted options for the multiselect ---
+                options_with_counts = {f"{aspect} ({total_counts[aspect]})": aspect for aspect in aspects_to_show}
+
+                # --- REPLACED SLIDER WITH MULTISELECT ---
+                selected_options = st.multiselect(
+                    "Select aspects to display:",
+                    options=options_with_counts.keys(),
+                    default=list(options_with_counts.keys())[:5], # Default to top 5
+                    key="aspect_selector"
+                )
+                # Get the actual aspect names from the user's selection
+                final_aspects_to_display = [options_with_counts[key] for key in selected_options]
+
+            # --- Data processing for charts ---
             chart_df = combined_common_aspects_df[combined_common_aspects_df['aspect'].isin(final_aspects_to_display)]
-            
             if not chart_df.empty:
                 chart_df['Product'] = pd.Categorical(chart_df['Product'], categories=[product_a_title, product_b_title], ordered=True)
-                
-                # --- Chart Layout ---
-                bar_chart_col, radar_chart_col = st.columns(2)
 
-                with bar_chart_col:
-                    st.markdown("**Aspect Sentiment Summary**")
-                    
-                    aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
-                        # --- FIX 1: Re-enable the X-axis ---
-                        x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
-                        
-                        # Y-axis with aspect names
-                        y=alt.Y('aspect:N', title=None, sort=alt.EncodingSortField(field="aspect", op="count", order='descending')),
-                        
-                        # --- FIX 2: Re-enable the legend ---
-                        color=alt.Color('sentiment:N',
-                                        scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
-                                                        range=['#1a9850', '#cccccc', '#d73027']),
-                                        legend=alt.Legend(title="Sentiment")),
-                        
-                        # Use 'row' to create the grouped (faceted) layout
-                        row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=5)),
-                        
-                        tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
-                    ).properties(
-                        height=150
-                    ).resolve_axis(
-                        # --- FIX 3: Ensure the Y-axis appears on both charts ---
-                        y='independent'
-                    )
-                    
-                    st.altair_chart(aspect_summary_chart, use_container_width=True)
+            with chart_area_col:
+                if not chart_df.empty:
+                    bar_chart_col, radar_chart_col = st.columns(2)
+                    with bar_chart_col:
+                        st.markdown("**Aspect Sentiment Summary**")
+                        aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
+                            x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
+                            y=alt.Y('aspect:N', title=None, sort='-x'),
+                            color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
+                            row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=5)),
+                            tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
+                        ).properties(height=150).resolve_axis(y='independent')
+                        st.altair_chart(aspect_summary_chart, use_container_width=True)
 
-                with radar_chart_col:
-                    st.markdown("**Sentiment Score Comparison**")
-                    aspects_a_with_scores = common_aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
-                    aspects_b_with_scores = common_aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
-                    
-                    avg_sent_a = aspects_a_with_scores[aspects_a_with_scores['aspect'].isin(final_aspects_to_display)].groupby('aspect')['sentiment_score'].mean().reindex(final_aspects_to_display, fill_value=0)
-                    avg_sent_b = aspects_b_with_scores[aspects_b_with_scores['aspect'].isin(final_aspects_to_display)].groupby('aspect')['sentiment_score'].mean().reindex(final_aspects_to_display, fill_value=0)
-                    
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself', name=product_a_title, marker_color='#4c78a8', opacity=0.7))
-                    fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=product_b_title, marker_color='#f58518', opacity=0.7))
-                    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True, legend=dict(yanchor="bottom", y=-0.2, xanchor="center", x=0.5), margin=dict(l=20, r=20, t=40, b=20), height=350)
-                    st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("No aspects meet the current filter criteria. Try adjusting the controls.")
+                    with radar_chart_col:
+                        st.markdown("**Sentiment Score Comparison**")
+                        aspects_a_with_scores = common_aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
+                        aspects_b_with_scores = common_aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
+                        
+                        avg_sent_a = aspects_a_with_scores[aspects_a_with_scores['aspect'].isin(final_aspects_to_display)].groupby('aspect')['sentiment_score'].mean().reindex(final_aspects_to_display, fill_value=0)
+                        avg_sent_b = aspects_b_with_scores[aspects_b_with_scores['aspect'].isin(final_aspects_to_display)].groupby('aspect')['sentiment_score'].mean().reindex(final_aspects_to_display, fill_value=0)
+                        
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself', name=product_a_title, marker_color='#4c78a8', opacity=0.7))
+                        fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=product_b_title, marker_color='#f58518', opacity=0.7))
+                        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True, legend=dict(yanchor="bottom", y=-0.2, xanchor="center", x=0.5), margin=dict(l=20, r=20, t=40, b=20), height=350)
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("Select one or more aspects from the list to display the charts.")
         else:
             st.warning("Not enough aspect data for one or both products to generate a feature-level comparison.")
-
+            
 if __name__ == "__main__":
     main()
