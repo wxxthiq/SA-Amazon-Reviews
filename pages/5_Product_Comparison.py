@@ -317,7 +317,9 @@ def main():
 
         aspects_a = get_aspects_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
         aspects_b = get_aspects_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
-
+        
+        product_a_title = truncate_text(product_a_details['product_title'])
+        product_b_title = truncate_text(product_b_details['product_title'])
         if not aspects_a.empty and not aspects_b.empty:
             # First, find the common aspects
             aspects_a_set = set(aspects_a['aspect'])
