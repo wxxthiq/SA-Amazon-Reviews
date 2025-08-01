@@ -387,8 +387,24 @@ def main():
 
                 with bar_chart_col:
                     st.markdown("**Aspect Sentiment Summary**")
-                    
-                    # --- Final Combined & Grouped Chart ---
+
+                    # --- Create a new column for our combined color encoding ---
+                    chart_df['sentiment_product'] = chart_df['sentiment'] + ' (' + chart_df['Product'] + ')'
+
+                    # Define the domain (all possible categories) and range (all colors)
+                    # This ensures consistent coloring.
+                    domain = [
+                        f'Positive ({product_a_title})', f'Positive ({product_b_title})',
+                        f'Neutral ({product_a_title})', f'Neutral ({product_b_title})',
+                        f'Negative ({product_a_title})', f'Negative ({product_b_title})'
+                    ]
+                    range_ = [
+                        '#2ca02c', '#98df8a',  # Dark Green, Light Green
+                        '#cccccc', '#f0f0f0',  # Dark Gray, Light Gray
+                        '#d62728', '#ff9896'   # Dark Red, Light Red
+                    ]
+
+                    # --- Final Chart with Color Shading ---
                     aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
                         # Y-axis: The common aspects
                         y=alt.Y('aspect:N', title=None, sort='-x'),
@@ -396,24 +412,17 @@ def main():
                         # X-axis: The stacked sentiment percentage
                         x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
                         
-                        # Color for the sentiment stacks
-                        color=alt.Color('sentiment:N',
-                                        scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
-                                                        range=['#1a9850', '#cccccc', '#d73027']),
+                        # Use the new combined column for color
+                        color=alt.Color('sentiment_product:N',
+                                        scale=alt.Scale(domain=domain, range=range_),
                                         legend=alt.Legend(title="Sentiment")),
                         
                         # Use 'yOffset' to group the bars by product
                         yOffset='Product:N',
-                        
-                        # --- NEW: Add a stroke to distinguish products ---
-                        stroke=alt.Stroke('Product:N',
-                                          scale=alt.Scale(range=['#f58518', 'transparent']), # One product gets an orange outline
-                                          legend=alt.Legend(title="Product Outline")),
 
                         tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
                     ).properties(
-                        # Adjust height for better spacing
-                        height=alt.Step(40) 
+                        height=alt.Step(40) # Add spacing
                     )
                     
                     st.altair_chart(aspect_summary_chart, use_container_width=True)
