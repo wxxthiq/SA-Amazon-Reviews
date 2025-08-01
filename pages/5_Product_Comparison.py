@@ -74,7 +74,7 @@ def display_product_metadata(column, product_details, metrics, other_metrics, ti
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
         
         # --- CHANGE 1: Set a fixed height for the image ---
-        st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, height=250)
+        st.markdown(f'<div class="product-image"><img src="{image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL}" width="100%"></div>', unsafe_allow_html=True)
 
         st.markdown("**Performance Summary (based on filters)**")
         
@@ -235,6 +235,15 @@ def truncate_text(text, max_length=15):
 # --- Main App Logic ---
 def main():
     st.title("⚖️ Product Comparison")
+
+    st.markdown("""
+        <style>
+        .product-image {
+            height: 250px;
+            object-fit: contain;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     init_session_state()
 
     if st.button("⬅️ Back to Sentiment Overview"):
