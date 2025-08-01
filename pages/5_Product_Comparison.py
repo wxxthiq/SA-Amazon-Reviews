@@ -387,13 +387,31 @@ def main():
 
                 with bar_chart_col:
                     st.markdown("**Aspect Sentiment Summary**")
+                    
                     aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
-                        x=alt.X('count()', stack='normalize', axis=alt.Axis(title=None, labels=False, ticks=False)),
+                        # --- FIX 1: Re-enable the X-axis ---
+                        x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
+                        
+                        # Y-axis with aspect names
                         y=alt.Y('aspect:N', title=None, sort=alt.EncodingSortField(field="aspect", op="count", order='descending')),
-                        color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=None),
+                        
+                        # --- FIX 2: Re-enable the legend ---
+                        color=alt.Color('sentiment:N',
+                                        scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
+                                                        range=['#1a9850', '#cccccc', '#d73027']),
+                                        legend=alt.Legend(title="Sentiment")),
+                        
+                        # Use 'row' to create the grouped (faceted) layout
                         row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=5)),
+                        
                         tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
-                    ).properties(height=150)
+                    ).properties(
+                        height=150
+                    ).resolve_axis(
+                        # --- FIX 3: Ensure the Y-axis appears on both charts ---
+                        y='independent'
+                    )
+                    
                     st.altair_chart(aspect_summary_chart, use_container_width=True)
 
                 with radar_chart_col:
