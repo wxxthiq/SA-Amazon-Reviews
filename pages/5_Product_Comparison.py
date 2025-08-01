@@ -386,15 +386,27 @@ def main():
                 bar_chart_col, radar_chart_col = st.columns(2)
 
                 with bar_chart_col:
-                    st.markdown("**Aspect Sentiment Summary**")
-                    aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
-                        x=alt.X('count()', stack='normalize', axis=alt.Axis(title=None, labels=False, ticks=False)),
-                        y=alt.Y('aspect:N', title=None, sort=alt.EncodingSortField(field="aspect", op="count", order='descending')),
-                        color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=None),
-                        row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=5)),
-                        tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
-                    ).properties(height=150)
-                    st.altair_chart(aspect_summary_chart, use_container_width=True)
+                        st.markdown("**Aspect Sentiment Summary**")
+                        
+                        # --- Combined Grouped & Stacked Bar Chart ---
+                        aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
+                            # Group the bars by aspect
+                            y=alt.Y('aspect:N', title=None, sort='-x'),
+                            # Create the stacked bar for sentiment percentage
+                            x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
+                            # Color the stacks by sentiment
+                            color=alt.Color('sentiment:N',
+                                            scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
+                                                            range=['#1a9850', '#cccccc', '#d73027']),
+                                            legend=alt.Legend(title="Sentiment")),
+                            # Use 'yOffset' to create the grouping by product
+                            yOffset='Product:N',
+                            tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
+                        ).properties(
+                            title="Sentiment breakdown per product for each common aspect"
+                        )
+                        
+                        st.altair_chart(aspect_summary_chart, use_container_width=True)
 
                 with radar_chart_col:
                     st.markdown("**Sentiment Score Comparison**")
