@@ -388,11 +388,10 @@ def main():
                 with bar_chart_col:
                     st.markdown("**Aspect Sentiment Summary**")
 
-                    # --- Create a new column for our combined color encoding ---
-                    chart_df['sentiment_product'] = chart_df['sentiment'] + ' (' + chart_df['Product'] + ')'
+                    # --- FIX IS HERE: Convert 'Product' column to string before concatenation ---
+                    chart_df['sentiment_product'] = chart_df['sentiment'].astype(str) + ' (' + chart_df['Product'].astype(str) + ')'
 
                     # Define the domain (all possible categories) and range (all colors)
-                    # This ensures consistent coloring.
                     domain = [
                         f'Positive ({product_a_title})', f'Positive ({product_b_title})',
                         f'Neutral ({product_a_title})', f'Neutral ({product_b_title})',
@@ -406,25 +405,18 @@ def main():
 
                     # --- Final Chart with Color Shading ---
                     aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
-                        # Y-axis: The common aspects
                         y=alt.Y('aspect:N', title=None, sort='-x'),
-                        
-                        # X-axis: The stacked sentiment percentage
                         x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
-                        
                         # Use the new combined column for color
                         color=alt.Color('sentiment_product:N',
                                         scale=alt.Scale(domain=domain, range=range_),
                                         legend=alt.Legend(title="Sentiment")),
-                        
-                        # Use 'yOffset' to group the bars by product
                         yOffset='Product:N',
-
                         tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
                     ).properties(
-                        height=alt.Step(40) # Add spacing
+                        height=alt.Step(40)
                     )
-                    
+
                     st.altair_chart(aspect_summary_chart, use_container_width=True)
 
                 with radar_chart_col:
