@@ -272,15 +272,17 @@ def main():
         display_product_metadata(col1, product_a_details, metrics_a, None, "Original Product")
         show_product_selection_pane(col2, product_a_details['category'], product_a_asin)
     else:
-        # --- Product B is Selected, Show Metadata and Comparison ---
+        # --- Product B is Selected, Calculate its metrics and then display both ---
         product_b_asin = st.session_state.product_b_asin
         product_b_details = get_product_details(conn, product_b_asin).iloc[0]
         product_b_reviews = get_reviews_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+        
         metrics_b = calculate_metrics(product_b_details, product_b_reviews)
 
         # Display both products with comparison data
         display_product_metadata(col1, product_a_details, metrics_a, metrics_b, "Original Product")
         display_product_metadata(col2, product_b_details, metrics_b, metrics_a, "Comparison Product")
+
         
         # --- RENDER COMPARISON CHARTS BELOW THE METADATA ---
         st.markdown("---")
