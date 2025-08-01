@@ -31,12 +31,12 @@ def init_session_state():
     if 'compare_page' not in st.session_state:
         st.session_state.compare_page = 0
 
-# --- UI Helper Functions ---
 def display_product_metadata(column, product_details, reviews_df, title):
-    """Displays the metadata for a single product in a given column."""
+    """Displays the complete metadata for a single product in a given column."""
     with column:
         st.subheader(title)
         st.markdown(f"**{product_details['product_title']}**")
+        st.caption(f"Category: {product_details.get('category', 'N/A')} | Store: {product_details.get('store', 'N/A')}")
 
         image_urls_str = product_details.get('image_urls')
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
@@ -50,31 +50,51 @@ def display_product_metadata(column, product_details, reviews_df, title):
             std_dev = reviews_df['rating'].std()
             consensus = get_rating_consensus(std_dev)
             m_col3.metric("Consensus", consensus, help=f"Std. Dev: {std_dev:.2f}")
-        
+
+        # --- NEW: Expandable sections for detailed metadata ---
+        if pd.notna(product_details.get('description')):
+            with st.expander("Description"):
+                st.write(product_details['description'])
+
+        if pd.notna(product_details.get('features')):
+            with st.expander("Features"):
+                features_list = json.loads(product_details['features'])
+                if features_list:
+                    for feature in features_list:
+                        st.markdown(f"- {feature}")
+
+        if pd.notna(product_details.get('details')):
+             with st.expander("Product Details"):
+                details_dict = json.loads(product_details['details'])
+                if details_dict:
+                    st.json(details_dict)
+
+
         if st.session_state.product_b_asin and title == "Comparison Product":
             if st.button("Change Product B", use_container_width=True):
                 st.session_state.product_b_asin = None
                 st.session_state.compare_page = 0
                 st.rerun()
 
+
 def show_product_selection_pane(column, category, product_a_asin):
     """Displays the UI for searching, sorting, and selecting a product."""
     with column:
         st.subheader("Select a Product to Compare")
-        st.info(f"Browsing products in the same category: **{category}**")
+        st.info(f"Browse products in the same category: **{category}**")
 
         # --- Search and Sort Controls ---
         c1, c2 = st.columns([2,1])
         with c1:
             st.session_state.compare_search_term = st.text_input(
-                "Search by product title:", 
+                "Search by product title:",
                 value=st.session_state.compare_search_term,
                 key="compare_search"
             )
         with c2:
             st.session_state.compare_sort_by = st.selectbox(
-                "Sort By", 
-                ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"], 
+                "Sort By",
+                ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"],
                 key="compare_sort"
             )
 
@@ -105,10 +125,16 @@ def show_product_selection_pane(column, category, product_a_asin):
                         img_url = product.get('image_urls', '').split(',')[0] if pd.notna(product.get('image_urls')) else PLACEHOLDER_IMAGE_URL
                         st.image(img_url, use_container_width=True)
                         st.markdown(f"<small>{product['product_title']}</small>", unsafe_allow_html=True)
+                        
+                        # --- NEW: Display rating and review count ---
+                        avg_rating = product.get('average_rating', 0)
+                        review_count = product.get('review_count', 0)
+                        st.caption(f"{avg_rating:.2f} ⭐ | {int(review_count)} reviews")
+
                         if st.button("Select to Compare", key=f"select_{product['parent_asin']}", use_container_width=True):
                             st.session_state.product_b_asin = product['parent_asin']
                             st.rerun()
-        
+
         # --- Pagination ---
         st.markdown("---")
         total_pages = (total_count + PRODUCTS_PER_PAGE_COMPARE - 1) // PRODUCTS_PER_PAGE_COMPARE
