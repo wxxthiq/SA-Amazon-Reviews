@@ -33,7 +33,7 @@ def init_session_state():
         st.session_state.compare_page = 0
 
 def display_product_metadata(column, product_details, reviews_df, title):
-    """Displays the complete metadata for a single product, mirroring the overview page metrics."""
+    """Displays the complete and consolidated metadata for a single product."""
     with column:
         st.subheader(title)
         st.markdown(f"**{product_details['product_title']}**")
@@ -43,27 +43,35 @@ def display_product_metadata(column, product_details, reviews_df, title):
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
         st.image(image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL, use_container_width=True)
 
-        # --- METRICS ALIGNED WITH OVERVIEW PAGE ---
+        # --- COMPLETE METRICS SUITE ---
         st.markdown("**Performance Summary (based on filters)**")
+        
+        # --- Row 1 of Metrics ---
         m_col1, m_col2, m_col3 = st.columns(3)
-        
-        # Metric 1: Average Rating (from all reviews for the product)
         m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-        
-        # Metric 2: Filtered Reviews Count
         m_col2.metric("Filtered Reviews", f"{len(reviews_df):,} 📝")
-        
-        # Metric 3: Reviewer Consensus (calculated from filtered reviews)
+
         if not reviews_df.empty and len(reviews_df) > 1:
             rating_std_dev = reviews_df['rating'].std()
             consensus_text = get_rating_consensus(rating_std_dev)
-            m_col3.metric(
-                "Reviewer Consensus",
-                consensus_text,
-                help="This measures how much agreement there is in the star ratings. 'Consistent' means most ratings are similar, while 'Polarizing' means there are many high and low ratings with few in the middle."
-            )
+            m_col3.metric("Reviewer Consensus", consensus_text)
         else:
             m_col3.metric("Reviewer Consensus", "N/A")
+            
+        # --- Row 2 of Metrics ---
+        m_col4, m_col5 = st.columns(2)
+        if not reviews_df.empty:
+            verified_rate = (reviews_df['verified_purchase'].sum() / len(reviews_df)) * 100
+            m_col4.metric("Verified Rate", f"{verified_rate:.1f}%", help="The percentage of reviews from verified purchases.")
+            
+            if 'sentiment_score' in reviews_df.columns:
+                avg_sentiment = reviews_df['sentiment_score'].mean()
+                m_col5.metric("Avg. Sentiment", f"{avg_sentiment:.2f}", help="The average sentiment score of review text, from -1 (Negative) to +1 (Positive).")
+            else:
+                m_col5.metric("Avg. Sentiment", "N/A")
+        else:
+            m_col4.metric("Verified Rate", "N/A")
+            m_col5.metric("Avg. Sentiment", "N/A")
 
 
         # --- CONSOLIDATED PRODUCT SPECIFICATIONS ---
@@ -79,7 +87,6 @@ def display_product_metadata(column, product_details, reviews_df, title):
                 st.markdown("---")
                 st.markdown("**Features**")
                 try:
-                    # Safely load JSON data
                     features_list = json.loads(product_details['features']) if isinstance(product_details['features'], str) else product_details['features']
                     if features_list:
                         for feature in features_list:
@@ -92,14 +99,13 @@ def display_product_metadata(column, product_details, reviews_df, title):
                 st.markdown("---")
                 st.markdown("**Technical Details**")
                 try:
-                    # Safely load JSON data
                     details_dict = json.loads(product_details['details']) if isinstance(product_details['details'], str) else product_details['details']
                     if details_dict:
                         st.json(details_dict)
                 except (json.JSONDecodeError, TypeError):
                     st.write("Could not parse product details.")
 
-
+        # --- Button to change the compared product ---
         if st.session_state.product_b_asin and title == "Comparison Product":
             if st.button("Change Comparison Product", use_container_width=True, key="change_product_b"):
                 st.session_state.product_b_asin = None
