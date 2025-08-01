@@ -330,8 +330,9 @@ def main():
                 st.stop()
 
             # Filter the original dataframes to only include common aspects
-            common_aspects_a = aspects_a[aspects_a['aspect'].isin(common_aspects_list)].copy()
-            common_aspects_b = aspects_b[aspects_b['aspect'].isin(common_aspects_list)].copy()
+            # --- FIX IS HERE: Add the 'Product' column before concatenation ---
+            common_aspects_a['Product'] = product_a_title
+            common_aspects_b['Product'] = product_b_title
             combined_common_aspects_df = pd.concat([common_aspects_a, common_aspects_b])
 
             # --- Main layout: 1/3 for controls, 2/3 for charts ---
