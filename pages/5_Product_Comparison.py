@@ -261,14 +261,13 @@ def main():
 
     # --- Main Two-Column Layout ---
     col1, col2 = st.columns(2)
-    
+
     # --- Calculate metrics for Product A ---
     metrics_a = calculate_metrics(product_a_details, product_a_reviews)
-    
-    display_product_metadata(col1, product_a_details, product_a_reviews, "Original Product")
 
     if not st.session_state.product_b_asin:
-        # If no product B, display A's metadata without comparison
+        # If no product B, display A's metadata without comparison.
+        # The 'other_metrics' argument is passed as None.
         display_product_metadata(col1, product_a_details, metrics_a, None, "Original Product")
         show_product_selection_pane(col2, product_a_details['category'], product_a_asin)
     else:
@@ -279,7 +278,7 @@ def main():
         
         metrics_b = calculate_metrics(product_b_details, product_b_reviews)
 
-        # Display both products with comparison data
+        # Display both products, passing the other's metrics for comparison.
         display_product_metadata(col1, product_a_details, metrics_a, metrics_b, "Original Product")
         display_product_metadata(col2, product_b_details, metrics_b, metrics_a, "Comparison Product")
 
