@@ -387,36 +387,13 @@ def main():
 
                 with bar_chart_col:
                     st.markdown("**Aspect Sentiment Summary**")
-
-                    # --- FIX IS HERE: Convert 'Product' column to string before concatenation ---
-                    chart_df['sentiment_product'] = chart_df['sentiment'].astype(str) + ' (' + chart_df['Product'].astype(str) + ')'
-
-                    # Define the domain (all possible categories) and range (all colors)
-                    domain = [
-                        f'Positive ({product_a_title})', f'Positive ({product_b_title})',
-                        f'Neutral ({product_a_title})', f'Neutral ({product_b_title})',
-                        f'Negative ({product_a_title})', f'Negative ({product_b_title})'
-                    ]
-                    range_ = [
-                        '#2ca02c', '#98df8a',  # Dark Green, Light Green
-                        '#cccccc', '#f0f0f0',  # Dark Gray, Light Gray
-                        '#d62728', '#ff9896'   # Dark Red, Light Red
-                    ]
-
-                    # --- Final Chart with Color Shading ---
                     aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
-                        y=alt.Y('aspect:N', title=None, sort='-x'),
-                        x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
-                        # Use the new combined column for color
-                        color=alt.Color('sentiment_product:N',
-                                        scale=alt.Scale(domain=domain, range=range_),
-                                        legend=alt.Legend(title="Sentiment")),
-                        yOffset='Product:N',
+                        x=alt.X('count()', stack='normalize', axis=alt.Axis(title=None, labels=False, ticks=False)),
+                        y=alt.Y('aspect:N', title=None, sort=alt.EncodingSortField(field="aspect", op="count", order='descending')),
+                        color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=None),
+                        row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=5)),
                         tooltip=['Product', 'aspect', 'sentiment', alt.Tooltip('count()', title='Mentions')]
-                    ).properties(
-                        height=alt.Step(40)
-                    )
-
+                    ).properties(height=150)
                     st.altair_chart(aspect_summary_chart, use_container_width=True)
 
                 with radar_chart_col:
