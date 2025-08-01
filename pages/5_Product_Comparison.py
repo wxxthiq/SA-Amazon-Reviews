@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import altair as alt
+import json
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
