@@ -471,37 +471,37 @@ def main():
                 else:
                     st.warning("Not enough common features found to generate a radar chart comparison.")
 
-        # --- 2. Find Unique Aspects ---
-        st.markdown("**Unique Differentiators**")
-        st.info("These are the most frequently mentioned positive and negative features for one product that are **not** mentioned for the other.")
-
-        unique_a = set(counts_a.index) - set(counts_b.index)
-        unique_b = set(counts_b.index) - set(counts_a.index)
-        
-        u_col1, u_col2 = st.columns(2)
-        with u_col1:
-            st.markdown(f"**For: {product_a_title}**")
-            if unique_a:
-                unique_a_sentiments = aspects_a[aspects_a['aspect'].isin(unique_a)].groupby('aspect')['sentiment_score'].mean()
-                st.success("**Top Unique Strengths**")
-                st.dataframe(unique_a_sentiments.nlargest(3).reset_index(), use_container_width=True, hide_index=True)
-                st.error("**Top Unique Weaknesses**")
-                st.dataframe(unique_a_sentiments.nsmallest(3).reset_index(), use_container_width=True, hide_index=True)
-            else:
-                st.write("No unique aspects found.")
-        with u_col2:
-            st.markdown(f"**For: {product_b_title}**")
-            if unique_b:
-                unique_b_sentiments = aspects_b[aspects_b['aspect'].isin(unique_b)].groupby('aspect')['sentiment_score'].mean()
-                st.success("**Top Unique Strengths**")
-                st.dataframe(unique_b_sentiments.nlargest(3).reset_index(), use_container_width=True, hide_index=True)
-                st.error("**Top Unique Weaknesses**")
-                st.dataframe(unique_b_sentiments.nsmallest(3).reset_index(), use_container_width=True, hide_index=True)
-            else:
-                st.write("No unique aspects found.")
-
-    else:
-        st.warning("Not enough aspect data for one or both products to generate a feature-level comparison.")
+            # --- 2. Find Unique Aspects ---
+            st.markdown("**Unique Differentiators**")
+            st.info("These are the most frequently mentioned positive and negative features for one product that are **not** mentioned for the other.")
+    
+            unique_a = set(counts_a.index) - set(counts_b.index)
+            unique_b = set(counts_b.index) - set(counts_a.index)
+            
+            u_col1, u_col2 = st.columns(2)
+            with u_col1:
+                st.markdown(f"**For: {product_a_title}**")
+                if unique_a:
+                    unique_a_sentiments = aspects_a[aspects_a['aspect'].isin(unique_a)].groupby('aspect')['sentiment_score'].mean()
+                    st.success("**Top Unique Strengths**")
+                    st.dataframe(unique_a_sentiments.nlargest(3).reset_index(), use_container_width=True, hide_index=True)
+                    st.error("**Top Unique Weaknesses**")
+                    st.dataframe(unique_a_sentiments.nsmallest(3).reset_index(), use_container_width=True, hide_index=True)
+                else:
+                    st.write("No unique aspects found.")
+            with u_col2:
+                st.markdown(f"**For: {product_b_title}**")
+                if unique_b:
+                    unique_b_sentiments = aspects_b[aspects_b['aspect'].isin(unique_b)].groupby('aspect')['sentiment_score'].mean()
+                    st.success("**Top Unique Strengths**")
+                    st.dataframe(unique_b_sentiments.nlargest(3).reset_index(), use_container_width=True, hide_index=True)
+                    st.error("**Top Unique Weaknesses**")
+                    st.dataframe(unique_b_sentiments.nsmallest(3).reset_index(), use_container_width=True, hide_index=True)
+                else:
+                    st.write("No unique aspects found.")
+    
+        else:
+            st.warning("Not enough aspect data for one or both products to generate a feature-level comparison.")
 
 if __name__ == "__main__":
     main()
