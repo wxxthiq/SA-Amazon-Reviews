@@ -307,7 +307,7 @@ def main():
 
         
         # --- RENDER COMPARISON CHARTS BELOW THE METADATA ---
-                # --- FEATURE-LEVEL PERFORMANCE (FINAL LAYOUT) ---
+               # --- FEATURE-LEVEL PERFORMANCE (FINAL REVISION WITH BUG FIX) ---
         st.markdown("---")
         st.subheader("🔎 Feature-Level Performance")
         st.info(
@@ -356,41 +356,31 @@ def main():
                 final_aspects_to_display = [options_with_counts[key] for key in selected_options]
 
             # --- Data processing for charts ---
-            chart_df = combined_common_aspects_df[combined_common_aspects_df['aspect'].isin(final_aspects_to_display)]
-            if not chart_df.empty:
-                chart_df['Product'] = pd.Categorical(chart_df['Product'], categories=[product_a_title, product_b_title], ordered=True)
+            chart_df_base = combined_common_aspects_df[combined_common_aspects_df['aspect'].isin(final_aspects_to_display)]
 
+            if not chart_df_base.empty:
+                # --- BUG FIX: Pre-calculate counts and proportions in pandas ---
+                agg_df = chart_df_base.groupby(['Product', 'aspect', 'sentiment']).size().reset_index(name='count')
+                agg_df['proportion'] = agg_df.groupby(['Product', 'aspect'])['count'].transform(lambda x: x / x.sum())
+                agg_df['Product'] = pd.Categorical(agg_df['Product'], categories=[product_a_title, product_b_title], ordered=True)
+                
                 # --- Chart Layout ---
                 bar_chart_col, radar_chart_col = st.columns(2)
 
                 with bar_chart_col:
                     st.markdown("**Aspect Sentiment Summary**")
-                    if not chart_df.empty:
-                        aspect_summary_chart = alt.Chart(chart_df).mark_bar().encode(
-                            x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
-                            y=alt.Y('aspect:N', title=None, sort='-x'),
-                            color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
-                            row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=5)),
-                            
-                            # --- ADDED PROPORTION TO TOOLTIP ---
-                            tooltip=[
-                                'Product', 'aspect', 'sentiment',
-                                alt.Tooltip('count()', title='Mentions'),
-                                alt.Tooltip('proportion:Q', title='Proportion', format='.1%')
-                            ]
-                        ).transform_joinaggregate(
-                            # Calculate the total mentions for each product's aspect bar
-                            total_in_bar='count()',
-                            groupby=['Product', 'aspect']
-                        ).transform_calculate(
-                            # Calculate the proportion for each sentiment within that bar
-                            proportion='1 / datum.total_in_bar'
-                        ).properties(
-                            height=150
-                        ).resolve_axis(
-                            y='independent'
-                        )
-                        st.altair_chart(aspect_summary_chart, use_container_width=True)
+                    aspect_summary_chart = alt.Chart(agg_df).mark_bar().encode(
+                        x=alt.X('sum(count)', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
+                        y=alt.Y('aspect:N', title=None, sort='-x'),
+                        color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
+                        row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=5)),
+                        tooltip=[
+                            'Product', 'aspect', 'sentiment',
+                            alt.Tooltip('count:Q', title='Mentions'),
+                            alt.Tooltip('proportion:Q', title='Proportion', format='.1%')
+                        ]
+                    ).resolve_axis(y='independent')
+                    st.altair_chart(aspect_summary_chart, use_container_width=True)
 
                 with radar_chart_col:
                     st.markdown("**Sentiment Score Comparison**")
