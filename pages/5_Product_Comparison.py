@@ -382,35 +382,75 @@ def main():
         aspects_b = get_aspects_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
 
         if not aspects_a.empty and not aspects_b.empty:
-            aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
-            aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
+            aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score', 'text', 'helpful_vote']], on='review_id', how='inner')
+            aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score', 'text', 'helpful_vote']], on='review_id', how='inner')
 
-            # --- 1. Find Common Aspects ---
+            # --- 1. Interactive Comparison on Common Features ---
             counts_a = aspects_a['aspect'].value_counts()
             counts_b = aspects_b['aspect'].value_counts()
-            common_aspects = set(counts_a.index).intersection(set(counts_b.index))
+            common_aspects_list = sorted(list(set(counts_a.index).intersection(set(counts_b.index))))
 
             st.markdown("**Direct Comparison on Common Features**")
-            st.info("This radar chart compares sentiment scores only for features mentioned for **both** products.")
+            st.info("Use the dropdown below to add or remove features from the radar chart comparison.")
 
-            if len(common_aspects) >= 3:
-                total_counts = (counts_a.reindex(common_aspects, fill_value=0) + counts_b.reindex(common_aspects, fill_value=0)).sort_values(ascending=False)
-                
-                num_aspects_to_show = st.slider(
-                    "Select number of top common aspects to compare:",
-                    min_value=3, max_value=min(15, len(total_counts)), value=min(5, len(total_counts)),
-                    key="radar_aspect_slider"
+            if len(common_aspects_list) >= 3:
+                # --- REPLACED SLIDER WITH MULTISELECT ---
+                top_5_common = (counts_a + counts_b).reindex(common_aspects_list).nlargest(5).index.tolist()
+                selected_aspects = st.multiselect(
+                    "Select features to compare:",
+                    options=common_aspects_list,
+                    default=top_5_common,
+                    key="aspect_multiselect"
                 )
-                top_common_aspects = total_counts.nlargest(num_aspects_to_show).index.tolist()
 
-                avg_sent_a = aspects_a[aspects_a['aspect'].isin(top_common_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
-                avg_sent_b = aspects_b[aspects_b['aspect'].isin(top_common_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
+                if len(selected_aspects) >= 1:
+                    avg_sent_a = aspects_a[aspects_a['aspect'].isin(selected_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(selected_aspects)
+                    avg_sent_b = aspects_b[aspects_b['aspect'].isin(selected_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(selected_aspects)
 
-                fig = go.Figure()
-                fig.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself', name=product_a_title, marker_color='#4c78a8', opacity=0.7))
-                fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=product_b_title, marker_color='#f58518', opacity=0.7))
-                fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True, height=400)
-                st.plotly_chart(fig, use_container_width=True)
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself', name=product_a_title, marker_color='#4c78a8', opacity=0.7))
+                    fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=product_b_title, marker_color='#f58518', opacity=0.7))
+                    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True, height=400)
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    # --- NEW FEATURE: FEATURE DEEP DIVE ---
+                    st.markdown("**Feature Deep Dive**")
+                    st.info("Select a single feature from your comparison to see relevant review snippets.")
+                    
+                    deep_dive_aspect = st.selectbox(
+                        "Choose a feature to see example reviews:",
+                        options=selected_aspects,
+                        index=0,
+                        key="deep_dive_selector"
+                    )
+
+                    if deep_dive_aspect:
+                        dd_col1, dd_col2 = st.columns(2)
+                        
+                        # Function to get and display review snippets
+                        def display_snippets(column, product_title, aspect_df, aspect_name):
+                            with column:
+                                st.markdown(f"**{product_title}**")
+                                relevant_reviews = aspect_df[aspect_df['aspect'] == aspect_name].sort_values('helpful_vote', ascending=False)
+                                
+                                pos_reviews = relevant_reviews[relevant_reviews['sentiment_score'] > 0.3]
+                                neg_reviews = relevant_reviews[relevant_reviews['sentiment_score'] < -0.3]
+
+                                st.success("👍 Most Helpful Positive Snippet:")
+                                if not pos_reviews.empty:
+                                    st.markdown(f"> *{pos_reviews.iloc[0]['text'][:200]}...*")
+                                else:
+                                    st.caption("No positive reviews found for this aspect.")
+
+                                st.error("👎 Most Helpful Negative Snippet:")
+                                if not neg_reviews.empty:
+                                    st.markdown(f"> *{neg_reviews.iloc[0]['text'][:200]}...*")
+                                else:
+                                    st.caption("No negative reviews found for this aspect.")
+
+                        display_snippets(dd_col1, product_a_title, aspects_a, deep_dive_aspect)
+                        display_snippets(dd_col2, product_b_title, aspects_b, deep_dive_aspect)
+
             else:
                 st.warning("Not enough common aspects (at least 3) found between the products to generate a comparison chart.")
 
