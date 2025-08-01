@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import altair as alt
 import json
+import plotly.express as px
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
