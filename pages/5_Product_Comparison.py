@@ -307,102 +307,71 @@ def main():
 
         
         # --- RENDER COMPARISON CHARTS BELOW THE METADATA ---
+        # --- RENDER COMPARISON CHARTS BELOW THE METADATA ---
         st.markdown("---")
         st.subheader("📊 At-a-Glance Comparison")
-        st.info("These charts directly compare the proportion of sentiments and star ratings for each product based on your filters. Hover over the bars to see the raw counts.")
+        st.info(
+            "These charts show the proportional breakdown of ratings and sentiments for each product, based on your filters. "
+            "This allows for a fair comparison even if the number of reviews is different."
+        )
 
+        # --- Prepare data for charts ---
+        # Add a 'Product' column to each dataframe before combining
+        product_a_title = truncate_text(product_a_details['product_title'])
+        product_b_title = truncate_text(product_b_details['product_title'])
+        product_a_reviews['Product'] = product_a_title
+        product_b_reviews['Product'] = product_b_title
+
+        combined_reviews_df = pd.concat([product_a_reviews, product_b_reviews], ignore_index=True)
+
+        # --- Create a two-column layout for the charts ---
         chart_col1, chart_col2 = st.columns(2)
 
-        # --- Sentiment Comparison Chart ---
         with chart_col1:
-            if not product_a_reviews.empty or not product_b_reviews.empty:
-                # Calculate proportions for each product
-                dist_a = product_a_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-                counts_a = product_a_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-                df_a = pd.DataFrame({'Proportion': dist_a, 'Count': counts_a}).reset_index(); df_a.columns = ['Sentiment', 'Proportion', 'Count']; df_a['Product'] = truncate_text(product_a_details['product_title'])
-
-                dist_b = product_b_reviews['sentiment'].value_counts(normalize=True).reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-                counts_b = product_b_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-                df_b = pd.DataFrame({'Proportion': dist_b, 'Count': counts_b}).reset_index(); df_b.columns = ['Sentiment', 'Proportion', 'Count']; df_b['Product'] = truncate_text(product_b_details['product_title'])
-
-                plot_df = pd.concat([df_a, df_b])
-
-                sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
-                    x=alt.X('Sentiment:N', title="Sentiment", sort=['Positive', 'Neutral', 'Negative']),
-                    y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
-                    color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518']), legend=alt.Legend(title="Product")),
-                    xOffset='Product:N',
-                    tooltip=[alt.Tooltip('Product:N'), alt.Tooltip('Sentiment:N'), alt.Tooltip('Count:Q', title='Review Count'), alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')]
-                ).properties(title="Sentiment Comparison")
-                st.altair_chart(sentiment_chart, use_container_width=True)
-            else:
-                st.warning("No sentiment data to display for the selected filters.")
-
-
-        # --- Rating Comparison Chart ---
-        with chart_col2:
-            if not product_a_reviews.empty or not product_b_reviews.empty:
-                # Calculate proportions for each product
-                dist_a_ratings = product_a_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
-                counts_a_ratings = product_a_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
-                df_a_ratings = pd.DataFrame({'Proportion': dist_a_ratings, 'Count': counts_a_ratings}).reset_index(); df_a_ratings.columns = ['Rating', 'Proportion', 'Count']; df_a_ratings['Product'] = truncate_text(product_a_details['product_title'])
-
-                dist_b_ratings = product_b_reviews['rating'].value_counts(normalize=True).reindex([5, 4, 3, 2, 1]).fillna(0)
-                counts_b_ratings = product_b_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
-                df_b_ratings = pd.DataFrame({'Proportion': dist_b_ratings, 'Count': counts_b_ratings}).reset_index(); df_b_ratings.columns = ['Rating', 'Proportion', 'Count']; df_b_ratings['Product'] = truncate_text(product_b_details['product_title'])
-
-                plot_df_ratings = pd.concat([df_a_ratings, df_b_ratings])
-
-                rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
-                    x=alt.X('Rating:O', title="Star Rating", sort=alt.EncodingSortField(field="Rating", order="descending")),
-                    y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
-                    color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518']), legend=alt.Legend(title="Product")),
-                    xOffset='Product:N',
-                    tooltip=[alt.Tooltip('Product:N'), alt.Tooltip('Rating:O'), alt.Tooltip('Count:Q', title='Review Count'), alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')]
-                ).properties(title="Rating Comparison")
-                st.altair_chart(rating_chart, use_container_width=True)
-            else:
-                st.warning("No rating data to display for the selected filters.")
-            
-        # --- Feature-Level Performance: Comparative Radar Chart ---
-        st.markdown("---")
-        st.subheader("🔎 Feature-Level Performance Comparison")
-        st.info("This radar chart compares the average sentiment score for the most frequently discussed common aspects. A score closer to 1 is more positive, and a score closer to -1 is more negative.")
-
-        aspects_a = get_aspects_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
-        aspects_b = get_aspects_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
-        
-        if not aspects_a.empty and not aspects_b.empty:
-            # Merge with reviews to get sentiment scores
-            aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
-            aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
-
-            counts_a = aspects_a['aspect'].value_counts()
-            counts_b = aspects_b['aspect'].value_counts()
-            common_aspects = set(counts_a.index).intersection(set(counts_b.index))
-            
-            if len(common_aspects) >= 3:
-                total_counts = (counts_a.reindex(common_aspects, fill_value=0) + counts_b.reindex(common_aspects, fill_value=0)).sort_values(ascending=False)
+            st.markdown("**⭐ Rating Distribution**")
+            if not combined_reviews_df.empty:
+                # Create a categorical rating string for sorting and labeling
+                combined_reviews_df['rating_cat'] = combined_reviews_df['rating'].astype(str) + ' ⭐'
                 
-                num_aspects_to_show = st.slider(
-                    "Select number of top aspects to display:",
-                    min_value=3, max_value=min(20, len(total_counts)), value=min(5, len(total_counts)),
-                    key="radar_aspect_slider"
+                rating_chart = alt.Chart(combined_reviews_df).mark_bar().encode(
+                    x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Percentage', format='%')),
+                    color=alt.Color('rating_cat:N',
+                                    scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'],
+                                                    range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
+                                    legend=alt.Legend(title="Rating")),
+                    order=alt.Order('rating_cat', sort='descending'),
+                    tooltip=[
+                        alt.Tooltip('Product:N', title='Product'),
+                        alt.Tooltip('rating_cat:N', title='Rating'),
+                        alt.Tooltip('count()', title='Review Count')
+                    ]
+                ).properties(
+                    height=80
+                ).facet(
+                    row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=10))
                 )
-                top_common_aspects = total_counts.nlargest(num_aspects_to_show).index.tolist()
+                st.altair_chart(rating_chart, use_container_width=True)
 
-                avg_sent_a = aspects_a[aspects_a['aspect'].isin(top_common_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
-                avg_sent_b = aspects_b[aspects_b['aspect'].isin(top_common_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
-
-                fig = go.Figure()
-                fig.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself', name=truncate_text(product_a_details['product_title']), marker_color='#4c78a8', opacity=0.7))
-                fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=truncate_text(product_b_details['product_title']), marker_color='#f58518', opacity=0.7))
-                fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("Not enough common aspects (at least 3) found between the products with the current filters to generate a comparison chart.")
-        else:
-            st.warning("Not enough aspect data for one or both products to generate a comparison with the current filters.")
-
+        with chart_col2:
+            st.markdown("**😊 Sentiment Distribution**")
+            if not combined_reviews_df.empty:
+                sentiment_chart = alt.Chart(combined_reviews_df).mark_bar().encode(
+                    x=alt.X('count()', stack='normalize', axis=alt.Axis(title='Percentage', format='%')),
+                    color=alt.Color('sentiment:N',
+                                    scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
+                                                    range=['#1a9850', '#cccccc', '#d73027']),
+                                    legend=alt.Legend(title="Sentiment")),
+                    order=alt.Order('sentiment', sort='descending'),
+                     tooltip=[
+                        alt.Tooltip('Product:N', title='Product'),
+                        alt.Tooltip('sentiment:N', title='Sentiment'),
+                        alt.Tooltip('count()', title='Review Count')
+                    ]
+                ).properties(
+                    height=80
+                ).facet(
+                    row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=10))
+                )
+                st.altair_chart(sentiment_chart, use_container_width=True)
 if __name__ == "__main__":
     main()
