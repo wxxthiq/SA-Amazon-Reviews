@@ -373,5 +373,78 @@ def main():
                     row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=10))
                 )
                 st.altair_chart(sentiment_chart, use_container_width=True)
+        
+        # --- FEATURE-LEVEL PERFORMANCE (IMPROVED LOGIC) ---
+        st.markdown("---")
+        st.subheader("🔎 Feature-Level Performance")
+        
+        aspects_a = get_aspects_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+        aspects_b = get_aspects_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+
+        if not aspects_a.empty and not aspects_b.empty:
+            aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
+            aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
+
+            # --- 1. Find Common Aspects ---
+            counts_a = aspects_a['aspect'].value_counts()
+            counts_b = aspects_b['aspect'].value_counts()
+            common_aspects = set(counts_a.index).intersection(set(counts_b.index))
+
+            st.markdown("**Direct Comparison on Common Features**")
+            st.info("This radar chart compares sentiment scores only for features mentioned for **both** products.")
+
+            if len(common_aspects) >= 3:
+                total_counts = (counts_a.reindex(common_aspects, fill_value=0) + counts_b.reindex(common_aspects, fill_value=0)).sort_values(ascending=False)
+                
+                num_aspects_to_show = st.slider(
+                    "Select number of top common aspects to compare:",
+                    min_value=3, max_value=min(15, len(total_counts)), value=min(5, len(total_counts)),
+                    key="radar_aspect_slider"
+                )
+                top_common_aspects = total_counts.nlargest(num_aspects_to_show).index.tolist()
+
+                avg_sent_a = aspects_a[aspects_a['aspect'].isin(top_common_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
+                avg_sent_b = aspects_b[aspects_b['aspect'].isin(top_common_aspects)].groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
+
+                fig = go.Figure()
+                fig.add_trace(go.Scatterpolar(r=avg_sent_a.values, theta=avg_sent_a.index, fill='toself', name=product_a_title, marker_color='#4c78a8', opacity=0.7))
+                fig.add_trace(go.Scatterpolar(r=avg_sent_b.values, theta=avg_sent_b.index, fill='toself', name=product_b_title, marker_color='#f58518', opacity=0.7))
+                fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[-1, 1])), showlegend=True, height=400)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("Not enough common aspects (at least 3) found between the products to generate a comparison chart.")
+
+            # --- 2. Find Unique Aspects ---
+            st.markdown("**Unique Differentiators**")
+            st.info("These are the most frequently mentioned positive and negative features for one product that are **not** mentioned for the other.")
+
+            unique_a = set(counts_a.index) - set(counts_b.index)
+            unique_b = set(counts_b.index) - set(counts_a.index)
+            
+            u_col1, u_col2 = st.columns(2)
+            with u_col1:
+                st.markdown(f"**For: {product_a_title}**")
+                if unique_a:
+                    unique_a_sentiments = aspects_a[aspects_a['aspect'].isin(unique_a)].groupby('aspect')['sentiment_score'].mean()
+                    st.success("**Top Unique Strengths**")
+                    st.dataframe(unique_a_sentiments.nlargest(3).reset_index(), use_container_width=True, hide_index=True)
+                    st.error("**Top Unique Weaknesses**")
+                    st.dataframe(unique_a_sentiments.nsmallest(3).reset_index(), use_container_width=True, hide_index=True)
+                else:
+                    st.write("No unique aspects found.")
+            with u_col2:
+                st.markdown(f"**For: {product_b_title}**")
+                if unique_b:
+                    unique_b_sentiments = aspects_b[aspects_b['aspect'].isin(unique_b)].groupby('aspect')['sentiment_score'].mean()
+                    st.success("**Top Unique Strengths**")
+                    st.dataframe(unique_b_sentiments.nlargest(3).reset_index(), use_container_width=True, hide_index=True)
+                    st.error("**Top Unique Weaknesses**")
+                    st.dataframe(unique_b_sentiments.nsmallest(3).reset_index(), use_container_width=True, hide_index=True)
+                else:
+                    st.write("No unique aspects found.")
+
+        else:
+            st.warning("Not enough aspect data for one or both products to generate a feature-level comparison.")
+
 if __name__ == "__main__":
     main()
