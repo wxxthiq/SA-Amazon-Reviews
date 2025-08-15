@@ -192,7 +192,16 @@ def show_product_selection_pane(column, category, product_a_asin):
                     product = products_df.iloc[i+j]
                     with col.container(border=True):
                         img_url = product.get('image_urls', '').split(',')[0] if pd.notna(product.get('image_urls')) else PLACEHOLDER_IMAGE_URL
-                        st.image(img_url, use_container_width=True)
+                        st.markdown(f"""
+                            <div class="product-container">
+                                <div>
+                                    <div class="product-image-container">
+                                        <img src="{img_url}" class="product-image">
+                                    </div>
+                                    <small>{product['product_title']}</small>
+                                </div>
+                                <div>
+                        """, unsafe_allow_html=True)
                         st.markdown(f"<small>{product['product_title']}</small>", unsafe_allow_html=True)
                         
                         # --- NEW: Display rating and review count ---
@@ -238,20 +247,27 @@ def truncate_text(text, max_length=15):
 def main():
     st.title("⚖️ Product Comparison")
 
+# ADD THIS CSS BLOCK
     st.markdown("""
         <style>
-        .product-image-container {
-            width: 100%;
-            height: 250px; /* Explicitly set the container height */
+        .product-container {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+        }
+        .product-image-container {
+            height: 150px; /* Adjust height as needed for this page */
+            display: flex;
             align-items: center;
-            margin-bottom: 1rem; /* Add some space below the image container */
+            justify-content: center;
+            overflow: hidden;
+            margin-bottom: 10px;
         }
         .product-image-container img {
-            max-width: 100%;
             max-height: 100%;
-            object-fit: contain;
+            max-width: 100%;
+            object-fit: contain; /* Scales the image to fit */
         }
         </style>
     """, unsafe_allow_html=True)
