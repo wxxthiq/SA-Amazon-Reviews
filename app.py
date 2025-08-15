@@ -10,9 +10,36 @@ PRODUCTS_PER_PAGE = 16
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-preprocessing-3cat"
 
+
 # --- Page Setup ---
 st.set_page_config(layout="wide", page_title="Amazon Review Search")
 st.title("🔎 Amazon Product Search")
+
+# ADD THIS CSS BLOCK
+st.markdown("""
+    <style>
+    .product-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
+    }
+    .product-image-container {
+        height: 200px; /* Fixed height for the image container */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        margin-bottom: 10px;
+    }
+    .product-image-container img {
+        max-height: 100%;
+        max-width: 100%;
+        object-fit: contain; /* Scales the image to fit */
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 st.info("ℹ️ **How to Use:** Start by selecting a product category from the dropdown menu. You can then use the search bar and advanced filters to find specific products.")
 
 # --- Data Loading ---
@@ -81,6 +108,8 @@ else:
 
     st.header(f"Found {total_results} Products in '{st.session_state.category}'")
 
+    # ... (inside the `else` block after "Found {total_results} Products...")
+
     if paginated_results.empty:
         st.warning("No products match your search criteria on this page.")
     else:
@@ -91,17 +120,30 @@ else:
                 if i + j < len(paginated_results):
                     row = paginated_results.iloc[i+j]
                     with col.container(border=True):
+                        # MODIFIED SECTION
                         image_urls_str = row.get('image_urls')
                         thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
-                        st.image(thumbnail_url, use_container_width=True)
-                        st.markdown(f"**{row['product_title']}**")
+
+                        st.markdown(f"""
+                            <div class="product-container">
+                                <div>
+                                    <div class="product-image-container">
+                                        <img src="{thumbnail_url}" class="product-image">
+                                    </div>
+                                    <p><strong>{row['product_title']}</strong></p>
+                                </div>
+                                <div>
+                        """, unsafe_allow_html=True)
+
                         avg_rating = row.get('average_rating', 0)
                         review_count = row.get('review_count', 0)
                         st.caption(f"Avg. Rating: {avg_rating:.2f} ⭐ ({int(review_count)} reviews)")
-                        
+
                         if st.button("View Details", key=row['parent_asin']):
                             st.session_state.selected_product = row['parent_asin']
                             st.switch_page("pages/1_Sentiment_Overview.py")
+
+                        st.markdown("</div></div>", unsafe_allow_html=True) # Closes the divs
 
     # --- Pagination Buttons ---
     st.markdown("---")
