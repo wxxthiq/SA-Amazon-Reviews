@@ -153,7 +153,7 @@ else:
 
     # --- Pagination Buttons ---
     st.markdown("---")
-    total_pages = (total_results + PRODUCTS_PER_PAGE - 1) // PRODUCTS_PER_PAGE
+    total_pages = (total_results + st.session_state.products_per_page - 1) // st.session_state.products_per_page
     if total_pages > 1:
         nav_cols = st.columns([1, 1, 1])
         with nav_cols[0]:
