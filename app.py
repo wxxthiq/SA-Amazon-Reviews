@@ -15,31 +15,27 @@ KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-preprocessing-3cat"
 st.set_page_config(layout="wide", page_title="Amazon Review Search")
 st.title("🔎 Amazon Product Search")
 
-# REPLACE THE OLD CSS WITH THIS NEW BLOCK
+# ADD THIS CSS BLOCK
 st.markdown("""
     <style>
-    .product-card {
-        height: 420px; /* Set a fixed height for the entire card */
+    .product-container {
         display: flex;
         flex-direction: column;
-        justify-content: space-between; /* Pushes content to top and button to bottom */
+        justify-content: space-between;
+        height: 100%;
     }
     .product-image-container {
-        height: 200px; /* Fixed height for the image area */
+        height: 200px; /* Fixed height for the image container */
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 1rem;
+        overflow: hidden;
+        margin-bottom: 10px;
     }
     .product-image-container img {
         max-height: 100%;
         max-width: 100%;
-        object-fit: contain;
-    }
-    .product-title {
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-        /* The title can now wrap without breaking the layout */
+        object-fit: contain; /* Scales the image to fit */
     }
     </style>
 """, unsafe_allow_html=True)
@@ -124,34 +120,30 @@ else:
                 if i + j < len(paginated_results):
                     row = paginated_results.iloc[i+j]
                     with col.container(border=True):
-                        # MODIFIED HTML STRUCTURE
+                        # MODIFIED SECTION
                         image_urls_str = row.get('image_urls')
                         thumbnail_url = image_urls_str.split(',')[0] if pd.notna(image_urls_str) else PLACEHOLDER_IMAGE_URL
-                        
-                        st.markdown(f'<div class="product-card">', unsafe_allow_html=True)
-                        
-                        # Top part of the card (image and title)
+
                         st.markdown(f"""
-                            <div>
-                                <div class="product-image-container">
-                                    <img src="{thumbnail_url}">
+                            <div class="product-container">
+                                <div>
+                                    <div class="product-image-container">
+                                        <img src="{thumbnail_url}" class="product-image">
+                                    </div>
+                                    <p><strong>{row['product_title']}</strong></p>
                                 </div>
-                                <div class="product-title">{row['product_title']}</div>
-                            </div>
+                                <div>
                         """, unsafe_allow_html=True)
-                        
-                        # Bottom part of the card (rating and button)
-                        st.markdown('<div>', unsafe_allow_html=True)
+
                         avg_rating = row.get('average_rating', 0)
                         review_count = row.get('review_count', 0)
                         st.caption(f"Avg. Rating: {avg_rating:.2f} ⭐ ({int(review_count)} reviews)")
-                        
-                        if st.button("View Details", key=row['parent_asin'], use_container_width=True):
+
+                        if st.button("View Details", key=row['parent_asin']):
                             st.session_state.selected_product = row['parent_asin']
                             st.switch_page("pages/1_Sentiment_Overview.py")
-                        st.markdown('</div>', unsafe_allow_html=True)
 
-                        st.markdown('</div>', unsafe_allow_html=True) # Close product-card div
+                        st.markdown("</div></div>", unsafe_allow_html=True) # Closes the divs
 
     # --- Pagination Buttons ---
     st.markdown("---")
