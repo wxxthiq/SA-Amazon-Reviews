@@ -71,7 +71,7 @@ with col3:
 
 # --- NEW: Advanced Filters UI ---
 with st.expander("✨ Advanced Filters"):
-    adv_col1, adv_col2 = st.columns(2)
+    adv_col1, adv_col2, adv_col3 = st.columns(3) # Create a third column
     with adv_col1:
         st.session_state.rating_range = st.slider(
             "Filter by Average Rating:",
@@ -84,9 +84,16 @@ with st.expander("✨ Advanced Filters"):
         st.session_state.review_count_range = st.slider(
             "Filter by Number of Reviews:",
             min_value=0,
-            max_value=50000, # You can adjust this max value based on your dataset
+            max_value=50000, 
             value=st.session_state.review_count_range,
             step=100
+        )
+    # ADD THIS NEW WIDGET
+    with adv_col3:
+        st.session_state.products_per_page = st.selectbox(
+            "Products per Page:",
+            options=[8, 16, 24, 32],
+            help="Select how many products to show on each page."
         )
 
 
