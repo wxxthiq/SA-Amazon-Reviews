@@ -108,8 +108,8 @@ else:
         sort_by=st.session_state.sort_by,
         rating_range=st.session_state.rating_range,
         review_count_range=st.session_state.review_count_range,
-        limit=PRODUCTS_PER_PAGE,
-        offset=st.session_state.page * PRODUCTS_PER_PAGE
+        limit=st.session_state.products_per_page,
+        offset=st.session_state.page * st.session_state.products_per_page
     )
 
     st.header(f"Found {total_results} Products in '{st.session_state.category}'")
