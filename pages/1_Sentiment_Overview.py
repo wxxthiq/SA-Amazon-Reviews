@@ -166,6 +166,8 @@ def main():
                         return "✅ Consistent"  # Low deviation = high agreement
                     elif std_dev < 1.4:
                         return "↔️ Mixed"      # Medium deviation = some disagreement
+                    else:
+                        return "⚠️ Polarizing" # High deviation = disagreement
                         
                 consensus_text = get_rating_consensus(rating_std_dev)
                 st.metric(
