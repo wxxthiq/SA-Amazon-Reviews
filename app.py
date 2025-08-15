@@ -6,7 +6,6 @@ from utils.database_utils import connect_to_db, get_all_categories, get_filtered
 # --- App Configuration ---
 DB_PATH = "amazon_reviews_final.duckdb"
 DB_VERSION = 1
-PRODUCTS_PER_PAGE = 16
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-preprocessing-3cat"
 
@@ -55,7 +54,7 @@ if 'sort_by' not in st.session_state: st.session_state.sort_by = "Popularity (Mo
 # --- NEW: Initialize session state for new filters ---
 if 'rating_range' not in st.session_state: st.session_state.rating_range = (1.0, 5.0)
 if 'review_count_range' not in st.session_state: st.session_state.review_count_range = (0, 50000)
-
+if 'products_per_page' not in st.session_state: st.session_state.products_per_page = 8
 
 # --- Search and Filter UI ---
 col1, col2, col3 = st.columns(3)
