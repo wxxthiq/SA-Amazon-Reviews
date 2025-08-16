@@ -73,7 +73,7 @@ def main():
         st.stop()
         
     selected_asin = st.session_state.selected_product
-    st.title("REMOVE -> Asin is {selected_asin}")
+    st.title(selected_asin)
     product_details_df = get_product_details(conn, selected_asin)
     if product_details_df.empty:
         st.error("Could not find details for the selected product.")
