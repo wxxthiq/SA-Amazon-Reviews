@@ -60,7 +60,7 @@ nlp = load_spacy_model()
     
 if 'selected_review_id' not in st.session_state:
     st.session_state.selected_review_id = None
-
+st.session_state['selected_product'] = 'B002MPLYEW'
 # --- Main App Logic ---
 def main():
     st.title("📊 Sentiment Overview")
@@ -73,7 +73,6 @@ def main():
         st.stop()
         
     selected_asin = st.session_state.selected_product
-    st.markdown(selected_asin)
     product_details_df = get_product_details(conn, selected_asin)
     if product_details_df.empty:
         st.error("Could not find details for the selected product.")
