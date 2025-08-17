@@ -13,7 +13,11 @@ from utils.database_utils import (
     get_all_filtered_reviews 
 )
 
-
+# --- Page Configuration and Constants ---
+st.set_page_config(layout="wide", page_title="Review Explorer")
+DB_PATH = "amazon_reviews_final.duckdb"
+REVIEWS_PER_PAGE = 10
+conn = connect_to_db(DB_PATH)
 
 # --- Helper function to convert DataFrame to CSV ---
 @st.cache_data
@@ -25,11 +29,6 @@ def initialize_session_state(min_date_db, max_date_db):
     """Initializes all necessary session state variables for this page."""
     # For the audit, we hardcode a product.
     # When navigating from app.py, this will already be set and this line will be skipped.
-    # --- Page Configuration and Constants ---
-    st.set_page_config(layout="wide", page_title="Review Explorer")
-    DB_PATH = "amazon_reviews_final.duckdb"
-    REVIEWS_PER_PAGE = 10
-    conn = connect_to_db(DB_PATH)
     if 'selected_product' not in st.session_state:
         st.session_state['selected_product'] = 'B002MPLYEW' # Use a real ASIN
 
