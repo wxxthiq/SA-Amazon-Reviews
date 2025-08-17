@@ -60,7 +60,7 @@ nlp = load_spacy_model()
     
 if 'selected_review_id' not in st.session_state:
     st.session_state.selected_review_id = None
-st.session_state['selected_product'] = 'B002MPLYEW'
+
 # --- Main App Logic ---
 def main():
     st.title("📊 Sentiment Overview")
