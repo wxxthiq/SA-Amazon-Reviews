@@ -242,7 +242,8 @@ def get_rating_consensus(std_dev):
 def truncate_text(text, max_length=15):
     """Truncates text for chart labels."""
     return text if len(text) <= max_length else text[:max_length] + "..."
-
+    
+st.session_state['selected_product'] = 'B002MPLYEW'
 # --- Main App Logic ---
 def main():
     st.title("⚖️ Product Comparison")
