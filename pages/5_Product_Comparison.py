@@ -242,29 +242,9 @@ def get_rating_consensus(std_dev):
 def truncate_text(text, max_length=15):
     """Truncates text for chart labels."""
     return text if len(text) <= max_length else text[:max_length] + "..."
-    
 
 # --- Main App Logic ---
 def main():
-    # --- TEMPORARY CODE FOR LIGHTHOUSE AUDIT ---
-    # This block hardcodes the session state to allow this page to run standalone.
-    # REMEMBER TO REMOVE THIS BLOCK AFTER THE AUDIT IS COMPLETE.
-    
-    # We need to set the main product to start the comparison from.
-    if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
-        st.session_state['selected_product'] = 'B002MPLYEW' # IMPORTANT: Use a real ASIN from your database
-    
-    # Initialize all other session state keys this page uses.
-    if 'product_b_asin' not in st.session_state:
-        st.session_state.product_b_asin = None
-    if 'compare_search_term' not in st.session_state:
-        st.session_state.compare_search_term = ""
-    if 'compare_sort_by' not in st.session_state:
-        st.session_state.compare_sort_by = "Popularity (Most Reviews)"
-    if 'compare_page' not in st.session_state:
-        st.session_state.compare_page = 0
-    
-    # --- END OF TEMPORARY CODE ---
     st.title("⚖️ Product Comparison")
 
 # ADD THIS CSS BLOCK
@@ -296,9 +276,9 @@ def main():
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
 
-    # if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
-    #     st.warning("Please select a product from the main search page first to begin a comparison.")
-    #     st.stop()
+    if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
+        st.warning("Please select a product from the main search page first to begin a comparison.")
+        st.stop()
 
     product_a_asin = st.session_state.selected_product
     product_a_details = get_product_details(conn, product_a_asin).iloc[0]
