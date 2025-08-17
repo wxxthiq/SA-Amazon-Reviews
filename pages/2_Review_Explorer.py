@@ -25,6 +25,8 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8')
 
 st.session_state['selected_product'] = 'B002MPLYEW'
+if 'selected_review_id' not in st.session_state:
+    st.session_state['selected_review_id'] = None
 # --- Main App Logic ---
 def main():
 
