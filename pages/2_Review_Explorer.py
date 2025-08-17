@@ -24,6 +24,7 @@ conn = connect_to_db(DB_PATH)
 def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8')
 
+st.session_state['selected_product'] = 'B002MPLYEW'
 # --- Main App Logic ---
 def main():
 
