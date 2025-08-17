@@ -194,35 +194,35 @@ def main():
             all_filtered_df_for_plot['text_polarity_jittered'] = all_filtered_df_for_plot['sentiment_score'] + rng.uniform(-0.02, 0.02, size=len(all_filtered_df_for_plot))
             all_filtered_df_for_plot['discrepancy'] = (all_filtered_df_for_plot['sentiment_score'] - ((all_filtered_df_for_plot['rating'] - 3) / 2.0)).abs()
 
-            plot_col, review_col = st.columns([2, 1])
-            with plot_col:
-                fig = px.scatter(
-                    all_filtered_df_for_plot, x="rating_jittered", y="text_polarity_jittered", color="discrepancy",
-                    labels={"rating_jittered": "Star Rating", "text_polarity_jittered": "Sentiment Score"},
-                    hover_name="review_title"
-                )
-                fig.update_layout(clickmode='event+select')
-                selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
+            # plot_col, review_col = st.columns([2, 1])
+            # with plot_col:
+            #     fig = px.scatter(
+            #         all_filtered_df_for_plot, x="rating_jittered", y="text_polarity_jittered", color="discrepancy",
+            #         labels={"rating_jittered": "Star Rating", "text_polarity_jittered": "Sentiment Score"},
+            #         hover_name="review_title"
+            #     )
+            #     fig.update_layout(clickmode='event+select')
+            #     selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
 
-                if selected_points and 'pointIndex' in selected_points[0]:
-                    point_index = selected_points[0]['pointIndex']
-                    if point_index < len(all_filtered_df_for_plot):
-                        clicked_id = all_filtered_df_for_plot.iloc[point_index]['review_id']
-                        if st.session_state.selected_review_id != clicked_id:
-                            st.session_state.selected_review_id = clicked_id
-                            st.rerun()
-            with review_col:
-                if st.session_state.selected_review_id:
-                    if st.session_state.selected_review_id in all_filtered_df_for_plot['review_id'].values:
-                        st.markdown("#### Selected Review Details")
-                        review_details = get_single_review_details(conn, st.session_state.selected_review_id)
-                        if review_details is not None:
-                            st.subheader(review_details.get('review_title', 'No Title'))
-                            st.caption(f"Reviewed on: {review_details.get('date', 'N/A')} | {int(review_details.get('helpful_vote', 0))} helpful votes")
-                            st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
-                        if st.button("Close Review", key="close_review_button"):
-                            st.session_state.selected_review_id = None
-                            st.rerun()
+            #     if selected_points and 'pointIndex' in selected_points[0]:
+            #         point_index = selected_points[0]['pointIndex']
+            #         if point_index < len(all_filtered_df_for_plot):
+            #             clicked_id = all_filtered_df_for_plot.iloc[point_index]['review_id']
+            #             if st.session_state.selected_review_id != clicked_id:
+            #                 st.session_state.selected_review_id = clicked_id
+            #                 st.rerun()
+            # with review_col:
+            #     if st.session_state.selected_review_id:
+            #         if st.session_state.selected_review_id in all_filtered_df_for_plot['review_id'].values:
+            #             st.markdown("#### Selected Review Details")
+            #             review_details = get_single_review_details(conn, st.session_state.selected_review_id)
+            #             if review_details is not None:
+            #                 st.subheader(review_details.get('review_title', 'No Title'))
+            #                 st.caption(f"Reviewed on: {review_details.get('date', 'N/A')} | {int(review_details.get('helpful_vote', 0))} helpful votes")
+            #                 st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
+            #             if st.button("Close Review", key="close_review_button"):
+            #                 st.session_state.selected_review_id = None
+            #                 st.rerun()
 
 # This ensures the script runs only when executed directly
 if __name__ == "__main__":
