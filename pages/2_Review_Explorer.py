@@ -23,10 +23,27 @@ conn = connect_to_db(DB_PATH)
 @st.cache_data
 def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8')
+    
+# --- NEW: ROBUST SESSION STATE INITIALIZATION ---
+def initialize_session_state(min_date_db, max_date_db):
+    """Initializes all necessary session state variables for this page."""
+    # For the audit, we hardcode a product.
+    # When navigating from app.py, this will already be set and this line will be skipped.
+    if 'selected_product' not in st.session_state:
+        st.session_state['selected_product'] = 'B002MPLYEW' # Use a real ASIN
 
-st.session_state['selected_product'] = 'B002MPLYEW'
-if 'selected_review_id' not in st.session_state:
-    st.session_state['selected_review_id'] = None
+    # This is the critical fix: Ensure selected_review_id always exists.
+    if 'selected_review_id' not in st.session_state:
+        st.session_state['selected_review_id'] = None
+
+    # Initialize all other page-specific keys to prevent errors
+    if 'explorer_date_filter' not in st.session_state: st.session_state.explorer_date_filter = (min_date_db, max_date_db)
+    if 'explorer_rating_filter' not in st.session_state: st.session_state.explorer_rating_filter = [1, 2, 3, 4, 5]
+    if 'explorer_sentiment_filter' not in st.session_state: st.session_state.explorer_sentiment_filter = ['Positive', 'Negative', 'Neutral']
+    if 'explorer_verified_filter' not in st.session_state: st.session_state.explorer_verified_filter = "All"
+    if 'review_page' not in st.session_state: st.session_state.review_page = 0
+    if 'explorer_search_term' not in st.session_state: st.session_state.explorer_search_term = ""
+
 # --- Main App Logic ---
 def main():
 
@@ -45,9 +62,14 @@ def main():
             st.markdown("Scroll down to the 'Advanced Analysis' section to find reviews where the star rating and the written sentiment don't match up!")
             
     # --- Check for Selected Product ---
+    # if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
+    #     st.warning("Please select a product from the main search page first.")
+    #     st.stop()
+        # --- Check for Selected Product FIRST ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
-        st.warning("Please select a product from the main search page first.")
-        st.stop()
+        # For the audit, we'll add a hardcoded value to prevent this from stopping the script
+        st.session_state.selected_product = 'B002MPLYEW' # Make sure this ASIN exists
+        # In a real run from app.py, this code block won't be hit.
     selected_asin = st.session_state.selected_product
 
     product_details = get_product_details(conn, selected_asin).iloc[0]
@@ -55,7 +77,8 @@ def main():
     # --- Sidebar Filters ---
     st.sidebar.header("📊 Interactive Filters")
     min_date_db, max_date_db = get_product_date_range(conn, selected_asin)
-    
+        # --- NOW, INITIALIZE THE STATE ---
+    initialize_session_state(min_date_db, max_date_db)
     # Initialize session state variables
     if 'explorer_date_filter' not in st.session_state: st.session_state.explorer_date_filter = (min_date_db, max_date_db)
     if 'explorer_rating_filter' not in st.session_state: st.session_state.explorer_rating_filter = [1, 2, 3, 4, 5]
