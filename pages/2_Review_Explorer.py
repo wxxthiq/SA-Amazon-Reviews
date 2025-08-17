@@ -218,7 +218,7 @@ def main():
                         review_details = get_single_review_details(conn, st.session_state.selected_review_id)
                         if review_details is not None:
                             st.subheader(review_details.get('review_title', 'No Title'))
-                            st.caption(f"Reviewed on: {review_details.get('date', 'N/A')} | � {int(review_details.get('helpful_vote', 0))} helpful votes")
+                            st.caption(f"Reviewed on: {review_details.get('date', 'N/A')} | {int(review_details.get('helpful_vote', 0))} helpful votes")
                             st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
                         if st.button("Close Review", key="close_review_button"):
                             st.session_state.selected_review_id = None
