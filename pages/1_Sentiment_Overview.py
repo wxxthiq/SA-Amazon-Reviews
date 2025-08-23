@@ -191,7 +191,7 @@ def main():
             else:
                 st.metric("Verified Purchases", "N/A")
 
-         st.info(f"**{len(chart_data):,}** reviews match your current filters.")
+        st.info(f"**{len(chart_data):,}** reviews match your current filters.")
         st.markdown("---")
         # --- MODIFIED: Back to a 2-column layout ---
         dist_col1, dist_col2 = st.columns(2)
