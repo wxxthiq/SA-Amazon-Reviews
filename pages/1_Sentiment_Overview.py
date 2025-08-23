@@ -132,7 +132,7 @@ def main():
             
     with right_col:
         st.header(product_details['product_title'])
-        st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
+        #st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
         # In main() -> with right_col:
         # --- NEW: 2x2 Grid for Metrics ---
         row1_col1, row1_col2 = st.columns(2)
