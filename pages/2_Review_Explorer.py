@@ -130,7 +130,7 @@ def main():
         st.warning("No reviews match your current filter and search criteria.")
     else:
         # Display informational message and export button
-        info_c1, export_c2, page_c3 = st.columns([2, 1, 1])
+        info_c1, page_c3, export_c2 = st.columns([2, 1, 1])
         with info_c1:
             total_pages = (total_reviews + st.session_state.reviews_per_page - 1) // st.session_state.reviews_per_page
             st.info(f"Showing **{len(paginated_reviews_df)}** of **{total_reviews}** matching reviews. (Page **{st.session_state.review_page + 1}** of **{total_pages}**)")
