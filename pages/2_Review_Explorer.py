@@ -161,7 +161,8 @@ def main():
                 col1, col2 = st.columns([4, 1])
                 with col1:
                     st.subheader(review['review_title'])
-                    caption_parts = ["✅ Verified" if review['verified_purchase'] else "❌ Not Verified", f"Reviewed on: {review['date']}", f"Sentiment: {review['sentiment']}"]
+                    formatted_date = review['date'].strftime('%B %d, %Y')
+                    caption_parts = ["✅ Verified" if review['verified_purchase'] else "❌ Not Verified", f"Reviewed on: {formatted_date}", f"Sentiment: {review['sentiment']}"]
                     st.caption(" | ".join(caption_parts))
                     
                     search_term = st.session_state.explorer_search_term
@@ -174,6 +175,9 @@ def main():
                         st.markdown(f"> {review_text}")
                 with col2:
                     st.metric("⭐ Rating", f"{review['rating']:.1f}")
+                    score = review['sentiment_score']
+                    emoji = "😊" if score > 0.3 else "😐" if score > -0.3 else "😞"
+                    st.metric("Sentiment Score", f"{score:.2f} {emoji}")
                     st.metric("👍 Helpful", f"{review['helpful_vote']}")
         
         # --- Pagination Buttons ---
