@@ -7,7 +7,7 @@ from utils.database_utils import connect_to_db, get_all_categories, get_filtered
 DB_PATH = "amazon_reviews_final.duckdb"
 DB_VERSION = 1
 PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
-KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-reviews-duckdb"
+KAGGLE_DATASET_SLUG = "wathiqsoualhi/amazon-reviews-duckdb2"
 
 
 # --- Page Setup ---
