@@ -106,14 +106,13 @@ def main():
     aspect_df = get_aspects_for_product(conn, selected_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
 
 
-    st.markdown("---")
     if reviews_data.empty or aspect_df.empty:
         st.warning("No review or aspect data available for the selected filters.")
         st.stop()
 
     st.info(f"Analyzing aspects from **{len(reviews_data)}** reviews matching your criteria.")
     # --- Aspect Summary Chart (with Interactive Sorting) ---
-    st.markdown("### Aspect Analysis")
+
     
     # Create a two-column layout
     col1, col2 = st.columns([3, 2]) # Give more space to the main chart
