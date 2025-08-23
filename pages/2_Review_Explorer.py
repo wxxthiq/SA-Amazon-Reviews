@@ -119,8 +119,8 @@ def main():
         verified_filter=st.session_state.explorer_verified_filter,
         search_term=st.session_state.explorer_search_term,
         sort_by=sort_by,
-        limit=REVIEWS_PER_PAGE,
-        offset=st.session_state.review_page * REVIEWS_PER_PAGE
+        limit=st.session_state.reviews_per_page,
+        offset=st.session_state.review_page * st.session_state.reviews_per_page
     )
     
     # --- Display Results and Export Button ---
@@ -179,7 +179,7 @@ def main():
         
         # --- Pagination Buttons ---
         st.markdown("---")
-        if total_reviews > REVIEWS_PER_PAGE:
+        if total_reviews > st.session_state.reviews_per_page:
             nav_cols = st.columns([1, 1, 1])
             if st.session_state.review_page > 0:
                 nav_cols[0].button("⬅️ Previous Page", on_click=lambda: setattr(st.session_state, 'review_page', st.session_state.review_page - 1), use_container_width=True)
