@@ -16,7 +16,7 @@ from utils.database_utils import (
 # --- Page Configuration and Constants ---
 st.set_page_config(layout="wide", page_title="Review Explorer")
 DB_PATH = "amazon_reviews_final.duckdb"
-REVIEWS_PER_PAGE = 10
+#REVIEWS_PER_PAGE = 10
 conn = connect_to_db(DB_PATH)
 
 # --- Helper function to convert DataFrame to CSV ---
@@ -60,6 +60,7 @@ def main():
     if 'explorer_verified_filter' not in st.session_state: st.session_state.explorer_verified_filter = "All"
     if 'review_page' not in st.session_state: st.session_state.review_page = 0
     if 'explorer_search_term' not in st.session_state: st.session_state.explorer_search_term = ""
+    if 'reviews_per_page' not in st.session_state: st.session_state.reviews_per_page = 10
         
     def reset_page_number():
         st.session_state.review_page = 0
@@ -129,10 +130,17 @@ def main():
         st.warning("No reviews match your current filter and search criteria.")
     else:
         # Display informational message and export button
-        info_c1, export_c2 = st.columns([3, 1])
+        info_c1, export_c2, page_c3 = st.columns([2, 1, 1])
         with info_c1:
             total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
             st.info(f"Showing **{len(paginated_reviews_df)}** of **{total_reviews}** matching reviews. (Page **{st.session_state.review_page + 1}** of **{total_pages}**)")
+        with page_c3:
+            st.selectbox(
+                "Reviews per page:",
+                options=[10, 25, 50],
+                key='reviews_per_page',
+                on_change=reset_page_number
+            )
         with export_c2:
             # MODIFIED: Fetch the full data only when the button is being prepared
             all_filtered_df_for_export = get_all_filtered_reviews(
