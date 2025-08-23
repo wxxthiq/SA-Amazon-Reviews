@@ -254,12 +254,19 @@ def main():
                             m_col2.metric("Sentiment", f"{score:.2f} {emoji}")
                             
                             # Format the date for the caption
+                            # --- MODIFIED SECTION ---
                             formatted_date = review_details['date'].strftime('%B %d, %Y')
+                            
+                            # Add the Verified Purchase status
+                            verified_status = "✅ Verified Purchase" if review_details.get('verified_purchase') else "❌ Not Verified"
+                            
                             caption_parts = [
+                                verified_status,
                                 f"Reviewed on: {formatted_date}",
                                 f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"
                             ]
                             st.caption(" | ".join(caption_parts))
+                            # --- END MODIFICATION ---
                             
                             st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
                             # --- END MODIFICATION ---
