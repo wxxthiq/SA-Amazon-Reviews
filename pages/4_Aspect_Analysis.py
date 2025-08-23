@@ -57,13 +57,14 @@ REVIEWS_PER_PAGE = 5
 
 # --- Main App Logic ---
 def main():
+    if st.button("⬅️ Back to Sentiment Overview"):
+        st.switch_page("pages/1_Sentiment_Overview.py")
+        
     st.title("🔎 Aspect-Based Sentiment Analysis")
     
     if 'aspect_review_page' not in st.session_state:
         st.session_state.aspect_review_page = 0
         
-    if st.button("⬅️ Back to Sentiment Overview"):
-        st.switch_page("pages/1_Sentiment_Overview.py")
 
     # --- Check for Selected Product ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
@@ -73,8 +74,6 @@ def main():
 
     # --- Load Product Data ---
     product_details = get_product_details(conn, selected_asin).iloc[0]
-    st.header(product_details['product_title'])
-    st.caption("This page automatically identifies key product features and analyzes the specific sentiment towards them.")
 
     # --- Sidebar Filters (COMPLETE SET) ---
     st.sidebar.header("🔬 Aspect Analysis Filters")
