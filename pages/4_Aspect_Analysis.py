@@ -60,7 +60,18 @@ def main():
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
         
-    st.title("🔎 Aspect-Based Sentiment Analysis")
+    title_col, help_col = st.columns([10, 1])
+    with title_col:
+        st.markdown("# 🔎 Detailed Aspect Analysis")
+    with help_col:
+        st.markdown('<div style="height: 2rem;"></div>', unsafe_allow_html=True) # Vertical alignment spacer
+        with st.popover("ⓘ"):
+            st.markdown("##### What is this page for?")
+            st.markdown("This page provides a deep-dive into the sentiment associated with specific product features (or 'aspects') that were automatically identified from the reviews.")
+            st.markdown("##### How do I use it?")
+            st.markdown("1.  **Use the sidebar** to filter the reviews you want to analyze.")
+            st.markdown("2.  **Use the charts** in the 'Aspect Sentiment Summary' to get a high-level view.")
+            st.markdown("3.  **Select a specific aspect** from the 'Interactive Aspect Explorer' dropdown to see its detailed rating distribution, sentiment breakdown, and performance over time.")
     
     if 'aspect_review_page' not in st.session_state:
         st.session_state.aspect_review_page = 0
