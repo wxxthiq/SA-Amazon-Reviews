@@ -242,10 +242,27 @@ def main():
                         st.markdown("#### Selected Review Details")
                         review_details = get_single_review_details(conn, st.session_state.selected_review_id)
                         if review_details is not None:
+                            # --- MODIFIED & ENHANCED SECTION ---
                             st.subheader(review_details.get('review_title', 'No Title'))
-                            caption_parts = [f"Reviewed on: {review_details.get('date', 'N/A')}", f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"]
+                            
+                            # Add the key metrics
+                            m_col1, m_col2 = st.columns(2)
+                            m_col1.metric("⭐ Rating", f"{review_details.get('rating', 0):.1f}")
+                            
+                            score = review_details.get('sentiment_score', 0)
+                            emoji = "😊" if score > 0.3 else "😐" if score > -0.3 else "😞"
+                            m_col2.metric("Sentiment", f"{score:.2f} {emoji}")
+                            
+                            # Format the date for the caption
+                            formatted_date = review_details['date'].strftime('%B %d, %Y')
+                            caption_parts = [
+                                f"Reviewed on: {formatted_date}",
+                                f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"
+                            ]
                             st.caption(" | ".join(caption_parts))
+                            
                             st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
+                            # --- END MODIFICATION ---
                         if st.button("Close Review", key="close_review_button"):
                             st.session_state.selected_review_id = None
                             st.rerun()
