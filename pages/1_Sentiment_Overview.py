@@ -64,7 +64,24 @@ if 'selected_review_id' not in st.session_state:
 # --- Main App Logic ---
 def main():
     st.title("📊 Sentiment Overview")
-    
+
+    # ADD THIS CSS BLOCK
+    st.markdown("""
+        <style>
+        .product-image-container {
+            height: 350px; /* Adjust height as needed for this page */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        .product-image-container img {
+            max-height: 100%;
+            max-width: 100%;
+            object-fit: contain;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     DB_PATH = "amazon_reviews_final.duckdb"
     conn = connect_to_db(DB_PATH)
     
@@ -115,7 +132,14 @@ def main():
     with left_col:
         image_urls_str = product_details.get('image_urls')
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
-        st.image(image_urls[0] if image_urls else "https://via.placeholder.com/200", use_container_width=True)
+        # --- MODIFIED SECTION ---
+        thumbnail_url = image_urls[0] if image_urls else "https://via.placeholder.com/200"
+        st.markdown(f"""
+            <div class="product-image-container">
+                <img src="{thumbnail_url}">
+            </div>
+        """, unsafe_allow_html=True)
+        # --- END MODIFICATION ---
         if image_urls:
             with st.popover("🖼️ View Image Gallery"):
                 st.image(image_urls, use_container_width=True)
