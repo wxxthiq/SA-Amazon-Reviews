@@ -142,18 +142,17 @@ def main():
                 on_change=reset_page_number
             )
         with export_c2:
-            # MODIFIED: Fetch the full data only when the button is being prepared
-            all_filtered_df_for_export = get_all_filtered_reviews(
+            st.download_button(
+               label="📥 Export to CSV",
+               data=convert_df_to_csv(get_all_filtered_reviews(
                 _conn=conn, asin=selected_asin, date_range=st.session_state.explorer_date_filter,
                 rating_filter=tuple(st.session_state.explorer_rating_filter), sentiment_filter=tuple(st.session_state.explorer_sentiment_filter),
                 verified_filter=st.session_state.explorer_verified_filter, search_term=st.session_state.explorer_search_term
-            )
-            st.download_button(
-               label="📥 Export to CSV",
-               data=convert_df_to_csv(all_filtered_df_for_export),
+            )),
                file_name=f"{selected_asin}_reviews.csv",
                mime="text/csv",
-               use_container_width=True
+               use_container_width=True,
+               help="Download all reviews that match the current filter settings."
             )
 
         # Loop to display reviews with keyword highlighting
