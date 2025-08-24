@@ -197,7 +197,13 @@ def main():
                 st.metric(
                     "Reviewer Consensus",
                     consensus_text,
-                    help="Measures agreement in star ratings. 'Consistent' means ratings are similar; 'Polarizing' means there are many high and low ratings."
+                    help="""
+                    This metric measures how much agreement there is in the star ratings. It's based on the standard deviation of all filtered ratings.
+
+                    - **✅ Consistent**: A low standard deviation. Most reviewers gave similar star ratings.
+                    - **↔️ Mixed**: A medium standard deviation. There's a blend of different ratings.
+                    - **⚠️ Polarizing**: A high standard deviation. The product likely has many very high *and* very low ratings, indicating a divisive user experience.
+                    """
                 )
              else:
                  st.metric("Reviewer Consensus", "N/A")
