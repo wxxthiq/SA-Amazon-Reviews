@@ -112,16 +112,24 @@ def display_product_metadata(column, product_details, metrics, other_metrics, ti
         m_col5.metric("Avg. Sentiment", f"{metrics.get('avg_sentiment', 0):.2f} {sentiment_icon}", delta=f"{delta_sentiment:.2f}" if delta_sentiment is not None else None,
                       help="The average sentiment score of review text, from -1 (very negative) to +1 (very positive).")
 
-
         # --- CONSOLIDATED PRODUCT SPECIFICATIONS ---
         with st.expander("View Product Specifications"):
-            # (This part remains the same)
+            # 1. Display Description (Handles JSON list format)
             if pd.notna(product_details.get('description')):
-                st.markdown("---")
                 st.markdown("**Description**")
-                st.write(product_details['description'])
-            if pd.notna(product_details.get('features')):
+                try:
+                    # Stored as a JSON string of a list, so we parse and get the first item
+                    desc_list = json.loads(product_details['description'])
+                    if isinstance(desc_list, list) and desc_list:
+                        st.write(desc_list[0])
+                    else:
+                        st.write(desc_list) # Fallback if not a list
+                except (json.JSONDecodeError, TypeError):
+                    st.write(product_details['description']) # Fallback if not JSON
                 st.markdown("---")
+
+            # 2. Display Features as a list if they exist
+            if pd.notna(product_details.get('features')):
                 st.markdown("**Features**")
                 try:
                     features_list = json.loads(product_details['features']) if isinstance(product_details['features'], str) else product_details['features']
@@ -129,14 +137,18 @@ def display_product_metadata(column, product_details, metrics, other_metrics, ti
                         for feature in features_list:
                             st.markdown(f"- {feature}")
                 except (json.JSONDecodeError, TypeError):
-                    st.write("Could not parse features.")
-            if pd.notna(product_details.get('details')):
+                    st.write("Could not parse product features.")
                 st.markdown("---")
+
+            # 3. Display Technical Details as a clean list (Handles JSON object)
+            if pd.notna(product_details.get('details')):
                 st.markdown("**Technical Details**")
                 try:
                     details_dict = json.loads(product_details['details']) if isinstance(product_details['details'], str) else product_details['details']
                     if details_dict:
-                        st.json(details_dict)
+                        # Display as a two-column key-value list instead of raw JSON
+                        for key, value in details_dict.items():
+                            st.markdown(f"**{key.strip()}:** {str(value).strip()}")
                 except (json.JSONDecodeError, TypeError):
                     st.write("Could not parse product details.")
 
