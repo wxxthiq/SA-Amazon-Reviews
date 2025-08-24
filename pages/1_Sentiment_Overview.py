@@ -198,11 +198,13 @@ def main():
                     "Reviewer Consensus",
                     consensus_text,
                     help="""
-                    This metric measures how much agreement there is in the star ratings. It's based on the standard deviation of all filtered ratings.
+                    This measures how much reviewers agree in their star ratings.
 
-                    - **✅ Consistent**: A low standard deviation. Most reviewers gave similar star ratings.
-                    - **↔️ Mixed**: A medium standard deviation. There's a blend of different ratings.
-                    - **⚠️ Polarizing**: A high standard deviation. The product likely has many very high *and* very low ratings, indicating a divisive user experience.
+                    - **✅ Consistent:** Most reviewers gave similar star ratings, suggesting a widely shared opinion.
+
+                    - **↔️ Mixed:** There is a mix of opinions, but most ratings are still grouped together.
+
+                    - **⚠️ Polarizing:** Reviewers strongly disagree. The product likely has many 5-star AND 1-star reviews, with very few in the middle.
                     """
                 )
              else:
