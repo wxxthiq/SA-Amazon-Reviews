@@ -75,7 +75,7 @@ def display_product_metadata(column, product_details, metrics, other_metrics, ti
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
         
         # --- CHANGE 1: Set a fixed height for the image ---
-        st.markdown(f'<div class="product-image"><img src="{image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL}" width="100%"></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="comparison-image-container"><img src="{image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL}"></div>', unsafe_allow_html=True)
         
        # --- METRICS WITH HELP ICONS ---
         m_col1, m_col2, m_col3 = st.columns(3)
@@ -259,9 +259,23 @@ def truncate_text(text, max_length=15):
 def main():
     st.title("⚖️ Product Comparison")
 
-# ADD THIS CSS BLOCK
     st.markdown("""
         <style>
+        /* CSS for the main comparison images */
+        .comparison-image-container {
+            height: 250px; /* Fixed height for the main images */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        .comparison-image-container img {
+            max-height: 100%;
+            max-width: 100%;
+            object-fit: contain;
+        }
+
+        /* CSS for the product selection grid */
         .product-container {
             display: flex;
             flex-direction: column;
@@ -269,7 +283,7 @@ def main():
             height: 100%;
         }
         .product-image-container {
-            height: 150px; /* Adjust height as needed for this page */
+            height: 150px; /* Height for the smaller selection images */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -279,7 +293,7 @@ def main():
         .product-image-container img {
             max-height: 100%;
             max-width: 100%;
-            object-fit: contain; /* Scales the image to fit */
+            object-fit: contain;
         }
         </style>
     """, unsafe_allow_html=True)
