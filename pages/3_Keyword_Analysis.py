@@ -365,7 +365,7 @@ def main():
                     emoji = "😊" if score > 0.3 else "😐" if score > -0.3 else "😞"
                     st.metric("Sentiment", f"{score:.2f} {emoji}")
                     
-                    st.metric("👍 Helpful", f"{int(review.get('helpful_vote', 0))}
+                    st.metric("👍 Helpful", f"{int(review.get('helpful_vote', 0))}")
         total_reviews = len(sorted_keyword_df)
         total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
         if total_pages > 1:
