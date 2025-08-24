@@ -433,17 +433,31 @@ def main():
     
             for _, review in reviews_to_display.iterrows():
                 with st.container(border=True):
-                    st.subheader(review['review_title'])
-                    caption_parts = []
-                    if review['verified_purchase']:
-                        caption_parts.append("✅ Verified")
-                    caption_parts.append(f"Reviewed on: {review['date']}")
-                    caption_parts.append(f"Rating: {review['rating']} ⭐")
-                    caption_parts.append(f"Helpful Votes: {review['helpful_vote']} 👍")
-                    st.caption(" | ".join(caption_parts))
-                    
-                    highlighted_review = highlight_text(review['text'], selected_aspect)
-                    st.markdown(f"> {highlighted_review}", unsafe_allow_html=True)
+                    # --- MODIFIED SECTION ---
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.subheader(review['review_title'])
+                        
+                        # Format the date and create the caption
+                        formatted_date = review['date'].strftime('%B %d, %Y')
+                        verified_status = "✅ Verified" if review.get('verified_purchase') else "❌ Not Verified"
+                        
+                        st.caption(f"{verified_status} | Reviewed on: {formatted_date}")
+
+                        # Highlight the selected aspect in the review text
+                        highlighted_review = highlight_text(review['text'], selected_aspect)
+                        st.markdown(f"> {highlighted_review}", unsafe_allow_html=True)
+
+                    with col2:
+                        st.metric("⭐ Rating", f"{review.get('rating', 0):.1f}")
+                        
+                        # Add Sentiment Score metric
+                        score = review.get('sentiment_score', 0)
+                        emoji = "😊" if score > 0.3 else "😐" if score > -0.3 else "😞"
+                        st.metric("Sentiment", f"{score:.2f} {emoji}")
+                        
+                        st.metric("👍 Helpful", f"{int(review.get('helpful_vote', 0))}")
+                    # --- END MODIFICATION ---
             
             # Pagination Buttons
             total_reviews = len(sorted_aspect_df)
