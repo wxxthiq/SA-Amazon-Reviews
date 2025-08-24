@@ -144,9 +144,40 @@ def main():
             with st.popover("🖼️ View Image Gallery"):
                 st.image(image_urls, use_container_width=True)
     
-        if pd.notna(product_details.get('description')):
-            with st.expander("Description"):
+        # --- MODIFIED & ENHANCED SECTION ---
+        # Unified expander for all product details
+        with st.expander("View Product Details"):
+            # 1. Display Description if it exists
+            if pd.notna(product_details.get('description')):
+                st.markdown("**Description**")
                 st.write(product_details['description'])
+                st.markdown("---")
+
+            # 2. Display Features as a list if they exist
+            if pd.notna(product_details.get('features')):
+                st.markdown("**Features**")
+                try:
+                    # Features are stored as a JSON string list
+                    features_list = json.loads(product_details['features']) if isinstance(product_details['features'], str) else product_details['features']
+                    if features_list:
+                        for feature in features_list:
+                            st.markdown(f"- {feature}")
+                except (json.JSONDecodeError, TypeError):
+                    st.write("Could not parse product features.")
+                st.markdown("---")
+
+            # 3. Display Technical Details as a JSON object if they exist
+            if pd.notna(product_details.get('details')):
+                st.markdown("**Technical Details**")
+                try:
+                    # Details are stored as a JSON string dictionary
+                    details_dict = json.loads(product_details['details']) if isinstance(product_details['details'], str) else product_details['details']
+                    if details_dict:
+                        st.json(details_dict, expanded=False)
+                except (json.JSONDecodeError, TypeError):
+                    st.write("Could not parse product details.")
+        
+        # --- END MODIFICATION ---
     
         # --- Navigation to Review Explorer ---
         if st.button("📝 Explore All Reviews"):
