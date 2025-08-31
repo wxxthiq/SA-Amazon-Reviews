@@ -206,9 +206,9 @@ def main():
                 filtered_avg_rating = chart_data['rating'].mean()
                 delta = filtered_avg_rating - overall_avg_rating
                 st.metric(
-                    "Average Rating (Filtered)",
+                    "Average Rating",
                     f"{filtered_avg_rating:.2f} ⭐",
-                    help="The average star rating for reviews matching your current filters. The number in green or red shows how this compares to the product's overall average rating."
+                    help="The average star rating for reviews matching your current filters."
                 )
             else:
                 st.metric("Average Rating (Filtered)", "N/A")
