@@ -200,7 +200,18 @@ def main():
 
         # --- Row 1, Col 1: Average Rating (Existing) ---
         with row1_col1:
-            st.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐", help="The average star rating for this product across all reviews.")
+            overall_avg_rating = product_details.get('average_rating', 0)
+            
+            if not chart_data.empty:
+                filtered_avg_rating = chart_data['rating'].mean()
+                delta = filtered_avg_rating - overall_avg_rating
+                st.metric(
+                    "Average Rating (Filtered)",
+                    f"{filtered_avg_rating:.2f} ⭐",
+                    help="The average star rating for reviews matching your current filters. The number in green or red shows how this compares to the product's overall average rating."
+                )
+            else:
+                st.metric("Average Rating (Filtered)", "N/A")
 
         # --- Row 1, Col 2: Average Sentiment Score (New) ---
         with row1_col2:
