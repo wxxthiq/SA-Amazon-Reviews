@@ -20,57 +20,43 @@ from utils.database_utils import (
     get_product_details,
     get_reviews_for_product,
     get_product_date_range,
-    get_single_review_details
+    get_single_review_details,
+    get_aspects_for_product # --- IMPORT THE NEW FUNCTION ---
 )
 
-# --- Page Configuration and State Initialization ---
 st.set_page_config(layout="wide", page_title="Sentiment Overview")
 
+def render_help_popover(title, what, how, learn):
+    """Creates a standardized help popover next to a title."""
+    with st.container():
+        c1, c2 = st.columns([0.9, 0.1])
+        with c1:
+            st.markdown(f"**{title}**")
+        with c2:
+            with st.popover("ⓘ"):
+                st.markdown("##### What am I looking at?")
+                st.markdown(what)
+                st.markdown("##### How do I use it?")
+                st.markdown(how)
+                st.markdown("##### What can I learn?")
+                st.markdown(learn)
+                
+# --- NEW: Clickable Icon and State Management Function ---
+def clickable_help_icon(topic: str):
+    """Creates a clickable help icon that toggles a help topic in session state."""
+    # Use a unique key for each button
+    if st.button("ⓘ", key=f"help_{topic}", help=f"Click to see details about the {topic} chart"):
+        # If the button is clicked, toggle the state for this topic
+        if st.session_state.get('active_help_topic') == topic:
+            st.session_state['active_help_topic'] = None # Hide if it's already active
+        else:
+            st.session_state['active_help_topic'] = topic # Show this topic
+        
 @st.cache_resource
 def load_spacy_model():
     return spacy.load("en_core_web_sm")
 
 nlp = load_spacy_model()
-
-# In pages/1_Sentiment_Overview.py
-@st.cache_data
-def extract_aspects_with_sentiment(_reviews_df, _product_details):
-    """
-    Performs metadata-guided Aspect-Based Sentiment Analysis (ABSA).
-    It extracts seed aspects from product metadata and finds mentions in reviews.
-    """
-    # ... (function content remains the same)
-    seed_aspects = set()
-    title = _product_details.get('product_title')
-    if title and isinstance(title, str):
-        for token in nlp(title):
-            if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
-                seed_aspects.add(token.lemma_.lower())
-    features_json = _product_details.get('features')
-    if features_json and isinstance(features_json, str):
-        try:
-            features_list = json.loads(features_json)
-            if isinstance(features_list, list):
-                for feature_item in features_list:
-                    for token in nlp(str(feature_item)):
-                        if token.pos_ in ['NOUN', 'PROPN'] and not token.is_stop:
-                            seed_aspects.add(token.lemma_.lower())
-        except json.JSONDecodeError:
-            print("Could not decode features JSON")
-    if not seed_aspects:
-        return pd.DataFrame()
-    aspect_sentiments = []
-    for review_text, sentiment in zip(_reviews_df['text'], _reviews_df['sentiment']):
-        mentioned_aspects_in_review = set()
-        doc = nlp(review_text)
-        for aspect in seed_aspects:
-            if re.search(r'\b' + re.escape(aspect) + r'\b', doc.text, re.IGNORECASE):
-                if aspect not in mentioned_aspects_in_review:
-                    aspect_sentiments.append({'aspect': aspect, 'sentiment': sentiment})
-                    mentioned_aspects_in_review.add(aspect)
-    if not aspect_sentiments:
-        return pd.DataFrame()
-    return pd.DataFrame(aspect_sentiments)
     
 if 'selected_review_id' not in st.session_state:
     st.session_state.selected_review_id = None
@@ -78,7 +64,24 @@ if 'selected_review_id' not in st.session_state:
 # --- Main App Logic ---
 def main():
     st.title("📊 Sentiment Overview")
-    
+
+    # ADD THIS CSS BLOCK
+    st.markdown("""
+        <style>
+        .product-image-container {
+            height: 350px; /* Adjust height as needed for this page */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        .product-image-container img {
+            max-height: 100%;
+            max-width: 100%;
+            object-fit: contain;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     DB_PATH = "amazon_reviews_final.duckdb"
     conn = connect_to_db(DB_PATH)
     
@@ -124,18 +127,64 @@ def main():
     if st.button("⬅️ Back to Search"):
         st.session_state.selected_product = None
         st.session_state.selected_review_id = None
-        extract_aspects_with_sentiment.clear()
         st.switch_page("app.py")
     left_col, right_col = st.columns([1, 2])
     with left_col:
         image_urls_str = product_details.get('image_urls')
         image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
-        st.image(image_urls[0] if image_urls else "https://via.placeholder.com/200", use_container_width=True)
+        # --- MODIFIED SECTION ---
+        thumbnail_url = image_urls[0] if image_urls else "https://via.placeholder.com/200"
+        st.markdown(f"""
+            <div class="product-image-container">
+                <img src="{thumbnail_url}">
+            </div>
+        """, unsafe_allow_html=True)
+        # --- END MODIFICATION ---
         if image_urls:
             with st.popover("🖼️ View Image Gallery"):
                 st.image(image_urls, use_container_width=True)
+    
+        # --- MODIFIED & ENHANCED SECTION ---
+        with st.expander("View Product Specifications"):
+            # 1. Display Description (Handles JSON list format)
+            if pd.notna(product_details.get('description')):
+                st.markdown("**Description**")
+                try:
+                    # Stored as a JSON string of a list, so we parse and get the first item
+                    desc_list = json.loads(product_details['description'])
+                    if isinstance(desc_list, list) and desc_list:
+                        st.write(desc_list[0])
+                    else:
+                        st.write(desc_list) # Fallback if not a list
+                except (json.JSONDecodeError, TypeError):
+                    st.write(product_details['description']) # Fallback if not JSON
+                st.markdown("---")
+
+            # 2. Display Features as a list if they exist
+            if pd.notna(product_details.get('features')):
+                st.markdown("**Features**")
+                try:
+                    features_list = json.loads(product_details['features']) if isinstance(product_details['features'], str) else product_details['features']
+                    if features_list:
+                        for feature in features_list:
+                            st.markdown(f"- {feature}")
+                except (json.JSONDecodeError, TypeError):
+                    st.write("Could not parse product features.")
+                st.markdown("---")
+
+            # 3. Display Technical Details as a clean list (Handles JSON object)
+            if pd.notna(product_details.get('details')):
+                st.markdown("**Technical Details**")
+                try:
+                    details_dict = json.loads(product_details['details']) if isinstance(product_details['details'], str) else product_details['details']
+                    if details_dict:
+                        # Display as a two-column key-value list instead of raw JSON
+                        for key, value in details_dict.items():
+                            st.markdown(f"**{key.strip()}:** {str(value).strip()}")
+                except (json.JSONDecodeError, TypeError):
+                    st.write("Could not parse product details.")
+    
         # --- Navigation to Review Explorer ---
-        #st.subheader("📝 Browse Individual Reviews")
         if st.button("📝 Explore All Reviews"):
             st.switch_page("pages/2_Review_Explorer.py")
         if st.button("⚖️ Compare this Product"):
@@ -143,128 +192,203 @@ def main():
             
     with right_col:
         st.header(product_details['product_title'])
-        st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
-        m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Average Rating", f"{product_details.get('average_rating', 0):.2f} ⭐")
-        m_col2.metric("Filtered Reviews", f"{len(chart_data):,}")
-        # Helper function to interpret standard deviation
-        def get_rating_consensus(std_dev):
-            if std_dev < 1.1:
-                return "✅ Consistent"  # Low deviation = high agreement
-            elif std_dev < 1.4:
-                return "↔️ Mixed"      # Medium deviation = some disagreement
-            else:
-                return "⚠️ Polarizing" # High deviation = strong disagreement
-            # --- NEW: Calculate and display Rating Standard Deviation ---
-        # --- NEW: Calculate and display Rating Consensus with a tooltip ---
-        if not chart_data.empty and len(chart_data) > 1:
-            rating_std_dev = chart_data['rating'].std()
-            consensus_text = get_rating_consensus(rating_std_dev)
+        #st.caption(f"Category: {product_details['category']} | Store: {product_details['store']}")
+        # In main() -> with right_col:
+        # --- NEW: 2x2 Grid for Metrics ---
+        row1_col1, row1_col2 = st.columns(2)
+        row2_col1, row2_col2 = st.columns(2)
+
+        # --- Row 1, Col 1: Average Rating (Existing) ---
+        with row1_col1:
+            overall_avg_rating = product_details.get('average_rating', 0)
             
-            # Add the 'help' parameter to create a tooltip
-            m_col3.metric(
-                "Reviewer Consensus",
-                consensus_text,
-                help=f"Standard Deviation of ratings: {rating_std_dev:.2f}"
-            )
+            if not chart_data.empty:
+                filtered_avg_rating = chart_data['rating'].mean()
+                delta = filtered_avg_rating - overall_avg_rating
+                st.metric(
+                    "Average Rating",
+                    f"{filtered_avg_rating:.2f} ⭐",
+                    help="The average star rating for reviews matching your current filters."
+                )
+            else:
+                st.metric("Average Rating (Filtered)", "N/A")
+
+        # --- Row 1, Col 2: Average Sentiment Score (New) ---
+        with row1_col2:
+            if not chart_data.empty:
+                avg_sentiment_score = chart_data['sentiment_score'].mean()
+                # Use an emoji to represent the score
+                emoji = "😊" if avg_sentiment_score > 0.3 else "😐" if avg_sentiment_score > -0.3 else "😞"
+                st.metric(
+                    "Average Sentiment",
+                    f"{avg_sentiment_score:.2f} {emoji}",
+                    help="The average sentiment score of the review text, from -1.0 (very negative) to 1.0 (very positive)."
+                )
+            else:
+                st.metric("Average Sentiment", "N/A")
+
+        # --- Row 2, Col 1: Reviewer Consensus (Existing) ---
+        with row2_col1:
+             if not chart_data.empty and len(chart_data) > 1:
+                rating_std_dev = chart_data['rating'].std()
+                 
+                def get_rating_consensus(std_dev):
+                    if std_dev < 1.1:
+                        return "✅ Consistent"  # Low deviation = high agreement
+                    elif std_dev < 1.4:
+                        return "↔️ Mixed"      # Medium deviation = some disagreement
+                    else:
+                        return "⚠️ Polarizing" # High deviation = disagreement
+                        
+                consensus_text = get_rating_consensus(rating_std_dev)
+                st.metric(
+                    "Reviewer Consensus",
+                    consensus_text,
+                    help="""
+                    This measures how much reviewers agree in their star ratings.
+
+                    - **✅ Consistent:** Most reviewers gave similar star ratings, suggesting a widely shared opinion.
+
+                    - **↔️ Mixed:** There is a mix of opinions, but most ratings are still grouped together.
+
+                    - **⚠️ Polarizing:** Reviewers strongly disagree. The product likely has many 5-star AND 1-star reviews, with very few in the middle.
+                    """
+                )
+             else:
+                 st.metric("Reviewer Consensus", "N/A")
+
+
+        # --- Row 2, Col 2: Verified Purchases (New) ---
+        with row2_col2:
+            if not chart_data.empty:
+                verified_percentage = (chart_data['verified_purchase'].sum() / len(chart_data)) * 100
+                st.metric(
+                    "Verified Purchases",
+                    f"{verified_percentage:.1f}%",
+                    help="The percentage of reviews left by customers with a confirmed purchase of this product."
+                )
+            else:
+                st.metric("Verified Purchases", "N/A")
+
+        st.info(f"**{len(chart_data):,}** reviews match your current filters.")
         st.markdown("---")
-        dist_col1, dist_col2, dist_col3 = st.columns(3)
+        # --- MODIFIED: Back to a 2-column layout ---
+        dist_col1, dist_col2 = st.columns(2)
+        # --- Column 1: Rating Distribution ---
         with dist_col1:
-            st.markdown("**Rating Distribution**")
-            if not chart_data.empty:
-                # Prepare data and calculate percentages
-                rating_counts_df = chart_data['rating'].value_counts().reindex(range(1, 6), fill_value=0).reset_index()
-                rating_counts_df.columns = ['rating', 'count']
-                rating_counts_df['percentage'] = (rating_counts_df['count'] / chart_data.shape[0]) * 100
-                rating_counts_df['rating_str'] = rating_counts_df['rating'].astype(str) + ' ⭐'
-
-                # Base bar chart
-                bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(
-                    x=alt.X('count:Q', title='Number of Reviews'),
-                    y=alt.Y('rating_str:N', sort=alt.EncodingSortField(field="rating", order="descending"), title='Rating'),
-                    color=alt.Color('rating:O',
-                                    scale=alt.Scale(domain=[5, 4, 3, 2, 1], range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
-                                    legend=None),
-                    tooltip=[
-                        alt.Tooltip('rating_str', title='Rating'),
-                        alt.Tooltip('count', title='Reviews'),
-                        alt.Tooltip('percentage', title='Percentage', format='.1f')
-                    ]
-                )
+            # --- Title and Icon ---
+            title_c1, icon_c1 = st.columns([0.9, 0.1])
+            with title_c1:
+                st.markdown("**⭐ Rating Distribution**")
+            with icon_c1:
+                clickable_help_icon("Rating") # The button to toggle the help text
                 
-                # Text labels to overlay on the bars
-                text_labels = bar_chart.mark_text(
-                    align='left',
-                    baseline='middle',
-                    dx=3,  # Nudges text to the right so it's not on the edge
-                    color='white'
-                ).encode(
-                    text=alt.Text('percentage:Q', format='.1f')
-                )
+            if st.session_state.get('active_help_topic') == "Rating":
+                with st.container(border=True):
+                    st.markdown("##### What am I looking at?")
+                    st.markdown("This chart shows the breakdown of reviews by the star rating (1 to 5 stars) that reviewers gave.")
+                    st.markdown("##### How do I use it?")
+                    st.markdown("Hover over a segment to see the specific rating, the number of reviews, and its percentage of the total.")
+                    st.markdown("##### What can I learn?")
+                    st.markdown("Quickly see if a product is generally well-liked (large green segments) or has significant issues (visible red segments).")
 
-                # Combine chart and text
-                final_chart = (bar_chart + text_labels).properties(height=250)
-                st.altair_chart(final_chart, use_container_width=True)
-
-        with dist_col2:
-            st.markdown("**Sentiment Distribution**")
+            # --- Chart Display ---
             if not chart_data.empty:
-                # Prepare data and calculate percentages
-                sentiment_counts_df = chart_data['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative'], fill_value=0).reset_index()
-                sentiment_counts_df.columns = ['sentiment', 'count']
-                sentiment_counts_df['percentage'] = (sentiment_counts_df['count'] / chart_data.shape[0]) * 100
+                rating_counts_df = chart_data['rating'].value_counts().reset_index()
+                rating_counts_df.columns = ['rating', 'count']
+                rating_counts_df['rating_cat'] = rating_counts_df['rating'].astype(str) + ' ⭐'
+                
+                # --- NEW: Calculate percentage for tooltip ---
+                total_reviews = rating_counts_df['count'].sum()
+                rating_counts_df['percentage'] = rating_counts_df['count'] / total_reviews if total_reviews > 0 else 0
+            
+                bar_chart = alt.Chart(rating_counts_df).mark_bar().encode(
+                    x=alt.X('sum(count)', stack='normalize', axis=alt.Axis(title='Percentage', format='%')),
+                    color=alt.Color('rating_cat:N',
+                                    scale=alt.Scale(domain=['5 ⭐', '4 ⭐', '3 ⭐', '2 ⭐', '1 ⭐'],
+                                                    range=['#2ca02c', '#98df8a', '#ffdd71', '#ff9896', '#d62728']),
+                                    legend=alt.Legend(title="Rating")),
+                    order=alt.Order('rating_cat', sort='descending'),
+                    # --- MODIFIED: Added percentage to tooltip ---
+                    tooltip=[
+                        alt.Tooltip('rating_cat', title='Rating'),
+                        alt.Tooltip('count', title='Reviews'),
+                        alt.Tooltip('percentage:Q', title='Share', format='.1%')
+                    ]
+                ).properties(height=150)
+                st.altair_chart(bar_chart, use_container_width=True)
 
-                # Base bar chart
+        # --- Column 2: Sentiment Distribution ---
+        with dist_col2:
+            # --- Title and Icon ---
+            title_c2, icon_c2 = st.columns([0.9, 0.1])
+            with title_c2:
+                st.markdown("**😊 Sentiment Distribution**")
+            with icon_c2:
+                clickable_help_icon("Sentiment") # The button to toggle the help text
+
+            # --- Conditional Help Text Container ---
+            if st.session_state.get('active_help_topic') == "Sentiment":
+                with st.container(border=True):
+                    st.markdown("##### What am I looking at?")
+                    st.markdown("This chart shows the breakdown of reviews by their automatically detected sentiment (Positive, Negative, or Neutral).")
+                    st.markdown("##### How do I use it?")
+                    st.markdown("Hover over a segment to see the sentiment, the number of reviews, and its percentage of the total.")
+                    st.markdown("##### What can I learn?")
+                    st.markdown("Understand the overall feeling of the reviews. A large red segment might indicate widespread problems.")
+
+            # --- Chart Display ---
+            if not chart_data.empty:
+                sentiment_counts_df = chart_data['sentiment'].value_counts().reset_index()
+                sentiment_counts_df.columns = ['sentiment', 'count']
+                
+                # --- NEW: Calculate percentage for tooltip ---
+                total_sentiments = sentiment_counts_df['count'].sum()
+                sentiment_counts_df['percentage'] = sentiment_counts_df['count'] / total_sentiments if total_sentiments > 0 else 0
+            
                 bar_chart = alt.Chart(sentiment_counts_df).mark_bar().encode(
-                    x=alt.X('count:Q', title='Number of Reviews'),
-                    y=alt.Y('sentiment:N', sort=['Positive', 'Neutral', 'Negative'], title='Sentiment'),
+                    x=alt.X('sum(count)', stack='normalize', axis=alt.Axis(title='Percentage', format='%')),
                     color=alt.Color('sentiment:N',
-                                    scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']),
-                                    legend=None),
+                                    scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'],
+                                                    range=['#1a9850', '#cccccc', '#d73027']),
+                                    legend=alt.Legend(title="Sentiment")),
+                    order=alt.Order('sentiment', sort='descending'),
+                    # --- MODIFIED: Added percentage to tooltip ---
                     tooltip=[
                         alt.Tooltip('sentiment', title='Sentiment'),
                         alt.Tooltip('count', title='Reviews'),
-                        alt.Tooltip('percentage', title='Percentage', format='.1f')
+                        alt.Tooltip('percentage:Q', title='Share', format='.1%')
                     ]
-                )
-                
-                # Text labels to overlay on the bars
-                text_labels = bar_chart.mark_text(
-                    align='left',
-                    baseline='middle',
-                    dx=3,
-                    color='white'
-                ).encode(
-                    text=alt.Text('percentage:Q', format='.1f')
-                )
-
-                # Combine chart and text
-                final_chart = (bar_chart + text_labels).properties(height=250)
-                st.altair_chart(final_chart, use_container_width=True) 
+                ).properties(height=150)
+                st.altair_chart(bar_chart, use_container_width=True)
                 
     if chart_data.empty:
         st.warning("No reviews match the selected filters.")
         st.stop()
-    st.info(f"Displaying analysis for **{len(chart_data)}** reviews matching your criteria.")
-
-    # --- Create the new 3:2 column layout ---
+        
+    st.markdown("---")
     col1, col2 = st.columns([3, 2])
-
-    # --- Column 1: Keyword & Phrase Summary ---
     with col1:
-        st.markdown("### ☁️ Keyword & Phrase Summary")
-        st.info("Frequent terms in positive vs. negative reviews.")
+        # --- MODIFIED: Title with an integrated help popover ---
+        title_c, popover_c = st.columns([0.9, 0.1])
+        with title_c:
+            st.markdown("### ☁️ Keyword & Phrase Summary")
+        with popover_c:
+            with st.popover("ⓘ"):
+                st.markdown("##### What am I looking at?")
+                st.markdown("These word clouds show the most frequent words or phrases found in positive and negative reviews. The larger the word, the more often it was mentioned.")
+                st.markdown("##### How do I use it?")
+                st.markdown("Use the 'Advanced Settings' expander to switch between single words, two-word phrases (bigrams), or three-word phrases (trigrams) to find more specific insights.")
+                st.markdown("##### What can I learn?")
+                st.markdown("Quickly identify the key terms customers use to praise or complain about the product. This helps you spot common themes at a glance.")
+        with st.expander("Advanced Settings"):
+            control_col1, control_col2 = st.columns(2)
+            with control_col1:
+                max_words = st.slider("Max Terms in Cloud:", min_value=5, max_value=50, value=15, key="keyword_slider")
+            with control_col2:
+                ngram_level = st.radio("Term Type:", ("Single Words", "2 Words", "3 Words"), index=0, horizontal=True, key="ngram_radio")
 
-        # UI for controls
-        control_col1, control_col2 = st.columns(2)
-        with control_col1:
-            max_words = st.slider("Max Terms in Cloud:", min_value=5, max_value=50, value=15, key="keyword_slider")
-        with control_col2:
-            ngram_level = st.radio("Term Type:", ("Single Words", "Bigrams", "Trigrams"), index=0, horizontal=True, key="ngram_radio")
-
-        # Helper function to generate n-grams (remains the same)
         def get_top_ngrams(corpus, n=None, ngram_range=(1,1)):
-            # ... function content is unchanged
             vec = CountVectorizer(ngram_range=ngram_range, stop_words='english').fit(corpus)
             bag_of_words = vec.transform(corpus)
             sum_words = bag_of_words.sum(axis=0) 
@@ -273,10 +397,7 @@ def main():
             return words_freq[:n]
 
         ngram_range = {"Single Words": (1,1), "Bigrams": (2,2), "Trigrams": (3,3)}.get(ngram_level, (1,1))
-
-        # --- FIX: Create a nested two-column layout for the word clouds ---
         wc_col1, wc_col2 = st.columns(2)
-
         with wc_col1:
             st.markdown("#### Positive Reviews")
             pos_text = chart_data[chart_data["sentiment"]=="Positive"]["text"].dropna()
@@ -313,23 +434,61 @@ def main():
 
     # --- Column 2: Aspect Sentiment Analysis ---
     with col2:
-        st.markdown("### 🔎 Key Aspect Sentiment Analysis")
-        st.info("Sentiment breakdown for key product features.")
+        # --- MODIFIED: Title and Icon ---
+        title_c, icon_c = st.columns([0.9, 0.1])
+        with title_c:
+            st.markdown("### 🔎 Key Aspect Summary")
+        with icon_c:
+            # This button will toggle the help text below
+            clickable_help_icon("Aspect")
 
-        sort_option = st.selectbox(
-            "Sort aspects by:",
-            ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
-            key="aspect_sort_selector"
+        # --- MODIFIED: Conditional Help Text Container ---
+        if st.session_state.get('active_help_topic') == "Aspect":
+            with st.container(border=True):
+                st.markdown("##### What am I looking at?")
+                st.markdown("This chart identifies key product features (aspects) and shows the sentiment breakdown for each.")
+                st.markdown("##### How do I use it?")
+                st.markdown("Use the dropdown to sort aspects by popularity, or by which are most positive or negative. The sliders let you change how many aspects are displayed and filter out rarely-mentioned terms.")
+                st.markdown("##### What can I learn?")
+                st.markdown("Pinpoint specific product strengths and weaknesses. An aspect with a large red bar is a clear area for concern.")
+
+        # --- Original Controls and Chart Logic (no changes needed below this line) ---
+
+        with st.expander("Advanced Settings"):
+            sort_option = st.selectbox(
+                "Sort aspects by:",
+                ("Most Discussed", "Most Positive", "Most Negative", "Most Controversial"),
+                key="aspect_sort_selector"
+            )
+            num_aspects_to_show = st.slider(
+                "Select number of top aspects to display:",
+                min_value=3, max_value=15, value=5, key="overview_aspect_slider"
+            )
+            smart_threshold = max(3, min(10, int(len(chart_data) * 0.01)))
+            min_mentions = st.slider(
+                "Aspect Mention Threshold",
+                min_value=1,
+                max_value=50,
+                value=smart_threshold,
+                help="Filters out aspects mentioned fewer than this many times to reduce noise."
+            )
+        aspect_df = get_aspects_for_product(
+        conn, selected_asin, selected_date_range,
+        tuple(selected_ratings), tuple(selected_sentiments), selected_verified
         )
-        num_aspects_to_show = st.slider(
-            "Select number of top aspects to display:",
-            min_value=3, max_value=15, value=5, key="overview_aspect_slider"
-        )
-        
-        aspect_df = extract_aspects_with_sentiment(chart_data, product_details)
         if not aspect_df.empty:
+            # --- UPDATED: Use the dynamic min_mentions from the slider ---
+            aspect_counts = aspect_df['aspect'].value_counts()
+            significant_aspects = aspect_counts[aspect_counts >= min_mentions].index.tolist()
+
+            if not significant_aspects:
+                st.warning(f"No aspects were mentioned at least {min_mentions} times. Try lowering the threshold slider.")
+                st.stop()
+
+            filtered_aspect_df = aspect_df[aspect_df['aspect'].isin(significant_aspects)]
+
             # Data Processing and Sorting Logic
-            sentiment_counts = aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
+            sentiment_counts = filtered_aspect_df.groupby(['aspect', 'sentiment']).size().reset_index(name='count')
             pivot_df = sentiment_counts.pivot_table(index='aspect', columns='sentiment', values='count', fill_value=0)
             for col in ['Positive', 'Neutral', 'Negative']:
                 if col not in pivot_df.columns: pivot_df[col] = 0
@@ -342,24 +501,29 @@ def main():
             elif sort_option == "Most Negative": sort_field, sort_order = 'negative_pct', 'descending'
             elif sort_option == "Most Controversial": sort_field, sort_order = 'controversy', 'descending'
             else: sort_field, sort_order = 'total', 'descending'
-                
+
+            # Ensure we don't try to show more aspects than are available after filtering
+            num_aspects_to_show = min(num_aspects_to_show, len(pivot_df))
             top_aspects_sorted = pivot_df.nlargest(num_aspects_to_show, sort_field).index.tolist()
-            top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
             
-            # Create the Chart
+            if not top_aspects_sorted:
+                 st.warning("No aspects to display with the current settings.")
+                 st.stop()
+
+            top_aspects_df = sentiment_counts[sentiment_counts['aspect'].isin(top_aspects_sorted)]
+
+            # The Charting Logic
             chart = alt.Chart(top_aspects_df).mark_bar().encode(
                 y=alt.Y('aspect:N', title=None, sort=alt.EncodingSortField(field=sort_field, op="sum", order=sort_order)),
                 x=alt.X('sum(count):Q', stack="normalize", title="Sentiment Distribution", axis=alt.Axis(format='%')),
                 color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
                 tooltip=[alt.Tooltip('aspect', title='Aspect'), alt.Tooltip('sentiment', title='Sentiment'), alt.Tooltip('sum(count):Q', title='Review Count')]
-            ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})")
-            
+            ).properties(title=f"Top {num_aspects_to_show} Aspects (Sorted by {sort_option})", height = 400)
             st.altair_chart(chart, use_container_width=True)
+            
         else:
-            st.info("No aspects could be extracted for this product.")
-
-    st.markdown("<hr>", unsafe_allow_html=True) # Add a horizontal rule after the columns
-
+            st.info("No aspect data found for the selected filters.")
+            
     # --- Navigation Buttons ---
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
@@ -371,13 +535,19 @@ def main():
 
     # --- TRENDS OVER TIME ---
     st.markdown("---")
-    st.markdown("### 🗓️ Trends Over Time")
-    st.info(
-        "Analyze how review ratings and sentiment have evolved. Use the time period selector to "
-        "change the granularity and the toggles to show an average trendline. The Line Chart view is best for "
-        "comparing individual trends."
-    )
-    
+    # --- MODIFIED: Title with an integrated help popover ---
+    title_c, popover_c = st.columns([0.9, 0.1])
+    with title_c:
+        st.markdown("### 🗓️ Trends Over Time")
+    with popover_c:
+        with st.popover("ⓘ"):
+            st.markdown("##### What am I looking at?")
+            st.markdown("These charts analyze how the volume of review ratings and sentiment has evolved over time.")
+            st.markdown("##### How do I use it?")
+            st.markdown("Use the 'Select time period' radio buttons to change the granularity (e.g., from monthly to weekly). Use the toggles to overlay an average trendline. The 'Line Chart' view is best for comparing individual trends, while the 'Area Chart' view shows the overall distribution.")
+            st.markdown("##### What can I learn?")
+            st.markdown("Spot seasonal patterns, the impact of a product change, or whether sentiment is generally improving or declining over time.")
+            
     time_granularity = st.radio(
         "Select time period:",
         ("Monthly", "Weekly", "Daily"),
@@ -396,9 +566,7 @@ def main():
     
     rating_counts_over_time = time_df.groupby(['period', 'rating']).size().reset_index(name='count')
     sentiment_counts_over_time = time_df.groupby(['period', 'sentiment']).size().reset_index(name='count')
-    
     tab1, tab2 = st.tabs(["📈 Line Chart View", "📊 Area Chart View"])
-    
     # --- Tab 1: Line Chart View ---
     with tab1:
         col1, col2 = st.columns(2)
@@ -464,7 +632,6 @@ def main():
     with tab2:
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("#### Rating Distribution")
             if not rating_counts_over_time.empty:
                 fig_area_rating = px.area(
                     rating_counts_over_time, x='period', y='count', color='rating', title="Distribution by Rating",
@@ -475,7 +642,6 @@ def main():
                 st.plotly_chart(fig_area_rating, use_container_width=True)
     
         with col2:
-            st.markdown("#### Sentiment Distribution")
             if not sentiment_counts_over_time.empty:
                 fig_area_sentiment = px.area(
                     sentiment_counts_over_time, x='period', y='count', color='sentiment', title="Distribution by Sentiment",
@@ -484,66 +650,7 @@ def main():
                     category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
                 )
                 st.plotly_chart(fig_area_sentiment, use_container_width=True)
-            
-    st.markdown("### Rating vs. Text Discrepancy")
-    st.info("💡 This scatter plot helps identify reviews where the star rating might not match the sentiment of the written text. Points in the top-left (low rating, positive sentiment) or bottom-right (high rating, negative sentiment) are the most discrepant. Click a point to read the review.")
-    plot_col, review_col = st.columns([2, 1])
-    with plot_col:
-        # ... (code omitted for brevity)
-        chart_data['discrepancy'] = (chart_data['text_polarity'] - ((chart_data['rating'] - 3) / 2.0)).abs()
-        fig = px.scatter(
-            chart_data,
-            x="rating_jittered",
-            y="text_polarity_jittered",
-            color="discrepancy",
-            color_continuous_scale=px.colors.sequential.Viridis,
-            # --- UPDATED: Clearer labels ---
-            labels={
-                "rating_jittered": "Star Rating",
-                "text_polarity_jittered": "Sentiment Score", # Changed from Polarity
-                "discrepancy": "Discrepancy Score"
-            },
-            # --- UPDATED: Enhanced hover data ---
-            hover_name="review_title",
-            hover_data={
-                "rating": True,
-                "sentiment": True,
-                "discrepancy": ":.2f",
-                "rating_jittered": False,
-                "text_polarity_jittered": False
-            }
-        )
-        fig.update_layout(clickmode='event+select')
-        fig.update_traces(marker_size=10)
-        selected_points = plotly_events(fig, click_event=True, key="plotly_event_selector")
-        if selected_points and 'pointIndex' in selected_points[0]:
-            point_index = selected_points[0]['pointIndex']
-            if point_index < len(chart_data):
-                clicked_id = chart_data.iloc[point_index]['review_id']
-                if st.session_state.selected_review_id != clicked_id:
-                    st.session_state.selected_review_id = clicked_id
-                    st.rerun()
-    with review_col:
-        # ... (code omitted for brevity)
-        if st.session_state.selected_review_id:
-            if st.session_state.selected_review_id in chart_data['review_id'].values:
-                st.markdown("#### Selected Review Details")
-                review_details = get_single_review_details(conn, st.session_state.selected_review_id)
-                
-                if review_details is not None:
-                    st.subheader(review_details.get('review_title', 'No Title'))
 
-                    # --- Build a detailed caption with explicit verified status ---
-                    caption_parts = [
-                        f"Reviewed on: {review_details.get('date', 'N/A')}",
-                        f"👍 {int(review_details.get('helpful_vote', 0))} helpful votes"
-                    ]
-                    st.caption(" | ".join(caption_parts))
-                    st.markdown(f"> {review_details.get('text', 'Review text not available.')}")
-                    
-                if st.button("Close Review", key="close_review_button"):
-                    st.session_state.selected_review_id = None
-                    st.rerun()
 
 if __name__ == "__main__":
     main()

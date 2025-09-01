@@ -36,11 +36,22 @@ def convert_df_to_csv(df):
     
 # --- Main App Logic ---
 def main():
-    st.title("🔑 Detailed Keyword & Phrase Analysis")
-
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
 
+    # --- MODIFIED: Custom title with an integrated help popover ---
+    title_col, help_col = st.columns([10, 1])
+    with title_col:
+        st.markdown("# 🔑 Detailed Keyword & Phrase Analysis")
+    with help_col:
+        st.markdown('<div style="height: 2rem;"></div>', unsafe_allow_html=True) # Vertical alignment spacer
+        with st.popover("ⓘ"):
+            st.markdown("##### What is this page for?")
+            st.markdown("This page allows for a deep-dive analysis of specific words and phrases found within the reviews.")
+            st.markdown("##### How do I use it?")
+            st.markdown("1.  **Use the sidebar** to filter the reviews you want to analyze.")
+            st.markdown("2.  **Select a Term Type** (e.g., 'Bigrams' for two-word phrases).")
+            st.markdown("3.  **Choose a specific term** from the dropdown menu to see its detailed rating, sentiment, and trend distribution.")
     # --- Check for Selected Product ---
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
         st.warning("Please select a product from the main search page first.")
@@ -49,8 +60,6 @@ def main():
 
     # --- Load Product Data ---
     product_details = get_product_details(conn, selected_asin).iloc[0]
-    st.header(product_details['product_title'])
-    st.caption("Use the sidebar to filter reviews, then explore the most common terms and phrases.")
 
     # --- DEDICATED SIDEBAR FILTERS ---
     st.sidebar.header("🔬 Keyword Analysis Filters")
@@ -327,17 +336,36 @@ def main():
         start_idx = st.session_state.keyword_review_page * REVIEWS_PER_PAGE
         end_idx = start_idx + REVIEWS_PER_PAGE
         reviews_to_display = sorted_keyword_df.iloc[start_idx:end_idx]
+        
+        def highlight_text(text, term):
+            return re.sub(f'({re.escape(term)})', r'<mark>\1</mark>', text, flags=re.IGNORECASE)
+            
         for _, review in reviews_to_display.iterrows():
             with st.container(border=True):
-                st.subheader(review['review_title'])
-                caption_parts = []
-                if review['verified_purchase']:
-                    caption_parts.append("✅ Verified")
-                caption_parts.append(f"Reviewed on: {review['date']}")
-                caption_parts.append(f"Rating: {review['rating']} ⭐")
-                caption_parts.append(f"Helpful Votes: {review['helpful_vote']} 👍")
-                st.caption(" | ".join(caption_parts))
-                st.markdown(f"> {review['text']}")
+                # --- MODIFIED & ENHANCED REVIEW CARD ---
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.subheader(review['review_title'])
+                    
+                    # Format date and create caption
+                    formatted_date = review['date'].strftime('%B %d, %Y')
+                    verified_status = "✅ Verified" if review.get('verified_purchase') else "❌ Not Verified"
+                    
+                    st.caption(f"{verified_status} | Reviewed on: {formatted_date}")
+
+                    # Highlight the keyword in the text
+                    highlighted_review = highlight_text(review['text'], selected_term)
+                    st.markdown(f"> {highlighted_review}", unsafe_allow_html=True)
+
+                with col2:
+                    st.metric("⭐ Rating", f"{review.get('rating', 0):.1f}")
+                    
+                    # Add Sentiment Score metric
+                    score = review.get('sentiment_score', 0)
+                    emoji = "😊" if score > 0.3 else "😐" if score > -0.3 else "😞"
+                    st.metric("Sentiment", f"{score:.2f} {emoji}")
+                    
+                    st.metric("👍 Helpful", f"{int(review.get('helpful_vote', 0))}")
         total_reviews = len(sorted_keyword_df)
         total_pages = (total_reviews + REVIEWS_PER_PAGE - 1) // REVIEWS_PER_PAGE
         if total_pages > 1:

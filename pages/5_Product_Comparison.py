@@ -2,286 +2,602 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
-import spacy
-import re
-import json
 import altair as alt
+import json
+import plotly.express as px
 from utils.database_utils import (
     connect_to_db,
     get_product_details,
     get_reviews_for_product,
-    get_all_categories,
     get_filtered_products,
-    get_product_date_range
+    get_product_date_range,
+    get_aspects_for_product
 )
 
-# --- Page Config & Model Loading ---
+# --- Page Config & Constants ---
 st.set_page_config(layout="wide", page_title="Product Comparison")
-
-@st.cache_resource
-def load_spacy_model():
-    return spacy.load("en_core_web_sm")
-
-nlp = load_spacy_model()
 DB_PATH = "amazon_reviews_final.duckdb"
+PRODUCTS_PER_PAGE_COMPARE = 6
+PLACEHOLDER_IMAGE_URL = "https://via.placeholder.com/200"
 conn = connect_to_db(DB_PATH)
 
-# --- Definitive Aspect Extraction Function ---
-@st.cache_data
-def extract_aspects_with_sentiment(dataf):
-    aspect_sentiments = []
-    stop_words = nlp.Defaults.stop_words
-    
-    # --- FIX: Pass the review_id into the zip function ---
-    for doc, sentiment, review_id in zip(nlp.pipe(dataf['text']), dataf['sentiment'], dataf['review_id']):
-        for chunk in doc.noun_chunks:
-            tokens = [token for token in chunk]
-            while len(tokens) > 0 and (tokens[0].is_stop or tokens[0].pos_ == 'DET'):
-                tokens.pop(0)
-            while len(tokens) > 0 and tokens[-1].is_stop:
-                tokens.pop(-1)
-            if not tokens: continue
-            
-            final_aspect = " ".join(token.lemma_.lower() for token in tokens)
-            
-            if len(final_aspect) > 3 and final_aspect not in stop_words:
-                # --- FIX: Add the review_id to the dictionary ---
-                aspect_sentiments.append({
-                    'aspect': final_aspect, 
-                    'sentiment': sentiment,
-                    'review_id': review_id 
-                })
+# --- Session State Initialization ---
+def init_session_state():
+    """Initializes all necessary session state variables for this page."""
+    if 'product_b_asin' not in st.session_state:
+        st.session_state.product_b_asin = None
+    if 'compare_search_term' not in st.session_state:
+        st.session_state.compare_search_term = ""
+    if 'compare_sort_by' not in st.session_state:
+        st.session_state.compare_sort_by = "Popularity (Most Reviews)"
+    if 'compare_page' not in st.session_state:
+        st.session_state.compare_page = 0
 
-    if not aspect_sentiments:
-        return pd.DataFrame()
+def get_sentiment_icon(score):
+    """Returns an icon based on the sentiment score."""
+    if score is None or pd.isna(score):
+        return ""
+    if score > 0.3:
+        return "😊"
+    elif score < -0.3:
+        return "😞"
+    else:
+        return "😐"
+
+def calculate_metrics(product_details, reviews_df):
+    """Calculates all performance metrics for a product and returns them in a dictionary."""
+    metrics = {
+        'avg_rating': product_details.get('average_rating', 0),
+        'review_count': len(reviews_df),
+        'consensus': "N/A",
+        'verified_rate': None,
+        'avg_sentiment': None
+    }
+    if not reviews_df.empty:
+        if len(reviews_df) > 1:
+            metrics['consensus'] = get_rating_consensus(reviews_df['rating'].std())
         
-    return pd.DataFrame(aspect_sentiments)
+        metrics['verified_rate'] = (reviews_df['verified_purchase'].sum() / len(reviews_df)) * 100
+        
+        if 'sentiment_score' in reviews_df.columns:
+            metrics['avg_sentiment'] = reviews_df['sentiment_score'].mean()
+            
+    return metrics
+    
+def display_product_metadata(column, product_details, metrics, other_metrics, title):
+    """Displays metadata and compares metrics against another product."""
+    with column:
+        st.subheader(title)
+        st.markdown(f"**{product_details['product_title']}**")
+        st.caption(f"Category: {product_details.get('category', 'N/A')} | Store: {product_details.get('store', 'N/A')}")
+
+        image_urls_str = product_details.get('image_urls')
+        image_urls = image_urls_str.split(',') if pd.notna(image_urls_str) and image_urls_str else []
+        
+        # --- CHANGE 1: Set a fixed height for the image ---
+        st.markdown(f'<div class="comparison-image-container"><img src="{image_urls[0] if image_urls else PLACEHOLDER_IMAGE_URL}"></div>', unsafe_allow_html=True)
+        
+       # --- METRICS WITH HELP ICONS ---
+        m_col1, m_col2, m_col3 = st.columns(3)
+
+        # Avg Rating
+        delta_rating = None
+        if other_metrics and metrics['avg_rating'] is not None and other_metrics['avg_rating'] is not None:
+            delta_rating = metrics['avg_rating'] - other_metrics['avg_rating']
+        m_col1.metric("Avg. Rating", f"{metrics.get('avg_rating', 0):.2f} ⭐", delta=f"{delta_rating:.2f}" if delta_rating is not None else None,
+                      help="The average star rating from all reviews for this product.")
+
+        # Filtered Reviews
+        m_col2.metric("Filtered Reviews", f"{metrics.get('review_count', 0):,} 📝",
+                      help="The number of reviews that match the current filter settings in the sidebar.")
+
+        # Reviewer Consensus
+        m_col3.metric("Reviewer Consensus", metrics.get('consensus', 'N/A'),
+                      help="Measures agreement in star ratings. 'Consistent' means ratings are similar, while 'Polarizing' suggests many high and low ratings with few in the middle.")
+        
+        m_col4, m_col5 = st.columns(2)
+        
+        # Verified Rate
+        delta_verified = None
+        if other_metrics and metrics['verified_rate'] is not None and other_metrics['verified_rate'] is not None:
+            delta_verified = metrics['verified_rate'] - other_metrics['verified_rate']
+        m_col4.metric("Verified Rate", f"{metrics.get('verified_rate', 0):.1f}%", delta=f"{delta_verified:.1f}%" if delta_verified is not None else None,
+                      help="The percentage of filtered reviews that are from 'Verified Purchases'.")
+
+        # Avg Sentiment
+        sentiment_icon = get_sentiment_icon(metrics.get('avg_sentiment'))
+        delta_sentiment = None
+        if other_metrics and metrics['avg_sentiment'] is not None and other_metrics['avg_sentiment'] is not None:
+            delta_sentiment = metrics['avg_sentiment'] - other_metrics['avg_sentiment']
+        m_col5.metric("Avg. Sentiment", f"{metrics.get('avg_sentiment', 0):.2f} {sentiment_icon}", delta=f"{delta_sentiment:.2f}" if delta_sentiment is not None else None,
+                      help="The average sentiment score of review text, from -1 (very negative) to +1 (very positive).")
+
+        # --- CONSOLIDATED PRODUCT SPECIFICATIONS ---
+        with st.expander("View Product Specifications"):
+            # 1. Display Description (Handles JSON list format)
+            if pd.notna(product_details.get('description')):
+                st.markdown("**Description**")
+                try:
+                    # Stored as a JSON string of a list, so we parse and get the first item
+                    desc_list = json.loads(product_details['description'])
+                    if isinstance(desc_list, list) and desc_list:
+                        st.write(desc_list[0])
+                    else:
+                        st.write(desc_list) # Fallback if not a list
+                except (json.JSONDecodeError, TypeError):
+                    st.write(product_details['description']) # Fallback if not JSON
+                st.markdown("---")
+
+            # 2. Display Features as a list if they exist
+            if pd.notna(product_details.get('features')):
+                st.markdown("**Features**")
+                try:
+                    features_list = json.loads(product_details['features']) if isinstance(product_details['features'], str) else product_details['features']
+                    if features_list:
+                        for feature in features_list:
+                            st.markdown(f"- {feature}")
+                except (json.JSONDecodeError, TypeError):
+                    st.write("Could not parse product features.")
+                st.markdown("---")
+
+            # 3. Display Technical Details as a clean list (Handles JSON object)
+            if pd.notna(product_details.get('details')):
+                st.markdown("**Technical Details**")
+                try:
+                    details_dict = json.loads(product_details['details']) if isinstance(product_details['details'], str) else product_details['details']
+                    if details_dict:
+                        # Display as a two-column key-value list instead of raw JSON
+                        for key, value in details_dict.items():
+                            st.markdown(f"**{key.strip()}:** {str(value).strip()}")
+                except (json.JSONDecodeError, TypeError):
+                    st.write("Could not parse product details.")
+
+        if st.session_state.product_b_asin and title == "Comparison Product":
+            if st.button("Change Comparison Product", use_container_width=True, key="change_product_b"):
+                st.session_state.product_b_asin = None
+                st.session_state.compare_page = 0
+                st.rerun()
+                
+def show_product_selection_pane(column, category, product_a_asin):
+    """Displays the UI for searching, sorting, and selecting a product."""
+    with column:
+        st.subheader("Select a Product to Compare")
+        st.info(f"Browse products in the same category: **{category}**")
+
+        # --- Search and Sort Controls ---
+        c1, c2 = st.columns([2,1])
+        with c1:
+            st.session_state.compare_search_term = st.text_input(
+                "Search by product title:",
+                value=st.session_state.compare_search_term,
+                key="compare_search"
+            )
+        with c2:
+            st.session_state.compare_sort_by = st.selectbox(
+                "Sort By",
+                ["Popularity (Most Reviews)", "Highest Rating", "Lowest Rating"],
+                key="compare_sort"
+            )
+
+        # --- Fetch and Display Products ---
+        products_df, total_count = get_filtered_products(
+            _conn=conn,
+            category=category,
+            search_term=st.session_state.compare_search_term,
+            sort_by=st.session_state.compare_sort_by,
+            rating_range=None,
+            review_count_range=None,
+            limit=PRODUCTS_PER_PAGE_COMPARE,
+            offset=st.session_state.compare_page * PRODUCTS_PER_PAGE_COMPARE
+        )
+        products_df = products_df[products_df['parent_asin'] != product_a_asin]
+
+        if products_df.empty:
+            st.warning("No other products found matching your criteria.")
+            return
+
+        # --- Product Grid ---
+        for i in range(0, len(products_df), 3):
+            cols = st.columns(3)
+            for j, col in enumerate(cols):
+                if i + j < len(products_df):
+                    product = products_df.iloc[i+j]
+                    with col.container(border=True):
+                        img_url = product.get('image_urls', '').split(',')[0] if pd.notna(product.get('image_urls')) else PLACEHOLDER_IMAGE_URL
+                        st.markdown(f"""
+                            <div class="product-container">
+                                <div>
+                                    <div class="product-image-container">
+                                        <img src="{img_url}" class="product-image">
+                                    </div>
+                                    <small>{product['product_title']}</small>
+                                </div>
+                                <div>
+                        """, unsafe_allow_html=True)
+                        st.markdown(f"<small>{product['product_title']}</small>", unsafe_allow_html=True)
+                        
+                        # --- NEW: Display rating and review count ---
+                        avg_rating = product.get('average_rating', 0)
+                        review_count = product.get('review_count', 0)
+                        st.caption(f"{avg_rating:.2f} ⭐ | {int(review_count)} reviews")
+
+                        if st.button("Select to Compare", key=f"select_{product['parent_asin']}", use_container_width=True):
+                            st.session_state.product_b_asin = product['parent_asin']
+                            st.rerun()
+
+        # --- Pagination ---
+        st.markdown("---")
+        total_pages = (total_count + PRODUCTS_PER_PAGE_COMPARE - 1) // PRODUCTS_PER_PAGE_COMPARE
+        if total_pages > 1:
+            p_col1, p_col2, p_col3 = st.columns([1,1,1])
+            with p_col1:
+                if st.session_state.compare_page > 0:
+                    if st.button("⬅️ Previous"):
+                        st.session_state.compare_page -= 1
+                        st.rerun()
+            with p_col2:
+                st.write(f"Page {st.session_state.compare_page + 1} of {total_pages}")
+            with p_col3:
+                if (st.session_state.compare_page + 1) < total_pages:
+                    if st.button("Next ➡️"):
+                        st.session_state.compare_page += 1
+                        st.rerun()
+
+# --- Data & Charting Helper Functions ---
+def get_rating_consensus(std_dev):
+    """Interprets standard deviation of ratings into a consensus label."""
+    if std_dev is None or pd.isna(std_dev): return "N/A"
+    if std_dev < 1.1: return "✅ Consistent"
+    elif std_dev < 1.4: return "↔️ Mixed"
+    else: return "⚠️ Polarizing"
+
+def truncate_text(text, max_length=15):
+    """Truncates text for chart labels."""
+    return text if len(text) <= max_length else text[:max_length] + "..."
 
 # --- Main App Logic ---
 def main():
     st.title("⚖️ Product Comparison")
-        # --- Add the back button here ---
+
+    st.markdown("""
+        <style>
+        /* CSS for the main comparison images */
+        .comparison-image-container {
+            height: 250px; /* Fixed height for the main images */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        .comparison-image-container img {
+            max-height: 100%;
+            max-width: 100%;
+            object-fit: contain;
+        }
+
+        /* CSS for the product selection grid */
+        .product-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+        }
+        .product-image-container {
+            height: 150px; /* Height for the smaller selection images */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .product-image-container img {
+            max-height: 100%;
+            max-width: 100%;
+            object-fit: contain;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    init_session_state()
+
     if st.button("⬅️ Back to Sentiment Overview"):
         st.switch_page("pages/1_Sentiment_Overview.py")
+
     if 'selected_product' not in st.session_state or st.session_state.selected_product is None:
         st.warning("Please select a product from the main search page first to begin a comparison.")
         st.stop()
-    
+
     product_a_asin = st.session_state.selected_product
     product_a_details = get_product_details(conn, product_a_asin).iloc[0]
 
-    # --- Product B Selection ---
-    st.sidebar.header("Select Product to Compare")
-    all_products_df = get_filtered_products(conn, product_a_details['category'], "", "Popularity (Most Reviews)", None, None, 1000, 0)[0]
-    product_b_options = all_products_df[all_products_df['parent_asin'] != product_a_asin]
-    selected_product_b_title = st.sidebar.selectbox(
-        f"Select a product from the '{product_a_details['category']}' category:",
-        options=product_b_options['product_title'].tolist(),
-        index=0, key="product_b_selector"
-    )
-    product_b_asin = product_b_options[product_b_options['product_title'] == selected_product_b_title]['parent_asin'].iloc[0]
-    product_b_details = get_product_details(conn, product_b_asin).iloc[0]
-
-    # --- Consistent Sidebar Filters ---
+    # --- Sidebar Filters for Comparison ---
     st.sidebar.header("🔬 Comparison Filters")
+    # Set a default date range to avoid errors if one product has no reviews
     min_date_a, max_date_a = get_product_date_range(conn, product_a_asin)
-    min_date_b, max_date_b = get_product_date_range(conn, product_b_asin)
+    min_date_b, max_date_b = (min_date_a, max_date_a) # Default to A's dates
+    if st.session_state.product_b_asin:
+        min_date_b, max_date_b = get_product_date_range(conn, st.session_state.product_b_asin)
     
     selected_date_range = st.sidebar.date_input("Filter by Date Range", value=(min(min_date_a, min_date_b), max(max_date_a, max_date_b)), key='compare_date_filter')
     selected_ratings = st.sidebar.multiselect("Filter by Star Rating", options=[1, 2, 3, 4, 5], default=[1, 2, 3, 4, 5], key='compare_rating_filter')
     selected_sentiments = st.sidebar.multiselect("Filter by Sentiment", options=['Positive', 'Negative', 'Neutral'], default=['Positive', 'Negative', 'Neutral'], key='compare_sentiment_filter')
     selected_verified = st.sidebar.radio("Filter by Purchase Status", ["All", "Verified Only", "Not Verified"], index=0, key='compare_verified_filter')
 
-    # --- Load Filtered Data for Both Products ---
+    # --- Load Data for Product A ---
     product_a_reviews = get_reviews_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
-    product_b_reviews = get_reviews_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
 
-# Helper function to interpret standard deviation
-    def get_rating_consensus(std_dev):
-        if std_dev is None or pd.isna(std_dev):
-            return "N/A"
-        if std_dev < 1.1:
-            return "✅ Consistent"
-        elif std_dev < 1.4:
-            return "↔️ Mixed"
-        else:
-            return "⚠️ Polarizing"
-
+    # --- Main Two-Column Layout ---
     col1, col2 = st.columns(2)
 
-    # --- Product A Display ---
-    with col1:
-        st.subheader(product_a_details['product_title'])
+    # --- Calculate metrics for Product A ---
+    metrics_a = calculate_metrics(product_a_details, product_a_reviews)
+
+    if not st.session_state.product_b_asin:
+        # If no product B, display A's metadata without comparison.
+        # The 'other_metrics' argument is passed as None.
+        display_product_metadata(col1, product_a_details, metrics_a, None, "Original Product")
+        show_product_selection_pane(col2, product_a_details['category'], product_a_asin)
+    else:
+        # --- Product B is Selected, Calculate its metrics and then display both ---
+        product_b_asin = st.session_state.product_b_asin
+        product_b_details = get_product_details(conn, product_b_asin).iloc[0]
+        product_b_reviews = get_reviews_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
         
-        # Image Display
-        image_urls_str_a = product_a_details.get('image_urls')
-        image_urls_a = image_urls_str_a.split(',') if pd.notna(image_urls_str_a) and image_urls_str_a else []
-        if image_urls_a:
-            st.image(image_urls_a[0], use_container_width=True)
+        metrics_b = calculate_metrics(product_b_details, product_b_reviews)
 
-        # Metrics Display
-        m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Average Rating", f"{product_a_details.get('average_rating', 0):.2f} ⭐")
-        m_col2.metric("Filtered Reviews", f"{len(product_a_reviews):,}")
+        # Display both products, passing the other's metrics for comparison.
+        display_product_metadata(col1, product_a_details, metrics_a, metrics_b, "Original Product")
+        display_product_metadata(col2, product_b_details, metrics_b, metrics_a, "Comparison Product")
+
         
-        if not product_a_reviews.empty and len(product_a_reviews) > 1:
-            std_dev_a = product_a_reviews['rating'].std()
-            consensus_a = get_rating_consensus(std_dev_a)
-            m_col3.metric("Consensus", consensus_a, help=f"Std. Dev: {std_dev_a:.2f}")
+        # --- RENDER COMPARISON CHARTS BELOW THE METADATA ---
+               # --- FEATURE-LEVEL PERFORMANCE (FINAL REVISION WITH BUG FIX) ---
+        st.markdown("---")
+        st.subheader("🔎 Feature-Level Performance")
+        st.info(
+            "This section compares sentiment towards features that are **common to both products**. "
+            "Expand the controls to filter and select the features you want to compare."
+        )
 
-    # --- Product B Display ---
-    with col2:
-        st.subheader(product_b_details['product_title'])
+        aspects_a = get_aspects_for_product(conn, product_a_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
+        aspects_b = get_aspects_for_product(conn, product_b_asin, selected_date_range, tuple(selected_ratings), tuple(selected_sentiments), selected_verified)
 
-        # Image Display
-        image_urls_str_b = product_b_details.get('image_urls')
-        image_urls_b = image_urls_str_b.split(',') if pd.notna(image_urls_str_b) and image_urls_str_b else []
-        if image_urls_b:
-            st.image(image_urls_b[0], use_container_width=True)
-            
-        # Metrics Display
-        m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Average Rating", f"{product_b_details.get('average_rating', 0):.2f} ⭐")
-        m_col2.metric("Filtered Reviews", f"{len(product_b_reviews):,}")
-
-        if not product_b_reviews.empty and len(product_b_reviews) > 1:
-            std_dev_b = product_b_reviews['rating'].std()
-            consensus_b = get_rating_consensus(std_dev_b)
-            m_col3.metric("Consensus", consensus_b, help=f"Std. Dev: {std_dev_b:.2f}")
-        
-    st.markdown("---")
-    st.markdown("### Overall Sentiment and Rating Comparison")
-    st.info("These charts directly compare the proportion of sentiments and star ratings for each product. Hover over the bars to see the raw counts.")
-
-    # --- Helper function to truncate long text ---
-    def truncate_text(text, max_length=10):
-        return text if len(text) <= max_length else text[:max_length] + "..."
-
-    # Get the (potentially truncated) product titles for the legend
-    product_a_title = truncate_text(product_a_details['product_title'])
-    product_b_title = truncate_text(product_b_details['product_title'])
-
-    # --- Create a two-column layout for the charts ---
-    col1, col2 = st.columns(2)
-
-    # --- Column 1: Grouped Sentiment Bar Chart ---
-    with col1:
-        
-        counts_a = product_a_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-        dist_a = counts_a / counts_a.sum() if counts_a.sum() > 0 else counts_a
-        counts_b = product_b_reviews['sentiment'].value_counts().reindex(['Positive', 'Neutral', 'Negative']).fillna(0)
-        dist_b = counts_b / counts_b.sum() if counts_b.sum() > 0 else counts_b
-        
-        df_a = pd.DataFrame({'Proportion': dist_a, 'Count': counts_a}).reset_index(); df_a.columns = ['Sentiment', 'Proportion', 'Count']; df_a['Product'] = product_a_title
-        df_b = pd.DataFrame({'Proportion': dist_b, 'Count': counts_b}).reset_index(); df_b.columns = ['Sentiment', 'Proportion', 'Count']; df_b['Product'] = product_b_title
-        plot_df = pd.concat([df_a, df_b])
-
-        sentiment_chart = alt.Chart(plot_df).mark_bar().encode(
-            x=alt.X('Sentiment:N', title="Sentiment", sort=['Positive', 'Neutral', 'Negative']),
-            y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
-            color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])),
-            xOffset='Product:N',
-            tooltip=[
-                alt.Tooltip('Product:N'), alt.Tooltip('Sentiment:N'),
-                alt.Tooltip('Count:Q', title='Review Count'),
-                alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')
-            ]
-        ).properties(title="Sentiment Comparison")
-        st.altair_chart(sentiment_chart, use_container_width=True)
-
-    # --- Column 2: Grouped Rating Bar Chart ---
-    with col2:
-
-        rating_counts_a = product_a_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
-        rating_dist_a = rating_counts_a / rating_counts_a.sum() if rating_counts_a.sum() > 0 else rating_counts_a
-        rating_counts_b = product_b_reviews['rating'].value_counts().reindex([5, 4, 3, 2, 1]).fillna(0)
-        rating_dist_b = rating_counts_b / rating_counts_b.sum() if rating_counts_b.sum() > 0 else rating_counts_b
-        
-        df_a_ratings = pd.DataFrame({'Proportion': rating_dist_a, 'Count': rating_counts_a}).reset_index(); df_a_ratings.columns = ['Rating', 'Proportion', 'Count']; df_a_ratings['Product'] = product_a_title
-        df_b_ratings = pd.DataFrame({'Proportion': rating_dist_b, 'Count': rating_counts_b}).reset_index(); df_b_ratings.columns = ['Rating', 'Proportion', 'Count']; df_b_ratings['Product'] = product_b_title
-        plot_df_ratings = pd.concat([df_a_ratings, df_b_ratings])
-
-        rating_chart = alt.Chart(plot_df_ratings).mark_bar().encode(
-            x=alt.X('Rating:O', title="Star Rating", sort=alt.EncodingSortField(field="Rating", order="descending")),
-            y=alt.Y('Proportion:Q', title="Proportion of Reviews", axis=alt.Axis(format='%')),
-            color=alt.Color('Product:N', scale=alt.Scale(range=['#4c78a8', '#f58518'])),
-            xOffset='Product:N',
-            tooltip=[
-                alt.Tooltip('Product:N'), alt.Tooltip('Rating:O'),
-                alt.Tooltip('Count:Q', title='Review Count'),
-                alt.Tooltip('Proportion:Q', title='Proportion', format='.1%')
-            ]
-        ).properties(title="Rating Comparison")
-        st.altair_chart(rating_chart, use_container_width=True)
-        
-    # In pages/5_Product_Comparison.py
-
-    # --- Feature-Level Performance: Comparative Radar Chart ---
-    st.markdown("---")
-    st.markdown("### Feature-Level Performance Comparison")
-    st.info("This radar chart directly compares the average sentiment score for the most frequently discussed common aspects.")
-
-    aspects_a = extract_aspects_with_sentiment(product_a_reviews)
-    aspects_b = extract_aspects_with_sentiment(product_b_reviews)
-    
-    if not aspects_a.empty and not aspects_b.empty:
-        counts_a = aspects_a['aspect'].value_counts()
-        counts_b = aspects_b['aspect'].value_counts()
-        common_aspects = set(counts_a.index).intersection(set(counts_b.index))
-        
-        if len(common_aspects) >= 3:
-            total_counts = (counts_a.reindex(common_aspects, fill_value=0) + counts_b.reindex(common_aspects, fill_value=0)).sort_values(ascending=False)
-            
-            num_aspects_to_show = st.slider(
-                "Select number of top aspects to display:",
-                min_value=3, 
-                max_value=min(20, len(total_counts)),
-                value=min(5, len(total_counts)),
-                key="radar_aspect_slider"
-            )
-            
-            top_common_aspects = total_counts.nlargest(num_aspects_to_show).index.tolist()
-
-            aspects_a = aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id')
-            aspects_b = aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id')
-            
-            avg_sent_a = aspects_a.groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
-            avg_sent_b = aspects_b.groupby('aspect')['sentiment_score'].mean().reindex(top_common_aspects)
-
+        if not aspects_a.empty and not aspects_b.empty:
             product_a_title = truncate_text(product_a_details['product_title'])
             product_b_title = truncate_text(product_b_details['product_title'])
 
-            # --- FIX: Create a single, combined radar chart ---
-            fig = go.Figure()
+            common_aspects_list = list(set(aspects_a['aspect']).intersection(set(aspects_b['aspect'])))
 
-            fig.add_trace(go.Scatterpolar(
-                r=avg_sent_a.values,
-                theta=avg_sent_a.index, 
-                fill='toself',
-                name=product_a_title,
-                marker_color='#4c78a8', # Professional Blue
-                opacity=0.7
-            ))
-            fig.add_trace(go.Scatterpolar(
-                r=avg_sent_b.values,
-                theta=avg_sent_b.index,
-                fill='toself',
-                name=product_b_title,
-                marker_color='#f58518', # Professional Orange
-                opacity=0.7
-            ))
-            
-            fig.update_layout(
-              polar=dict(radialaxis=dict(visible=True, range=[-1, 1])),
-              showlegend=True,
-              title="Comparative Sentiment Scores by Aspect"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if not common_aspects_list:
+                st.warning("No common features were found between these two products with the current filters.")
+                st.stop()
+
+            # Filter dataframes to only include common aspects
+            common_aspects_a = aspects_a[aspects_a['aspect'].isin(common_aspects_list)].copy()
+            common_aspects_b = aspects_b[aspects_b['aspect'].isin(common_aspects_list)].copy()
+            common_aspects_a['Product'] = product_a_title
+            common_aspects_b['Product'] = product_b_title
+            combined_common_aspects_df = pd.concat([common_aspects_a, common_aspects_b])
+
+            # --- Controls are now in an Expander on top ---
+            with st.expander("⚙️ Comparison Controls & Filters"):
+                min_mentions = st.slider(
+                    "Minimum Mention Threshold:", 1, 100, 1,
+                    key="aspect_mention_threshold",
+                    help="Only show aspects with at least this many total mentions."
+                )
+                
+                total_counts = combined_common_aspects_df['aspect'].value_counts()
+                aspects_to_show = total_counts[total_counts >= min_mentions].index.tolist()
+                options_with_counts = {f"{aspect} ({total_counts[aspect]})": aspect for aspect in aspects_to_show}
+
+                selected_options = st.multiselect(
+                    "Select aspects to display:",
+                    options=options_with_counts.keys(),
+                    default=list(options_with_counts.keys())[:5],
+                    key="aspect_selector"
+                )
+                final_aspects_to_display = [options_with_counts[key] for key in selected_options]
+
+            # --- Data processing for charts ---
+            chart_df_base = combined_common_aspects_df[combined_common_aspects_df['aspect'].isin(final_aspects_to_display)]
+
+            if not chart_df_base.empty:
+                # --- BUG FIX: Pre-calculate counts and proportions in pandas ---
+                agg_df = chart_df_base.groupby(['Product', 'aspect', 'sentiment']).size().reset_index(name='count')
+                agg_df['proportion'] = agg_df.groupby(['Product', 'aspect'])['count'].transform(lambda x: x / x.sum())
+                agg_df['Product'] = pd.Categorical(agg_df['Product'], categories=[product_a_title, product_b_title], ordered=True)
+                
+                # --- Chart Layout ---
+                bar_chart_col, radar_chart_col = st.columns(2)
+
+                with bar_chart_col:
+                    st.markdown("**Aspect Sentiment Summary**")
+                    aspect_summary_chart = alt.Chart(agg_df).mark_bar().encode(
+                        x=alt.X('sum(count)', stack='normalize', axis=alt.Axis(title='Sentiment Distribution', format='%')),
+                        y=alt.Y('aspect:N', title=None, sort='-x'),
+                        color=alt.Color('sentiment:N', scale=alt.Scale(domain=['Positive', 'Neutral', 'Negative'], range=['#1a9850', '#cccccc', '#d73027']), legend=alt.Legend(title="Sentiment")),
+                        row=alt.Row('Product:N', title=None, header=alt.Header(labelOrient='top', labelPadding=5)),
+                        tooltip=[
+                            'Product', 'aspect', 'sentiment',
+                            alt.Tooltip('count:Q', title='Mentions'),
+                            alt.Tooltip('proportion:Q', title='Proportion', format='.1%')
+                        ]
+                    ).resolve_axis(y='independent')
+                    st.altair_chart(aspect_summary_chart, use_container_width=True)
+
+                with radar_chart_col:
+                    st.markdown("**Sentiment Score Comparison**")
+                    if final_aspects_to_display:
+                        aspects_a_with_scores = common_aspects_a.merge(product_a_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
+                        aspects_b_with_scores = common_aspects_b.merge(product_b_reviews[['review_id', 'sentiment_score']], on='review_id', how='inner')
+                        
+                        avg_sent_a = aspects_a_with_scores[aspects_a_with_scores['aspect'].isin(final_aspects_to_display)].groupby('aspect')['sentiment_score'].mean().reindex(final_aspects_to_display, fill_value=0)
+                        avg_sent_b = aspects_b_with_scores[aspects_b_with_scores['aspect'].isin(final_aspects_to_display)].groupby('aspect')['sentiment_score'].mean().reindex(final_aspects_to_display, fill_value=0)
+                        
+                        fig = go.Figure()
+
+                        # --- FINAL FIX: Added Product Name to hovertemplate ---
+                        fig.add_trace(go.Scatterpolar(
+                            r=avg_sent_a.values,
+                            theta=avg_sent_a.index,
+                            fill='toself',
+                            name=product_a_title,
+                            marker_color='#4c78a8',
+                            opacity=0.7,
+                            hovertemplate='<b>Product</b>: %{fullData.name}<br><b>Aspect</b>: %{theta}<br><b>Sentiment Score</b>: %{r:.2f}<extra></extra>'
+                        ))
+                        fig.add_trace(go.Scatterpolar(
+                            r=avg_sent_b.values,
+                            theta=avg_sent_b.index,
+                            fill='toself',
+                            name=product_b_title,
+                            marker_color='#f58518',
+                            opacity=0.7,
+                            hovertemplate='<b>Product</b>: %{fullData.name}<br><b>Aspect</b>: %{theta}<br><b>Sentiment Score</b>: %{r:.2f}<extra></extra>'
+                        ))
+                        
+                        fig.update_layout(
+                            polar=dict(radialaxis=dict(visible=True, range=[-1, 1])),
+                            showlegend=True,
+                            legend=dict(yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            height=350
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("Select one or more aspects from the list to display the charts.")
         else:
-            st.info("Not enough common aspects (at least 3) found to generate a comparison chart.")
-    else:
-        st.info("Not enough aspect data for one or both products to generate a comparison.")
+            st.warning("Not enough aspect data for one or both products to generate a feature-level comparison.")
+            
+        # --- TRENDS OVER TIME ---
+        st.markdown("---")
+        st.subheader("🗓️ Trends Over Time")
+        st.info(
+            "Analyze how the average rating and sentiment for each product have evolved. "
+            "The 'Line Chart' view is best for direct comparison, while the 'Area Chart' view shows the distribution within each product."
+        )
+
+        time_granularity = st.radio(
+            "Select time period:",
+            ("Monthly", "Weekly", "Daily"),
+            index=0, horizontal=True, key="trends_time_granularity"
+        )
+        
+        # Prepare the combined data for time series analysis
+        time_df_a = product_a_reviews[['date', 'rating', 'sentiment_score']].copy()
+        time_df_a['Product'] = product_a_title
+        time_df_b = product_b_reviews[['date', 'rating', 'sentiment_score']].copy()
+        time_df_b['Product'] = product_b_title
+        time_df = pd.concat([time_df_a, time_df_b])
+        
+        time_df['date'] = pd.to_datetime(time_df['date'])
+        if time_granularity == 'Monthly':
+            time_df['period'] = time_df['date'].dt.to_period('M').dt.start_time
+        elif time_granularity == 'Weekly':
+            time_df['period'] = time_df['date'].dt.to_period('W').dt.start_time
+        else: # Daily
+            time_df['period'] = time_df['date'].dt.date
+
+        tab1, tab2 = st.tabs(["📈 Line Chart View (Direct Comparison)", "📊 Area Chart View (Distribution)"])
+
+        # --- Tab 1: Line Chart View ---
+        with tab1:
+            line_col1, line_col2 = st.columns(2)
+            with line_col1:
+                st.markdown("**Average Rating Trend**")
+                avg_rating_trend = time_df.groupby(['period', 'Product'])['rating'].mean().reset_index()
+                fig_rating_line = px.line(
+                    avg_rating_trend, x='period', y='rating', color='Product',
+                    labels={'period': 'Date', 'rating': 'Average Rating'},
+                    color_discrete_map={product_a_title: '#4c78a8', product_b_title: '#f58518'}
+                )
+                fig_rating_line.update_layout(yaxis_range=[1,5])
+                st.plotly_chart(fig_rating_line, use_container_width=True)
+
+            with line_col2:
+                st.markdown("**Average Sentiment Trend**")
+                avg_sentiment_trend = time_df.groupby(['period', 'Product'])['sentiment_score'].mean().reset_index()
+                fig_sentiment_line = px.line(
+                    avg_sentiment_trend, x='period', y='sentiment_score', color='Product',
+                    labels={'period': 'Date', 'sentiment_score': 'Average Sentiment Score'},
+                    color_discrete_map={product_a_title: '#4c78a8', product_b_title: '#f58518'}
+                )
+                fig_sentiment_line.update_layout(yaxis_range=[-1,1])
+                st.plotly_chart(fig_sentiment_line, use_container_width=True)
+
+        # --- Tab 2: Area Chart View (with final bug fixes) ---
+                # --- Tab 2: Area Chart View (using Plotly Express) ---
+        with tab2:
+            area_col1, area_col2 = st.columns(2)
+
+            with area_col1:
+                st.markdown(
+                    "<h5 style='text-align: center;'>Rating Distribution</h5>",
+                    unsafe_allow_html=True,
+                )
+                rating_dist_trend = (
+                    time_df.groupby(["period", "Product", "rating"])
+                    .size()
+                    .reset_index(name="count")
+                )
+                
+                fig_rating_area = px.area(
+                    rating_dist_trend,
+                    x="period",
+                    y="count",
+                    color="rating",
+                    facet_row="Product",
+                    labels={"period": "Date", "count": "Number of Reviews", "rating": "Rating"},
+                    color_discrete_map={ # Using the same consistent color scheme
+                        5: "#2ca02c",
+                        4: "#98df8a",
+                        3: "#ffdd71",
+                        2: "#ff9896",
+                        1: "#d62728",
+                    },
+                    category_orders={"rating": [5, 4, 3, 2, 1]} # Ensures legend is sorted
+                )
+                # Clean up the layout
+                fig_rating_area.update_layout(showlegend=True, legend_title_text='Rating', legend_orientation="h", legend_y=1.15)
+                fig_rating_area.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1])) # Clean facet titles
+                st.plotly_chart(fig_rating_area, use_container_width=True)
+
+
+            with area_col2:
+                st.markdown(
+                    "<h5 style='text-align: center;'>Sentiment Distribution</h5>",
+                    unsafe_allow_html=True,
+                )
+                sentiment_dist_trend = time_df.copy()
+                sentiment_dist_trend["sentiment"] = pd.cut(
+                    sentiment_dist_trend["sentiment_score"],
+                    bins=[-1.1, -0.3, 0.3, 1.1],
+                    labels=["Negative", "Neutral", "Positive"],
+                )
+                sentiment_agg_trend = (
+                    sentiment_dist_trend.groupby(["period", "Product", "sentiment"])
+                    .size()
+                    .reset_index(name="count")
+                )
+                
+                fig_sentiment_area = px.area(
+                    sentiment_agg_trend,
+                    x="period",
+                    y="count",
+                    color="sentiment",
+                    facet_row="Product",
+                    labels={"period": "Date", "count": "Number of Reviews", "sentiment": "Sentiment"},
+                    color_discrete_map={ # Using the same consistent color scheme
+                        "Positive": "#1a9850",
+                        "Neutral": "#cccccc",
+                        "Negative": "#d73027",
+                    },
+                    category_orders={"sentiment": ["Positive", "Neutral", "Negative"]}
+                )
+                # Clean up the layout
+                fig_sentiment_area.update_layout(showlegend=True, legend_title_text='Sentiment', legend_orientation="h", legend_y=1.15)
+                fig_sentiment_area.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1])) # Clean facet titles
+                st.plotly_chart(fig_sentiment_area, use_container_width=True)
+
 if __name__ == "__main__":
     main()
